@@ -1,0 +1,60 @@
+import { useMemo, useState } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
+import { useData } from '@/context/DataContext'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { Sidebar, MobileSidebar } from './Sidebar'
+import { Topbar } from './Topbar'
+
+function useBadgeValues() {
+  const { conversations, jobs, verifications, sos, frauds, caregivers } = useData()
+
+  return useMemo(
+    () => ({
+      unreadCustomer: conversations.filter((c) => c.audience.includes('customer') && c.unread > 0).length,
+      unreadCaregiver: conversations.filter((c) => c.audience.includes('caregiver') && c.unread > 0).length,
+      openJobs: jobs.filter((j) => j.status === 'Open').length,
+      pendingVerifications: verifications.filter((v) => v.status === 'Pending' || v.status === 'Under Review').length,
+      activeSos: sos.filter((s) => s.status === 'Open' || s.status === 'Under Investigation').length,
+      openFrauds: frauds.filter((f) => f.status !== 'Resolved').length,
+      pendingCaregivers: caregivers.filter((c) => !c.verified).length,
+    }),
+    [conversations, jobs, verifications, sos, frauds, caregivers],
+  )
+}
+
+export function DashboardLayout({ nav, variant = 'customer', sidebarFooter, topbarSearch, topbarActions }) {
+  const [collapsed, setCollapsed] = useLocalStorage(`caremate.sidebar.${variant}`, false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const values = useBadgeValues()
+  const { pathname } = useLocation()
+
+  const lastSegment = pathname.split('/').filter(Boolean).pop() || 'dashboard'
+  const title = lastSegment.replace(/-/g, ' ')
+
+  return (
+    <div className="flex min-h-screen bg-canvas">
+      <Sidebar nav={nav} collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} values={values} footer={sidebarFooter} />
+      <MobileSidebar
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        nav={nav}
+        values={values}
+        footer={sidebarFooter}
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar
+          onMenuClick={() => setMobileOpen(true)}
+          search={topbarSearch}
+          actions={topbarActions}
+          title={title.replace(/\b\w/g, (c) => c.toUpperCase())}
+        />
+        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  )
+}
+
+export default DashboardLayout

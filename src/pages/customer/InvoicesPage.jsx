@@ -241,9 +241,7 @@ export function InvoicesPage() {
   const customerId = user?.id || 'cu-201'
 
   const mine = useMemo(() => {
-    const withInvoice = bookings.filter((b) => b.invoiceNo)
-    const own = withInvoice.filter((b) => b.customerId === customerId)
-    return own.length ? own : withInvoice.filter((b) => b.customerId === 'cu-201')
+    return bookings.filter((b) => b.invoiceNo && b.customerId === customerId)
   }, [bookings, customerId])
 
   const statusTabs = useMemo(() => {

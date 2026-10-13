@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { useAuth } from '@/context/AuthContext'
+import { useData } from '@/context/DataContext'
 import { FormField, Input, Textarea, Select } from '@/components/forms/FormField'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody } from '@/components/common/Card'
@@ -126,6 +127,7 @@ export function RegisterCustomerPage() {
   useDocumentTitle('Register as customer')
   const navigate = useNavigate()
   const { register: registerUser } = useAuth()
+  const { registerCustomerRecord } = useData()
   const [step, setStep] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -194,6 +196,16 @@ export function RegisterCustomerPage() {
       toast.error('Could not create your account. Please try again.')
       return
     }
+    registerCustomerRecord({
+      id: result.user.id,
+      name: payload.fullName,
+      email: payload.email,
+      phone: payload.mobile,
+      city: payload.city,
+      area: payload.area,
+      address: payload.address,
+      patientInfo: payload.patientInfo,
+    })
     toast.success('Account created. Verify your mobile to continue.')
     navigate('/verify-otp', { state: { email: payload.email, next: '/customer/dashboard' } })
   }

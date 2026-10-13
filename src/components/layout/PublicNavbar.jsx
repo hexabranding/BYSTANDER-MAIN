@@ -10,7 +10,7 @@ const links = [
   { label: 'Home', to: '/' },
   { label: 'About', to: '/about' },
   { label: 'Services', to: '/services' },
-  { label: 'Find Caregivers', to: '/caregivers' },
+  { label: 'Find Caretaker', to: '/caregivers' },
   { label: 'How It Works', to: '/#how-it-works' },
   { label: 'Contact', to: '/contact' },
 ]
@@ -39,8 +39,8 @@ export function PublicNavbar() {
         scrolled ? 'border-line bg-white/90 backdrop-blur-md shadow-card' : 'border-transparent bg-white',
       )}
     >
-      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Logo size="lg" />
+      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-4 px-4 sm:h-28 sm:px-6 lg:px-8">
+        <Logo size="xl" />
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
           {links.map((link) =>

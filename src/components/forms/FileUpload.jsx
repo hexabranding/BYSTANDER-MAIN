@@ -2,6 +2,9 @@ import { useRef, useState } from 'react'
 import { FileText, Image as ImageIcon, Trash2, UploadCloud, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
+const MAX_SIZE = 5 * 1024 * 1024
+const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+
 export function FileUpload({
   id,
   label,
@@ -14,10 +17,20 @@ export function FileUpload({
 }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
+  const [localError, setLocalError] = useState('')
 
   const handleFiles = (files) => {
     const file = files?.[0]
     if (!file) return
+    setLocalError('')
+    if (file.size > MAX_SIZE) {
+      setLocalError(`"${file.name}" is ${Math.round(file.size / (1024 * 1024))} MB — the limit is 5 MB.`)
+      return
+    }
+    if (file.type && !ALLOWED_TYPES.includes(file.type)) {
+      setLocalError('Unsupported format — please upload a PDF, JPG or PNG file.')
+      return
+    }
     onChange?.({
       name: file.name,
       size: file.size,
@@ -26,6 +39,7 @@ export function FileUpload({
     })
   }
 
+  const displayError = error || localError
   const isImage = value?.preview
 
   return (
@@ -90,7 +104,7 @@ export function FileUpload({
           className={cn(
             'flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition',
             dragging ? 'border-primary-400 bg-mint-50' : 'border-line-strong bg-slate-50 hover:border-primary-300 hover:bg-mint-50',
-            error && 'border-danger-300 bg-danger-50',
+            displayError && 'border-danger-300 bg-danger-50',
           )}
         >
           <UploadCloud className="h-6 w-6 text-primary-600" />
@@ -99,9 +113,9 @@ export function FileUpload({
         </button>
       )}
 
-      {error ? (
+      {displayError ? (
         <p className="text-xs font-medium text-danger-600" role="alert">
-          {error}
+          {displayError}
         </p>
       ) : hint ? (
         <p className="text-xs text-muted">{hint}</p>

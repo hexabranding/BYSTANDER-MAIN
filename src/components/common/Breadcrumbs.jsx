@@ -2,7 +2,12 @@ import { ChevronRight, Home } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/utils/cn'
 
-export function Breadcrumbs({ items, className }) {
+const tones = {
+  light: 'text-muted [&_a:hover]:text-primary-700 [&_span]:text-ink',
+  dark: 'text-white/55 [&_a:hover]:text-accent-300 [&_span]:text-white',
+}
+
+export function Breadcrumbs({ items, tone = 'light', className }) {
   const { pathname } = useLocation()
   const crumbs =
     items ||
@@ -17,8 +22,11 @@ export function Breadcrumbs({ items, className }) {
   if (!crumbs.length) return null
 
   return (
-    <nav className={cn('flex flex-wrap items-center gap-1.5 text-xs text-muted', className)} aria-label="Breadcrumb">
-      <Link to="/" className="inline-flex items-center gap-1 transition hover:text-primary-700">
+    <nav
+      className={cn('flex flex-wrap items-center gap-1.5 text-xs', tones[tone], className)}
+      aria-label="Breadcrumb"
+    >
+      <Link to="/" className="inline-flex items-center gap-1 transition hover:opacity-80">
         <Home className="h-3.5 w-3.5" />
         Home
       </Link>

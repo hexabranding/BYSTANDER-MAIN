@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarDays, ClipboardList, Plus, SearchX } from 'lucide-react'
+import { CalendarDays, ClipboardList, CreditCard, MessageSquare, Plus, SearchX, Star } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
@@ -16,6 +17,7 @@ import { BookingCard } from '@/components/booking/BookingCard'
 import { Button } from '@/components/common/Button'
 import { Chip } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
+import { RatingModal } from '@/components/booking/RatingModal'
 
 const STATUS_TABS = ['All', 'Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled']
 
@@ -23,10 +25,11 @@ export function BookingsPage() {
   useDocumentTitle('My bookings')
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { bookings, caregivers } = useData()
+  const { bookings, caregivers, updateBooking, addTransaction, addReview, ensureConversation } = useData()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
+  const [rateTarget, setRateTarget] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
   const customerId = user?.id || 'cu-201'
@@ -67,6 +70,54 @@ export function BookingsPage() {
     goto(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, status])
+
+  const canPay = (b) => b.paymentStatus === 'Pending' && b.status !== 'Cancelled'
+  const canRate = (b) => b.status === 'Completed' && !b.customerRating && Boolean(b.caregiverId)
+
+  const handlePay = (b) => {
+    updateBooking(b.id, { paymentStatus: 'Escrow Held' })
+    const tx = addTransaction({
+      bookingId: b.id,
+      ref: b.ref,
+      customerId,
+      caregiverId: b.caregiverId,
+      amount: b.total,
+      status: 'Escrow Held',
+      method: 'UPI (demo)',
+    })
+    toast.success('Payment secured in escrow', {
+      description: `${formatCurrency(b.total)} held for ${b.id}. Tx ${tx.id}.`,
+    })
+  }
+
+  const handleSubmitRating = (b, { criteria, average, comment }) => {
+    addReview({
+      bookingId: b.id,
+      caregiverId: b.caregiverId,
+      customerId: b.customerId,
+      customerName: user?.name || 'Customer',
+      rating: average,
+      criteria,
+      comment: comment || 'Great service, thank you!',
+    })
+    updateBooking(b.id, { customerRating: { ...criteria, average, at: new Date().toISOString() } })
+    toast.success('Thank you for your review!', {
+      description: `${caregiverName(b.caregiverId)} received your ${average}-star rating.`,
+    })
+  }
+
+  const handleMessage = (b) => {
+    const cg = caregivers.find((c) => c.id === b.caregiverId)
+    const threadId = ensureConversation({
+      bookingRef: b.ref,
+      audienceRole: 'customer',
+      name: cg?.name || 'Care Coordinator',
+      roleLabel: cg?.qualification || 'CareMate support',
+      avatar: cg?.photo || '',
+      firstMessage: `Hi, I'm reaching out regarding booking ${b.id} (${b.service} on ${formatDate(b.date)}).`,
+    })
+    navigate(`/customer/messages?thread=${threadId}`)
+  }
 
   const columns = [
     {
@@ -118,14 +169,31 @@ export function BookingsPage() {
       render: (b) => <StatusBadge status={b.status} size="sm" />,
     },
     {
-      key: 'view',
-      header: 'Details',
+      key: 'actions',
+      header: 'Actions',
       align: 'right',
       sortable: false,
       render: (b) => (
-        <Button size="xs" variant="outline" onClick={() => navigate(`/customer/bookings/${b.id}`)}>
-          View details
-        </Button>
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {canPay(b) ? (
+            <Button size="xs" icon={CreditCard} onClick={() => handlePay(b)}>
+              Pay
+            </Button>
+          ) : null}
+          {canRate(b) ? (
+            <Button size="xs" variant="outline" icon={Star} onClick={() => setRateTarget(b)}>
+              Rate
+            </Button>
+          ) : null}
+          {b.status !== 'Cancelled' ? (
+            <Button size="xs" variant="outline" icon={MessageSquare} onClick={() => handleMessage(b)}>
+              Message
+            </Button>
+          ) : null}
+          <Button size="xs" variant="outline" onClick={() => navigate(`/customer/bookings/${b.id}`)}>
+            View
+          </Button>
+        </div>
       ),
     },
   ]
@@ -227,6 +295,13 @@ export function BookingsPage() {
           <Pagination page={page} totalPages={totalPages} onPageChange={goto} totalItems={totalItems} />
         </>
       )}
+
+      <RatingModal
+        open={Boolean(rateTarget)}
+        onClose={() => setRateTarget(null)}
+        subjectName={rateTarget ? caregiverName(rateTarget.caregiverId) : ''}
+        onSubmit={(rating) => rateTarget && handleSubmitRating(rateTarget, rating)}
+      />
     </div>
   )
 }

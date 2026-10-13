@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { ShieldAlert } from 'lucide-react'
 
@@ -7,7 +7,7 @@ export function ProtectedRoute({ roles, children, fallback }) {
   const location = useLocation()
 
   if (!isLoggedIn) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+    return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />
   }
 
   if (roles && !roles.includes(user?.role)) {
@@ -20,9 +20,9 @@ export function ProtectedRoute({ roles, children, fallback }) {
         <p className="mt-2 text-sm leading-relaxed text-muted">
           Your account does not have permission to view this area. Sign in with a matching demo account to continue.
         </p>
-        <a href="/" className="mt-6 text-sm font-semibold text-primary-700 hover:underline">
+        <Link to="/" className="mt-6 text-sm font-semibold text-primary-700 hover:underline">
           Back to home
-        </a>
+        </Link>
       </div>
     )
   }

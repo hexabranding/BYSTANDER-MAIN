@@ -119,6 +119,7 @@ export function AppRoutes() {
         <Route path="jobs" element={<JobsPage />} />
         <Route path="jobs/:id" element={<JobDetailsPage />} />
         <Route path="bookings" element={<CaregiverBookings />} />
+        <Route path="bookings/:id" element={<JobDetailsPage />} />
         <Route path="schedule" element={<SchedulePage />} />
         <Route path="earnings" element={<EarningsPage />} />
         <Route path="reviews" element={<ReviewsPage />} />

@@ -15,7 +15,6 @@ import { Banknote, Download, HandCoins, Wallet } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
-import { EARNINGS_TXNS } from '@/data/finance'
 import { MONTHLY_EARNINGS, WEEKLY_EARNINGS } from '@/data/charts'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { formatCurrency, formatDate, toCSV, downloadText } from '@/utils/format'
@@ -43,7 +42,7 @@ export function EarningsPage() {
   useDocumentTitle('Earnings')
 
   const { user } = useAuth()
-  const { payouts, updatePayout } = useData()
+  const { payouts, updatePayout, createPayout, bookings, earnings } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
 
@@ -51,30 +50,35 @@ export function EarningsPage() {
   const [query, setQuery] = useState('')
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false)
 
-  const totalNet = EARNINGS_TXNS.reduce((sum, e) => sum + e.net, 0)
-  const totalGross = EARNINGS_TXNS.reduce((sum, e) => sum + e.gross, 0)
-  const totalCommission = EARNINGS_TXNS.reduce((sum, e) => sum + e.commission, 0)
-  const pendingPayout = EARNINGS_TXNS.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
+  const myEarnings = useMemo(() => {
+    const myBookingIds = new Set(bookings.filter((b) => b.caregiverId === myId).map((b) => b.id))
+    return earnings.filter((e) => e.caregiverId === myId || (e.caregiverId == null && myBookingIds.has(e.bookingId)))
+  }, [earnings, bookings, myId])
+
+  const totalNet = myEarnings.reduce((sum, e) => sum + e.net, 0)
+  const totalGross = myEarnings.reduce((sum, e) => sum + e.gross, 0)
+  const totalCommission = myEarnings.reduce((sum, e) => sum + e.commission, 0)
+  const pendingPayout = myEarnings.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
   const currentMonth = new Date().toISOString().slice(0, 7)
-  const thisMonth = EARNINGS_TXNS.filter((e) => e.date.startsWith(currentMonth)).reduce((sum, e) => sum + e.net, 0)
+  const thisMonth = myEarnings.filter((e) => e.date.startsWith(currentMonth)).reduce((sum, e) => sum + e.net, 0)
 
   const commissionPct = totalGross > 0 ? Math.round((totalCommission / totalGross) * 100) : 0
 
   const counts = useMemo(
     () => ({
-      all: EARNINGS_TXNS.length,
-      pending: EARNINGS_TXNS.filter((e) => e.status === 'Pending').length,
-      released: EARNINGS_TXNS.filter((e) => e.status === 'Released').length,
+      all: myEarnings.length,
+      pending: myEarnings.filter((e) => e.status === 'Pending').length,
+      released: myEarnings.filter((e) => e.status === 'Released').length,
     }),
-    [],
+    [myEarnings],
   )
 
   const filtered = useMemo(() => {
-    const list = tab === 'all' ? EARNINGS_TXNS : EARNINGS_TXNS.filter((e) => e.status.toLowerCase() === tab)
+    const list = tab === 'all' ? myEarnings : myEarnings.filter((e) => e.status.toLowerCase() === tab)
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((e) => [e.id, e.bookingId, e.service, e.status].join(' ').toLowerCase().includes(q))
-  }, [tab, query])
+  }, [myEarnings, tab, query])
 
   const handleExport = () => {
     const rows = filtered.map((e) => ({
@@ -94,6 +98,7 @@ export function EarningsPage() {
   const handlePayout = () => {
     const mine = payouts.find((p) => p.caregiverId === myId && p.status === 'Pending')
     if (mine) updatePayout(mine.id, 'Processing')
+    else createPayout({ caregiverId: myId, amount: pendingPayout, bank: 'HDFC •••• 4412', status: 'Processing' })
     setPayoutDialogOpen(false)
     toast.success('Payout request submitted — settles in 2 working days (demo)')
   }
@@ -139,7 +144,7 @@ export function EarningsPage() {
         <StatCard label="Total earnings" value={formatCurrency(totalNet)} icon={Banknote} tone="primary" hint="Lifetime net of commission" delay={0} />
         <StatCard label="Pending payout" value={formatCurrency(pendingPayout)} icon={Wallet} tone="warning" hint="Releasing soon" delay={0.05} />
         <StatCard label="This month" value={formatCurrency(thisMonth)} icon={HandCoins} tone="accent" hint="Current calendar month" delay={0.1} />
-        <StatCard label="Jobs completed" value={EARNINGS_TXNS.length} icon={Wallet} tone="success" hint="Paid transactions" delay={0.15} />
+        <StatCard label="Jobs completed" value={myEarnings.length} icon={Wallet} tone="success" hint="Paid transactions" delay={0.15} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

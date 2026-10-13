@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
+  ArrowRight,
   Building2,
   CheckCircle2,
   ChevronDown,
@@ -12,13 +13,15 @@ import {
   MessageSquare,
   Phone,
   Send,
+  Siren,
 } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { uid } from '@/utils/format'
 import { FAQS } from '@/data/content'
 import { Button } from '@/components/common/Button'
-import { Breadcrumbs } from '@/components/common/Breadcrumbs'
+import { Container } from '@/components/common/Container'
+import { PageHero } from '@/components/common/PageHero'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 
 const CONTACT_CARDS = [
@@ -104,31 +107,24 @@ export function ContactPage() {
 
   return (
     <div className="bg-canvas">
-      <section className="border-b border-line bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
-          <Breadcrumbs items={[{ label: 'Contact' }]} />
-          <div className="mt-5 max-w-3xl">
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-mint-100 px-3 py-1.5 text-xs font-bold text-primary-800">
-              <MessageSquare className="h-3.5 w-3.5" />
-              Real humans, not ticket bots
-            </span>
-            <h1 className="mt-4 font-display text-3xl font-extrabold leading-tight text-ink sm:text-4xl">
-              Talk to the CareMate team
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
-              Booking help, hospital requirements, caregiver onboarding or a billing question — write to us here or
-              call the care helpline. Urgent issues on an active booking are handled through the in-app SOS button.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="Real humans, not ticket bots"
+        icon={MessageSquare}
+        title="Talk to the"
+        highlight="CareMate team"
+        description="Booking help, hospital requirements, caregiver onboarding or a billing question — write to us here or call the care helpline. Urgent issues on an active booking are handled through the in-app SOS button."
+        items={[{ label: 'Contact' }]}
+      />
 
       {/* contact cards */}
-      <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 lg:px-8">
+      <Container className="pt-10 sm:pt-12">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CONTACT_CARDS.map((card) => (
-            <div key={card.label} className="rounded-card border border-line bg-white p-5 shadow-card">
-              <span className="grid h-11 w-11 place-items-center rounded-xl bg-mint-100 text-primary-700">
+            <div
+              key={card.label}
+              className="group rounded-card border border-line bg-white p-5 shadow-raised transition duration-300 hover:-translate-y-1 hover:border-primary-200"
+            >
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-mint-100 text-primary-700 transition-transform duration-300 group-hover:scale-105">
                 <card.icon className="h-5 w-5" />
               </span>
               <p className="mt-4 text-xs font-bold uppercase tracking-wider text-faint">{card.label}</p>
@@ -137,10 +133,10 @@ export function ContactPage() {
             </div>
           ))}
         </div>
-      </section>
+      </Container>
 
       {/* form + offices */}
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+      <Container className="py-10 sm:py-14">
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
           <div className="rounded-card border border-line bg-white shadow-raised">
             <div className="border-b border-line px-5 py-4 sm:px-6">
@@ -313,74 +309,94 @@ export function ContactPage() {
               </ul>
             </div>
 
-            <div className="rounded-card border border-line bg-primary-900 p-5">
-              <p className="flex items-center gap-2 text-sm font-bold text-white">
+            <div className="relative overflow-hidden rounded-card bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 p-5">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full bg-[radial-gradient(closest-side,rgba(56,189,248,0.3),transparent)] blur-2xl"
+              />
+              <p className="relative flex items-center gap-2 text-sm font-bold text-white">
                 <Phone className="h-4 w-4 text-accent-400" /> Active booking emergency?
               </p>
-              <p className="mt-2 text-sm leading-relaxed text-white/70">
+              <p className="relative mt-2 text-sm leading-relaxed text-white/65">
                 Use the SOS button inside your booking. It alerts the on-call desk, your emergency contact and an
                 admin who stays on the line until it is resolved.
               </p>
+              <span className="relative mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/85 backdrop-blur-sm">
+                <Siren className="h-3.5 w-3.5 text-accent-300" />
+                SOS desk answers 24×7
+              </span>
             </div>
           </div>
         </div>
-      </section>
+      </Container>
 
       {/* FAQ mini accordion */}
-      <section className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 sm:pb-18 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr] lg:items-start">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-700">Quick answers</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
-              Before you write in
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted">
-              These are the questions our support desk answers most often. If yours is not here, send the form above
-              or call the helpline.
-            </p>
-          </div>
+      <section className="border-t border-line bg-canvas">
+        <Container className="py-12 sm:py-16">
+          <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:items-start lg:gap-14">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-700">Quick answers</p>
+              <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
+                Before you write in
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-muted">
+                These are the questions our support desk answers most often. If yours is not here, send the form above
+                or call the helpline.
+              </p>
+              <Button to="/services" variant="outline" size="sm" className="mt-5" iconRight={ArrowRight}>
+                Browse care services
+              </Button>
+            </div>
 
-          <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-white shadow-card">
-            {FAQS.slice(0, 5).map((faq, i) => {
-              const open = openFaq === i
-              return (
-                <div key={faq.q}>
-                  <button
-                    type="button"
-                    id={`contact-faq-btn-${i}`}
-                    aria-expanded={open}
-                    aria-controls={`contact-faq-panel-${i}`}
-                    onClick={() => setOpenFaq(open ? -1 : i)}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-50"
-                  >
-                    <span className="font-display text-sm font-bold text-ink">{faq.q}</span>
-                    <ChevronDown
-                      className={cn(
-                        'h-4 w-4 shrink-0 text-faint transition-transform duration-200',
-                        open && 'rotate-180 text-primary-700',
-                      )}
-                    />
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {open ? (
-                      <motion.div
-                        id={`contact-faq-panel-${i}`}
-                        key="panel"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: 'easeOut' }}
-                        className="overflow-hidden"
+            <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-white shadow-card">
+              {FAQS.slice(0, 5).map((faq, i) => {
+                const open = openFaq === i
+                return (
+                  <div key={faq.q} className={cn(open && 'bg-mint-50/60')}>
+                    <button
+                      type="button"
+                      id={`contact-faq-btn-${i}`}
+                      aria-expanded={open}
+                      aria-controls={`contact-faq-panel-${i}`}
+                      onClick={() => setOpenFaq(open ? -1 : i)}
+                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-50"
+                    >
+                      <span
+                        className={cn(
+                          'font-display text-sm font-bold transition-colors sm:text-base',
+                          open ? 'text-primary-800' : 'text-ink',
+                        )}
                       >
-                        <p className="px-5 pb-5 text-sm leading-relaxed text-muted">{faq.a}</p>
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
-                </div>
-              )
-            })}
+                        {faq.q}
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 shrink-0 text-faint transition-transform duration-200',
+                          open && 'rotate-180 text-primary-700',
+                        )}
+                      />
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {open ? (
+                        <motion.div
+                          id={`contact-faq-panel-${i}`}
+                          key="panel"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: 'easeOut' }}
+                          className="overflow-hidden"
+                        >
+                          <p className="px-5 pb-5 text-sm leading-relaxed text-muted">{faq.a}</p>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        </Container>
       </section>
     </div>
   )

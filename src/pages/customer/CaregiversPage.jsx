@@ -44,7 +44,7 @@ const SORT_OPTIONS = [
 export function CaregiversPage() {
   useDocumentTitle('Caregivers')
   const navigate = useNavigate()
-  const { caregivers } = useData()
+  const { caregivers, shortlist, toggleShortlist: toggleShortlistStore } = useData()
 
   const [search, setSearch] = useState('')
   const [service, setService] = useState('All services')
@@ -53,20 +53,13 @@ export function CaregiversPage() {
   const [sort, setSort] = useState('recommended')
   const [view, setView] = useState('grid')
   const [shortlistOnly, setShortlistOnly] = useState(false)
-  const [shortlisted, setShortlisted] = useState(() => new Set(caregivers.filter((c) => c.verified).map((c) => c.id)))
+  const shortlisted = useMemo(() => new Set(shortlist), [shortlist])
 
   const toggleShortlist = (caregiver) => {
-    setShortlisted((prev) => {
-      const next = new Set(prev)
-      if (next.has(caregiver.id)) {
-        next.delete(caregiver.id)
-        toast(`${caregiver.name} removed from shortlist`)
-      } else {
-        next.add(caregiver.id)
-        toast.success('Added to shortlist', { description: `${caregiver.name} saved for later.` })
-      }
-      return next
-    })
+    const wasSaved = shortlisted.has(caregiver.id)
+    toggleShortlistStore(caregiver.id)
+    if (wasSaved) toast(`${caregiver.name} removed from shortlist`)
+    else toast.success('Added to shortlist', { description: `${caregiver.name} saved for later.` })
   }
 
   const filtered = useMemo(() => {
@@ -258,7 +251,7 @@ export function CaregiversPage() {
                   <CaregiverCard
                     caregiver={cg}
                     view="grid"
-                    onBook={() => navigate('/customer/book-caregiver')}
+                    onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
                     actionLabel="View profile"
                   />
                 </div>
@@ -272,7 +265,7 @@ export function CaregiversPage() {
                   <CaregiverCard
                     caregiver={cg}
                     view="list"
-                    onBook={() => navigate('/customer/book-caregiver')}
+                    onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
                     actionLabel="View profile"
                   />
                 </div>

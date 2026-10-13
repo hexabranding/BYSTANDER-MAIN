@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useMemo } from 'react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
-import { BOOKINGS } from '@/data/bookings'
+import { BOOKINGS, CUSTOMERS } from '@/data/bookings'
 import { CAREGIVERS } from '@/data/caregivers'
 import { REVIEWS, FAQS, TESTIMONIALS, HOW_IT_WORKS, WHY_CHOOSE } from '@/data/content'
 import { AVAILABLE_JOBS, COMPLAINTS, SOS_ALERTS, FRAUD_ALERTS, BLACKLIST, NOTIFICATIONS } from '@/data/operations'
 import { VERIFICATIONS } from '@/data/verifications'
 import { TRANSACTIONS, PAYOUTS, COMMISSIONS, EARNINGS_TXNS } from '@/data/finance'
 import { CONVERSATIONS } from '@/data/messages'
+import { PLATFORM_FEE, PLATFORM_COMMISSION, GST_RATE } from '@/utils/constants'
 import { bookingRef, uid } from '@/utils/format'
 
 const DataContext = createContext(null)
@@ -14,6 +15,7 @@ const DataContext = createContext(null)
 const seed = () => ({
   bookings: BOOKINGS,
   caregivers: CAREGIVERS,
+  customers: CUSTOMERS,
   verifications: VERIFICATIONS,
   jobs: AVAILABLE_JOBS,
   complaints: COMPLAINTS,
@@ -27,6 +29,7 @@ const seed = () => ({
   earnings: EARNINGS_TXNS,
   blacklist: BLACKLIST,
   frauds: FRAUD_ALERTS,
+  shortlist: CAREGIVERS.filter((c) => c.verified).map((c) => c.id),
 })
 
 export function DataProvider({ children }) {
@@ -116,7 +119,7 @@ export function DataProvider({ children }) {
   )
 
   const advanceBooking = useCallback(
-    (id, step) => {
+    (id, step, meta = null) => {
       const now = new Date().toISOString()
       const map = {
         start: 'Service started',
@@ -131,7 +134,13 @@ export function DataProvider({ children }) {
           const status =
             step === 'start' ? 'In Progress' : step === 'complete' ? 'Completed' : b.status
           const paymentStatus = step === 'settle' ? 'Paid' : b.paymentStatus
-          return { ...b, timeline, status, paymentStatus }
+          const checkMeta =
+            step === 'start' && meta
+              ? { checkIn: { at: now, ...meta } }
+              : step === 'complete' && meta
+                ? { checkOut: { at: now, ...meta } }
+                : null
+          return { ...b, timeline, status, paymentStatus, ...(checkMeta || {}) }
         }),
       )
     },
@@ -141,17 +150,28 @@ export function DataProvider({ children }) {
   /* ---------------- jobs ---------------- */
 
   const acceptJob = useCallback(
-    (jobId) => {
+    (jobId, caregiverIdOverride) => {
       let created = null
-      patch('jobs', (list) => list.map((j) => (j.id === jobId ? { ...j, status: 'Accepted' } : j)))
+      patch('jobs', (list) =>
+        list.map((j) =>
+          j.id === jobId ? { ...j, status: 'Accepted', caregiverId: caregiverIdOverride || j.caregiverId } : j,
+        ),
+      )
       setStore((prev) => {
         const job = prev.jobs.find((j) => j.id === jobId)
         if (!job) return prev
+        const caregiverId = caregiverIdOverride || job.caregiverId
+        const caregiver = prev.caregivers.find((c) => c.id === caregiverId)
+        const subtotal = job.payment
+        const platformFee = PLATFORM_FEE
+        const commission = Math.round(subtotal * PLATFORM_COMMISSION)
+        const tax = Math.round((subtotal + platformFee) * GST_RATE)
         created = {
           id: job.bookingId,
           ref: bookingRef(),
-          customerId: 'cu-202',
-          caregiverId: job.caregiverId,
+          customerId: job.customerId || 'cu-202',
+          caregiverId,
+          caregiverName: caregiver?.name || job.caregiverName || '',
           service: job.service,
           patient: job.patient,
           careType: job.careType,
@@ -164,12 +184,12 @@ export function DataProvider({ children }) {
           paymentStatus: 'Escrow Held',
           createdAt: new Date().toISOString(),
           invoiceNo: `INV-2026-${Math.floor(1000 + Math.random() * 8000)}`,
-          hourlyRate: Math.round(job.payment / job.hours),
-          subtotal: job.payment,
-          platformFee: 49,
-          commission: Math.round(job.payment * 0.12),
-          tax: Math.round((job.payment + 49) * 0.18),
-          total: job.payment + 49 + Math.round((job.payment + 49) * 0.18),
+          hourlyRate: Math.round(subtotal / job.hours),
+          subtotal,
+          platformFee,
+          commission,
+          tax,
+          total: subtotal + platformFee + tax,
           notes: job.requirements,
           specialInstructions: '',
           timeline: [
@@ -185,6 +205,24 @@ export function DataProvider({ children }) {
         return {
           ...prev,
           bookings: exists ? prev.bookings : [created, ...prev.bookings],
+          transactions: [
+            {
+              id: uid('tx'),
+              bookingId: job.bookingId,
+              customerId: job.customerId || 'cu-202',
+              caregiverId,
+              names: `${job.customerName} → ${caregiver?.name || 'Caregiver'}`,
+              service: job.service,
+              date: new Date().toISOString().slice(0, 10),
+              amount: subtotal + platformFee + tax,
+              commission,
+              payout: subtotal,
+              method: 'UPI',
+              status: 'Escrow Held',
+              type: 'Booking payment',
+            },
+            ...prev.transactions,
+          ],
           notifications: [
             {
               id: uid('nt'),
@@ -410,6 +448,187 @@ export function DataProvider({ children }) {
   const updateFraud = useCallback((id, status) => patch('frauds', (list) => list.map((f) => (f.id === id ? { ...f, status } : f))), [patch])
   const updatePayout = useCallback((id, status) => patch('payouts', (list) => list.map((p) => (p.id === id ? { ...p, status } : p))), [patch])
 
+  /* ---------------- payments, payouts, conversations, shortlist, registration bridge ---------------- */
+
+  const addTransaction = useCallback(
+    (payload) => {
+      const tx = { id: uid('tx'), date: new Date().toISOString().slice(0, 10), type: 'Booking payment', ...payload }
+      patch('transactions', (list) => [tx, ...list])
+      return tx
+    },
+    [patch],
+  )
+
+  const createPayout = useCallback(
+    (payload) => {
+      const payout = {
+        id: `PO-${Math.floor(5520 + Math.random() * 60)}`,
+        status: 'Pending',
+        requestedOn: new Date().toISOString().slice(0, 10),
+        ...payload,
+      }
+      patch('payouts', (list) => [payout, ...list])
+      return payout
+    },
+    [patch],
+  )
+
+  const ensureConversation = useCallback(
+    (payload) => {
+      let id = null
+      setStore((prev) => {
+        const existing = prev.conversations.find((c) => c.bookingRef && c.bookingRef === payload.bookingRef && (c.audience || []).includes(payload.audienceRole))
+        if (existing) {
+          id = existing.id
+          return prev
+        }
+        const thread = {
+          id: uid('cv'),
+          audience: [payload.audienceRole, payload.audienceRole === 'customer' ? 'caregiver' : 'customer'],
+          name: payload.name,
+          role: payload.roleLabel || '',
+          avatar: payload.avatar || '',
+          bookingRef: payload.bookingRef,
+          unread: 0,
+          messages: payload.firstMessage
+            ? [{ id: uid('m'), from: 'me', text: payload.firstMessage, at: new Date().toISOString() }]
+            : [],
+        }
+        id = thread.id
+        return { ...prev, conversations: [thread, ...prev.conversations] }
+      })
+      return id
+    },
+    [setStore],
+  )
+
+  const toggleShortlist = useCallback(
+    (caregiverId) => {
+      setStore((prev) => {
+        const list = prev.shortlist || []
+        return {
+          ...prev,
+          shortlist: list.includes(caregiverId) ? list.filter((id) => id !== caregiverId) : [...list, caregiverId],
+        }
+      })
+    },
+    [setStore],
+  )
+
+  const addEarning = useCallback(
+    (payload) => {
+      const earning = { id: uid('EX'), date: new Date().toISOString().slice(0, 10), status: 'Pending', ...payload }
+      patch('earnings', (list) => [earning, ...list])
+      return earning
+    },
+    [patch],
+  )
+
+  const registerCaregiverProfile = useCallback(
+    (profile) => {
+      const caregiverId = profile.caregiverId || profile.id
+      setStore((prev) => {
+        if (prev.caregivers.some((c) => c.id === caregiverId)) return prev
+        const record = {
+          id: caregiverId,
+          name: profile.name,
+          gender: profile.gender || '',
+          photo: '',
+          qualification: profile.qualification || '',
+          regNo: profile.nursingRegNo || '',
+          experienceYears: Number(profile.experience) || 0,
+          rating: 0,
+          reviewCount: 0,
+          hourlyRate: 399,
+          services: [],
+          languages: profile.languages || [],
+          city: profile.city || 'Mumbai, MH',
+          area: profile.area || '',
+          distanceKm: 6,
+          availability: 'Available Today',
+          verified: false,
+          verificationStatus: 'Pending',
+          careSettings: profile.careSettings || [],
+          bio: profile.bio || '',
+          joinedOn: new Date().toISOString().slice(0, 10),
+          trustScore: 55,
+          responseRate: 0,
+          completedJobs: 0,
+          repeatClients: 0,
+          badges: ['New applicant'],
+          specialities: [],
+          weekAvailability: [],
+        }
+        const docList = (profile.documents || []).map((d) => ({
+          id: d.docId,
+          type: d.type,
+          file: d.file?.name || '',
+          status: d.optional ? 'Pending' : 'Under Review',
+          feedback: '',
+          uploadedOn: new Date().toISOString().slice(0, 10),
+        }))
+        const verification = {
+          id: `VR-${caregiverId.replace('cg-', 'CG-')}`,
+          caregiverId,
+          name: profile.name,
+          avatar: '',
+          qualification: profile.qualification || '',
+          regNo: profile.nursingRegNo || '',
+          city: profile.city || 'Mumbai, MH',
+          submittedOn: new Date().toISOString().slice(0, 10),
+          status: 'Pending',
+          overallScore: 0,
+          documents: docList,
+          history: [{ at: new Date().toISOString(), action: 'Application submitted', by: profile.name }],
+        }
+        return {
+          ...prev,
+          caregivers: [record, ...prev.caregivers],
+          verifications: [verification, ...prev.verifications],
+          notifications: [
+            {
+              id: uid('nt'),
+              title: 'New caregiver application',
+              body: `${profile.name} submitted documents for verification.`,
+              time: new Date().toISOString(),
+              tone: 'info',
+              audience: ['admin'],
+              read: false,
+            },
+            ...prev.notifications,
+          ],
+        }
+      })
+    },
+    [setStore],
+  )
+
+  const registerCustomerRecord = useCallback(
+    (profile) => {
+      setStore((prev) => {
+        if (prev.customers.some((c) => c.id === profile.id || c.email === profile.email)) return prev
+        const record = {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          phone: profile.phone || '',
+          avatar: '',
+          city: profile.city || '',
+          area: profile.area || '',
+          address: profile.address || '',
+          joinedOn: new Date().toISOString().slice(0, 10),
+          status: 'Active',
+          role: 'customer',
+          patientInfo: profile.patientInfo || null,
+          totalBookings: 0,
+          totalSpent: 0,
+        }
+        return { ...prev, customers: [record, ...prev.customers] }
+      })
+    },
+    [setStore],
+  )
+
   const resetDemoData = useCallback(() => clearStore(), [clearStore])
 
   const value = useMemo(
@@ -439,6 +658,13 @@ export function DataProvider({ children }) {
       removeBlacklist,
       updateFraud,
       updatePayout,
+      addTransaction,
+      createPayout,
+      ensureConversation,
+      toggleShortlist,
+      addEarning,
+      registerCaregiverProfile,
+      registerCustomerRecord,
       resetDemoData,
     }),
     [
@@ -466,6 +692,13 @@ export function DataProvider({ children }) {
       removeBlacklist,
       updateFraud,
       updatePayout,
+      addTransaction,
+      createPayout,
+      ensureConversation,
+      toggleShortlist,
+      addEarning,
+      registerCaregiverProfile,
+      registerCustomerRecord,
       resetDemoData,
     ],
   )

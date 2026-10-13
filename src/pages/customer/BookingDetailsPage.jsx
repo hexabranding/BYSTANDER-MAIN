@@ -1,16 +1,21 @@
 import { useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Building2,
   CalendarDays,
+  CheckCircle2,
   Clock,
+  CreditCard,
   Download,
   Home,
   MapPin,
   MessageSquare,
+  QrCode,
   ShieldAlert,
   ShieldCheck,
+  Smartphone,
+  Star,
   UserRound,
   Wallet,
   XCircle,
@@ -20,7 +25,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { getBookingById, CUSTOMERS } from '@/data/bookings'
-import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
+import { downloadText, formatCurrency, formatDate, formatDateTime, toCSV } from '@/utils/format'
 import { cn } from '@/utils/cn'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -35,10 +40,24 @@ import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Modal } from '@/components/common/Modal'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 
-const COMPLAINT_CATEGORIES = ['Service quality', 'No-show', 'Behaviour', 'Billing', 'Safety', 'Other']
+const COMPLAINT_CATEGORIES = ['Misbehavior', 'Theft', 'Abuse', 'Harassment', 'Medical negligence', 'Other']
+
+const PAYMENT_METHODS = [
+  { id: 'upi', label: 'UPI', icon: Smartphone, hint: 'GPay, PhonePe, Paytm' },
+  { id: 'card', label: 'Card', icon: CreditCard, hint: 'Visa, Mastercard, RuPay' },
+  { id: 'netbanking', label: 'Net banking', icon: Wallet, hint: 'All major banks' },
+]
+
+const RATING_CRITERIA = [
+  { key: 'serviceQuality', label: 'Service quality' },
+  { key: 'behaviour', label: 'Behaviour' },
+  { key: 'punctuality', label: 'Punctuality' },
+  { key: 'overall', label: 'Overall experience' },
+]
 
 export function BookingDetailsPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const {
     bookings,
@@ -46,6 +65,11 @@ export function BookingDetailsPage() {
     updateBooking,
     cancelBooking,
     createComplaint,
+    advanceBooking,
+    addReview,
+    addTransaction,
+    addEarning,
+    ensureConversation,
   } = useData()
 
   useDocumentTitle(`Booking ${id || ''}`)
@@ -59,7 +83,13 @@ export function BookingDetailsPage() {
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [complaintOpen, setComplaintOpen] = useState(false)
-  const [complaint, setComplaint] = useState({ category: 'Service quality', subject: '', description: '' })
+  const [complaint, setComplaint] = useState({ category: 'Misbehavior', subject: '', description: '' })
+  const [payOpen, setPayOpen] = useState(false)
+  const [payMethod, setPayMethod] = useState('upi')
+  const [paying, setPaying] = useState(false)
+  const [rateOpen, setRateOpen] = useState(false)
+  const [rateForm, setRateForm] = useState({ serviceQuality: 5, behaviour: 5, punctuality: 5, overall: 5, comment: '' })
+  const [settleOpen, setSettleOpen] = useState(false)
 
   if (!booking) {
     return (
@@ -88,6 +118,11 @@ export function BookingDetailsPage() {
       : null)
 
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed'
+  const canPay = booking.paymentStatus === 'Pending'
+  const canSettle = booking.status === 'Completed' && booking.paymentStatus === 'Escrow Held'
+  const canRate = booking.status === 'Completed' && !booking.customerRating
+  const hasCheckedIn = Boolean(booking.checkIn)
+  const hasCheckedOut = Boolean(booking.checkOut)
 
   const handleDownloadInvoice = () => {
     const rows = [
@@ -131,15 +166,100 @@ export function BookingDetailsPage() {
     toast.success('Complaint submitted', {
       description: 'Our support desk will review it within 24 hours.',
     })
-    setComplaint({ category: 'Service quality', subject: '', description: '' })
+    setComplaint({ category: 'Misbehavior', subject: '', description: '' })
     setComplaintOpen(false)
   }
 
   const handlePayNow = () => {
-    updateBooking(booking.id, { paymentStatus: 'Escrow Held' })
-    toast.success('Payment secured in escrow', {
-      description: 'Funds will be released to the caregiver after the service completes.',
+    setPaying(true)
+    setTimeout(() => {
+      const methodLabel = PAYMENT_METHODS.find((m) => m.id === payMethod)?.label || 'UPI'
+      updateBooking(booking.id, { paymentStatus: 'Escrow Held' })
+      addTransaction({
+        bookingId: booking.id,
+        customerId: booking.customerId,
+        caregiverId: booking.caregiverId,
+        names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caregiver'}`,
+        service: booking.service,
+        amount: booking.total,
+        commission: booking.commission || Math.round(booking.subtotal * 0.12),
+        payout: booking.subtotal,
+        method: methodLabel,
+        status: 'Escrow Held',
+        type: 'Booking payment',
+      })
+      setPaying(false)
+      setPayOpen(false)
+      toast.success('Payment secured in escrow', {
+        description: `Paid via ${methodLabel}. Funds release after the service completes.`,
+      })
+    }, 900)
+  }
+
+  const handleSettle = () => {
+    advanceBooking(booking.id, 'settle')
+    const tx = addTransaction({
+      bookingId: booking.id,
+      customerId: booking.customerId,
+      caregiverId: booking.caregiverId,
+      names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caregiver'}`,
+      service: booking.service,
+      amount: booking.total,
+      commission: booking.commission || Math.round(booking.subtotal * 0.12),
+      payout: booking.subtotal,
+      method: 'Escrow',
+      status: 'Released',
+      type: 'Booking payment',
     })
+    if (booking.caregiverId) {
+      addEarning({
+        bookingId: booking.id,
+        caregiverId: booking.caregiverId,
+        service: booking.service,
+        gross: booking.subtotal,
+        commission: booking.commission || Math.round(booking.subtotal * 0.12),
+        net: booking.subtotal - (booking.commission || Math.round(booking.subtotal * 0.12)),
+        status: 'Pending',
+      })
+    }
+    setSettleOpen(false)
+    toast.success('Service confirmed & payment released', {
+      description: `Payout of ${formatCurrency(booking.subtotal)} is on its way to ${caregiver?.name || 'your caregiver'}. Tx ${tx.id}.`,
+    })
+  }
+
+  const handleRate = () => {
+    const avg = (
+      (rateForm.serviceQuality + rateForm.behaviour + rateForm.punctuality + rateForm.overall) / 4
+    ).toFixed(1)
+    addReview({
+      bookingId: booking.id,
+      caregiverId: booking.caregiverId,
+      customerId: booking.customerId,
+      customerName: customer?.name || user?.name || 'Customer',
+      rating: Number(avg),
+      criteria: { ...rateForm, comment: undefined },
+      comment: rateForm.comment.trim() || 'Great service, thank you!',
+    })
+    updateBooking(booking.id, {
+      customerRating: { ...rateForm, average: Number(avg), at: new Date().toISOString() },
+    })
+    setRateOpen(false)
+    toast.success('Thank you for your review!', {
+      description: `${caregiver?.name || 'Your caregiver'} received your ${avg}-star rating.`,
+    })
+  }
+
+  const handleSendMessage = () => {
+    const threadId = ensureConversation({
+      bookingRef: booking.ref,
+      audienceRole: 'customer',
+      name: caregiver?.name || 'Care Coordinator',
+      roleLabel: caregiver?.qualification || 'CareMate support',
+      avatar: caregiver?.photo || '',
+      firstMessage: `Hi, I'm reaching out regarding booking ${booking.id} (${booking.service} on ${formatDate(booking.date)}).`,
+    })
+    navigate(`/customer/messages?thread=${threadId}`)
   }
 
   return (
@@ -163,7 +283,7 @@ export function BookingDetailsPage() {
         }
         action={
           <>
-            <Button to="/customer/messages" variant="outline" size="sm" icon={MessageSquare}>
+            <Button variant="outline" size="sm" icon={MessageSquare} onClick={handleSendMessage}>
               Message caregiver
             </Button>
             <Button variant="outline" size="sm" icon={Download} onClick={handleDownloadInvoice}>
@@ -181,6 +301,51 @@ export function BookingDetailsPage() {
         }
       />
 
+      {(hasCheckedIn || canRate || canSettle) && (
+        <Card className={cn(canSettle ? 'border-success-200 bg-success-50' : 'border-primary-200 bg-mint-50')}>
+          <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span
+                className={cn(
+                  'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
+                  canSettle ? 'bg-success-500 text-white' : 'bg-primary-700 text-white',
+                )}
+              >
+                {canSettle ? <CheckCircle2 className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
+              </span>
+              <div>
+                <p className="text-sm font-bold text-ink">
+                  {canSettle
+                    ? 'Service completed — confirm to release payment'
+                    : canRate
+                      ? 'How was your experience with ' + (caregiver?.name || 'your caregiver') + '?'
+                      : 'Your caregiver has checked in'}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {canSettle
+                    ? 'Once you confirm, escrow funds are released and a payout is initiated.'
+                    : canRate
+                      ? 'Your rating helps other families and improves our matching.'
+                      : `Checked in at ${booking.checkIn ? formatDateTime(booking.checkIn.at || booking.checkIn) : '—'}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {canSettle ? (
+                <Button icon={CheckCircle2} onClick={() => setSettleOpen(true)}>
+                  Confirm & release payment
+                </Button>
+              ) : null}
+              {canRate ? (
+                <Button icon={Star} onClick={() => setRateOpen(true)}>
+                  Rate caregiver
+                </Button>
+              ) : null}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
@@ -189,6 +354,24 @@ export function BookingDetailsPage() {
               <BookingTimeline steps={booking.timeline || []} />
             </CardBody>
           </Card>
+
+          {(hasCheckedIn || hasCheckedOut) && (
+            <Card>
+              <CardHeader title="Service verification" icon={QrCode} subtitle="Check-in / check-out records" />
+              <CardBody className="grid gap-3 sm:grid-cols-2">
+                <VerifyRow
+                  label="Check-in"
+                  at={booking.checkIn?.at}
+                  qr={booking.checkIn?.qrCode}
+                />
+                <VerifyRow
+                  label="Check-out"
+                  at={booking.checkOut?.at}
+                  qr={booking.checkOut?.qrCode}
+                />
+              </CardBody>
+            </Card>
+          )}
 
           <div className="grid gap-6 sm:grid-cols-2">
             <Card>
@@ -311,9 +494,9 @@ export function BookingDetailsPage() {
                       ? 'A refund was processed for this booking to your original payment method.'
                       : 'Complete the payment to confirm your caregiver in escrow.'}
               </p>
-              {booking.paymentStatus === 'Pending' ? (
-                <Button className="w-full" icon={ShieldCheck} onClick={handlePayNow}>
-                  Pay now (demo)
+              {canPay ? (
+                <Button className="w-full" icon={ShieldCheck} onClick={() => setPayOpen(true)}>
+                  Pay {formatCurrency(booking.total)} now
                 </Button>
               ) : null}
             </CardBody>
@@ -343,6 +526,138 @@ export function BookingDetailsPage() {
         confirmLabel="Yes, cancel booking"
         cancelLabel="Keep booking"
       />
+
+      <ConfirmationDialog
+        open={settleOpen}
+        onClose={() => setSettleOpen(false)}
+        onConfirm={handleSettle}
+        tone="success"
+        title="Confirm service completed?"
+        message="By confirming, you verify the service was delivered as scheduled and authorise release of escrow funds to your caregiver. This cannot be undone."
+        confirmLabel="Yes, release payment"
+        cancelLabel="Not yet"
+      />
+
+      <Modal
+        open={payOpen}
+        onClose={() => setPayOpen(false)}
+        title="Complete payment"
+        subtitle={`${booking.service} · ${formatDate(booking.date, { long: true })}`}
+        size="sm"
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setPayOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handlePayNow} loading={paying} icon={ShieldCheck}>
+              Pay {formatCurrency(booking.total)}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-line bg-canvas px-4 py-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted">Amount</span>
+              <span className="font-display text-lg font-extrabold text-ink">{formatCurrency(booking.total)}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted">Held in escrow until the service is completed.</p>
+          </div>
+          <div className="space-y-2">
+            {PAYMENT_METHODS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setPayMethod(m.id)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition',
+                  payMethod === m.id
+                    ? 'border-primary-600 bg-mint-50 ring-2 ring-primary-200'
+                    : 'border-line bg-white hover:border-primary-200',
+                )}
+              >
+                <span
+                  className={cn(
+                    'grid h-9 w-9 shrink-0 place-items-center rounded-lg',
+                    payMethod === m.id ? 'bg-primary-700 text-white' : 'bg-slate-100 text-muted',
+                  )}
+                >
+                  <m.icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-ink">{m.label}</span>
+                  <span className="block text-xs text-muted">{m.hint}</span>
+                </span>
+                <span
+                  className={cn(
+                    'grid h-5 w-5 shrink-0 place-items-center rounded-full border-2',
+                    payMethod === m.id ? 'border-primary-700 bg-primary-700' : 'border-line-strong',
+                  )}
+                >
+                  {payMethod === m.id ? <CheckCircle2 className="h-3 w-3 text-white" /> : null}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] leading-relaxed text-faint">
+            Payments are simulated in this demo — no real money is charged. In production this step runs through the
+            PCI-compliant gateway with escrow protection.
+          </p>
+        </div>
+      </Modal>
+
+      <Modal
+        open={rateOpen}
+        onClose={() => setRateOpen(false)}
+        title="Rate your caregiver"
+        subtitle={`${caregiver?.name || 'Your caregiver'} · ${booking.service}`}
+        size="md"
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setRateOpen(false)}>
+              Skip for now
+            </Button>
+            <Button onClick={handleRate} icon={Star}>
+              Submit rating
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {RATING_CRITERIA.map((c) => (
+            <div key={c.key} className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-ink">{c.label}</span>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setRateForm((f) => ({ ...f, [c.key]: v }))}
+                    aria-label={`${c.label}: ${v} stars`}
+                    className="transition hover:scale-110"
+                  >
+                    <Star
+                      className={cn(
+                        'h-6 w-6',
+                        v <= rateForm[c.key] ? 'fill-warning-400 text-warning-400' : 'text-slate-300',
+                      )}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <FormField label="Comment (optional)" htmlFor="rate-comment">
+            <Textarea
+              id="rate-comment"
+              rows={3}
+              value={rateForm.comment}
+              onChange={(e) => setRateForm((f) => ({ ...f, comment: e.target.value }))}
+              placeholder="Share what went well, or what we can improve…"
+            />
+          </FormField>
+        </div>
+      </Modal>
 
       <Modal
         open={complaintOpen}
@@ -394,6 +709,28 @@ export function BookingDetailsPage() {
           </FormField>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function VerifyRow({ label, at, qr }) {
+  return (
+    <div className="rounded-xl border border-line bg-slate-50 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wider text-faint">{label}</span>
+        <StatusBadge status={at ? 'Verified' : 'Pending'} size="sm" />
+      </div>
+      <p className="mt-1.5 text-sm font-semibold text-ink">{at ? formatDateTime(at) : 'Not yet recorded'}</p>
+      {at ? (
+        <div className="mt-1.5 space-y-0.5 text-xs text-muted">
+          <p className="flex items-center gap-1.5">
+            <ShieldCheck className="h-3 w-3 text-success-600" /> Selfie captured
+          </p>
+          <p className="flex items-center gap-1.5">
+            <QrCode className="h-3 w-3 text-primary-600" /> QR {qr || 'verified'}
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }

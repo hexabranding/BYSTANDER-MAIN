@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { LayoutGrid, List, RotateCcw, SlidersHorizontal, UserSearch } from 'lucide-react'
+import {
+  BadgeCheck,
+  LayoutGrid,
+  Link2,
+  List,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Siren,
+  UserSearch,
+  X,
+} from 'lucide-react'
 import { useDocumentTitle, useDebouncedValue } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { cn } from '@/utils/cn'
@@ -9,8 +21,8 @@ import { CARE_TYPES, CITIES, QUALIFICATIONS } from '@/utils/constants'
 import { getServiceById } from '@/data/services'
 import { CAREGIVERS } from '@/data/caregivers'
 import { Button } from '@/components/common/Button'
-import { Breadcrumbs } from '@/components/common/Breadcrumbs'
-import { PageHeader } from '@/components/common/PageHeader'
+import { Container } from '@/components/common/Container'
+import { PageHero } from '@/components/common/PageHero'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Pagination } from '@/components/common/Pagination'
 import { EmptyState } from '@/components/common/States'
@@ -33,8 +45,14 @@ const SORT_OPTIONS = [
 ]
 const MAX_DISTANCE = 25
 
+const TRUST_POINTS = [
+  { icon: ShieldCheck, label: 'ID & licence verified' },
+  { icon: BadgeCheck, label: 'Escrow-protected payment' },
+  { icon: Siren, label: 'SOS desk live 24×7' },
+]
+
 export function CaregiversPage() {
-  useDocumentTitle('Find Caregivers')
+  useDocumentTitle('Find Caretaker')
 
   const [searchParams] = useSearchParams()
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -116,6 +134,22 @@ export function CaregiversPage() {
     reset()
   }
 
+  const activeChips = [
+    query ? { key: 'query', label: `“${query}”`, onRemove: () => setQuery('') } : null,
+    city ? { key: 'city', label: city, onRemove: () => setCity('') } : null,
+    ...selectedServices.map((s) => ({ key: `svc-${s}`, label: s, onRemove: () => toggleService(s) })),
+    availability !== 'Any'
+      ? { key: 'availability', label: availability, onRemove: () => setAvailability('Any') }
+      : null,
+    qualification !== 'Any'
+      ? { key: 'qualification', label: qualification, onRemove: () => setQualification('Any') }
+      : null,
+    minRating > 0 ? { key: 'rating', label: `${minRating}★ & up`, onRemove: () => setMinRating(0) } : null,
+    maxDistance < MAX_DISTANCE
+      ? { key: 'distance', label: `Within ${maxDistance} km`, onRemove: () => setMaxDistance(MAX_DISTANCE) }
+      : null,
+  ].filter(Boolean)
+
   const copySearchLink = async () => {
     const params = new URLSearchParams()
     if (city) params.set('city', city)
@@ -132,24 +166,29 @@ export function CaregiversPage() {
 
   return (
     <div className="bg-canvas">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <Breadcrumbs items={[{ label: 'Caregivers' }]} />
+      {/* ---------------- header band ---------------- */}
+      <PageHero
+        eyebrow="Search results"
+        icon={Search}
+        title="Find a"
+        highlight="caretaker"
+        description="Every profile below has passed identity, nursing registration and address verification. Filter by city, qualification, availability and budget — then book with escrow protection."
+        items={[{ label: 'Find Caretaker' }]}
+        actions={TRUST_POINTS.map((t) => (
+          <span
+            key={t.label}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/85 backdrop-blur-sm"
+          >
+            <t.icon className="h-3.5 w-3.5 text-accent-300" />
+            {t.label}
+          </span>
+        ))}
+      />
 
-        <div className="mt-4">
-          <PageHeader
-            title="Find a verified caregiver"
-            subtitle="Filter 16 hand-checked profiles by city, qualification, availability and budget. Every result below has passed identity, registration and address verification."
-            action={
-              <Button variant="outline" size="sm" onClick={copySearchLink}>
-                Copy search link
-              </Button>
-            }
-          />
-        </div>
-
-        <div className="mt-6 grid gap-6 lg:grid-cols-[17.5rem_1fr] lg:items-start">
+      <Container className="py-8 sm:py-10">
+        <div className="grid gap-6 lg:grid-cols-[17.5rem_1fr] lg:items-start">
           {/* ------------- filters ------------- */}
-          <aside className="lg:sticky lg:top-20">
+          <aside className="lg:sticky lg:top-32">
             <div className={cn('lg:block', filtersOpen ? 'block' : 'hidden')}>
               <FilterPanel
                 title="Filters"
@@ -188,7 +227,7 @@ export function CaregiversPage() {
                 </FilterGroup>
 
                 <FilterGroup label="Service type">
-                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1 thin-scrollbar">
+                  <div className="thin-scrollbar max-h-56 space-y-2 overflow-y-auto pr-1">
                     {CARE_TYPES.map((svc) => (
                       <CheckOption
                         key={svc}
@@ -300,7 +339,8 @@ export function CaregiversPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            {/* active filter chips */}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -311,16 +351,30 @@ export function CaregiversPage() {
                 Filters{activeCount > 0 ? ` (${activeCount})` : ''}
               </Button>
 
-              <p className="text-sm text-muted">
-                <span className="font-bold text-ink">{totalItems}</span> caregiver{totalItems === 1 ? '' : 's'} match
-                your filters
+              {activeChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={chip.onRemove}
+                  className="group inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 py-1 pr-1.5 pl-3 text-xs font-semibold text-primary-800 transition hover:border-primary-300 hover:bg-primary-100"
+                >
+                  {chip.label}
+                  <span className="grid h-4 w-4 place-items-center rounded-full bg-primary-200/70 text-primary-700 transition group-hover:bg-primary-300">
+                    <X className="h-2.5 w-2.5" />
+                  </span>
+                </button>
+              ))}
+
+              <p className="ml-auto text-sm text-muted">
+                <span className="font-display font-extrabold tabular-nums text-ink">{totalItems}</span>{' '}
+                caretaker{totalItems === 1 ? '' : 's'} match your filters
                 {activeCount > 0 ? (
                   <button
                     type="button"
                     onClick={resetFilters}
-                    className="ml-2 inline-flex items-center gap-1 text-xs font-semibold text-danger-600 transition hover:text-danger-700"
+                    className="ml-2.5 inline-flex items-center gap-1 text-xs font-semibold text-danger-600 transition hover:text-danger-700"
                   >
-                    <RotateCcw className="h-3.5 w-3.5" /> Reset
+                    <RotateCcw className="h-3.5 w-3.5" /> Reset all
                   </button>
                 ) : null}
               </p>
@@ -330,8 +384,8 @@ export function CaregiversPage() {
               <div className="mt-4 rounded-card border border-line bg-white shadow-card">
                 <EmptyState
                   icon={UserSearch}
-                  title="No caregivers match these filters"
-                  description="Widen the distance, remove a qualification filter or clear the search to see all available caregivers."
+                  title="No caretakers match these filters"
+                  description="Widen the distance, remove a qualification filter or clear the search to see all available caretakers."
                   action={
                     <Button variant="outline" icon={RotateCcw} onClick={resetFilters}>
                       Reset filters
@@ -359,9 +413,27 @@ export function CaregiversPage() {
               totalItems={totalItems}
               className="mt-6"
             />
+
+            {/* share strip */}
+            <div className="mt-8 flex flex-col gap-3 rounded-card border border-dashed border-primary-200 bg-primary-50/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-primary-700 shadow-card">
+                  <Link2 className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-ink">Sending this search to family?</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                    Copy a link that keeps every filter you have applied — no need to explain it twice.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" icon={Link2} onClick={copySearchLink} className="shrink-0">
+                Copy search link
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      </Container>
     </div>
   )
 }

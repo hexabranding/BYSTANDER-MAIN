@@ -35,7 +35,7 @@ export const CUSTOMER_NAV = [
     section: 'Care',
     items: [
       { label: 'Book a Caregiver', to: '/customer/book-caregiver', icon: CalendarPlus },
-      { label: 'Find Caregivers', to: '/customer/caregivers', icon: Users },
+      { label: 'Find Caretaker', to: '/customer/caregivers', icon: Users },
       { label: 'My Bookings', to: '/customer/bookings', icon: CalendarRange },
     ],
   },

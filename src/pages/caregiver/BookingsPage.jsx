@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { CalendarCheck, ClipboardList, Clock, PlayCircle, Search, Wallet } from 'lucide-react'
+import { CalendarCheck, CheckCircle2, ClipboardList, Clock, LogIn, LogOut, QrCode, Search, ShieldCheck, Wallet } from 'lucide-react'
 
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { bookingsForCaregiver, getCustomerById } from '@/data/bookings'
-import { formatCurrency, formatDate, formatTime } from '@/utils/format'
+import { formatCurrency, formatDate, formatDateTime, formatTime } from '@/utils/format'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { StatCard } from '@/components/common/StatCard'
@@ -21,6 +21,7 @@ import { Modal } from '@/components/common/Modal'
 import { EmptyState } from '@/components/common/States'
 import { BookingCard } from '@/components/booking/BookingCard'
 import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePrice'
+import { CheckInOutModal } from '@/components/booking/CheckInOutModal'
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -35,12 +36,13 @@ export function BookingsPage() {
   useDocumentTitle('My Bookings')
 
   const { user } = useAuth()
-  const { bookings, advanceBooking } = useData()
+  const { bookings, advanceBooking, confirmBooking, cancelBooking } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
   const [tab, setTab] = useState('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(null)
+  const [checkFlow, setCheckFlow] = useState(null)
 
   const myBookings = useMemo(() => {
     const list = bookings.filter((b) => b.caregiverId === myId)
@@ -64,11 +66,38 @@ export function BookingsPage() {
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 6)
 
-  const handleCheckIn = () => {
-    if (!selected || selected.status !== 'Confirmed') return
-    advanceBooking(selected.id, 'start')
-    toast.success('Checked in — the service is now in progress')
+  const handleRequest = (action) => {
+    if (!selected) return
+    if (action === 'accept') {
+      confirmBooking(selected.id)
+      toast.success('Booking request accepted', {
+        description: `${selected.service} on ${formatDate(selected.date, { long: true })} is confirmed.`,
+      })
+    } else {
+      cancelBooking(selected.id, 'Declined by caregiver')
+      toast.info('Booking request declined', { description: 'The customer has been notified.' })
+    }
     setSelected(null)
+  }
+
+  const openCheckFlow = (booking, mode) => {
+    setSelected(null)
+    setCheckFlow({ booking, mode })
+  }
+
+  const handleCheckConfirm = (payload) => {
+    if (!checkFlow) return
+    const { booking, mode } = checkFlow
+    advanceBooking(booking.id, mode === 'checkin' ? 'start' : 'complete', payload)
+    toast.success(
+      mode === 'checkin'
+        ? 'Checked in — the service is now in progress'
+        : 'Checked out — the service is marked complete',
+      {
+        description: `QR ${payload.qrCode} verified at ${formatDateTime(payload.capturedAt)}.`,
+      },
+    )
+    setCheckFlow(null)
   }
 
   const columns = [
@@ -215,9 +244,24 @@ export function BookingsPage() {
             <Button variant="ghost" onClick={() => setSelected(null)}>
               Close
             </Button>
+            {selected?.status === 'Pending' ? (
+              <>
+                <Button variant="outline" onClick={() => handleRequest('decline')}>
+                  Decline
+                </Button>
+                <Button variant="primary" icon={CheckCircle2} onClick={() => handleRequest('accept')}>
+                  Accept request
+                </Button>
+              </>
+            ) : null}
             {selected?.status === 'Confirmed' ? (
-              <Button variant="primary" icon={PlayCircle} onClick={handleCheckIn}>
-                Check in for shift
+              <Button variant="primary" icon={LogIn} onClick={() => openCheckFlow(selected, 'checkin')}>
+                {selected?.checkIn ? 'Re-verify check-in' : 'Check in for shift'}
+              </Button>
+            ) : null}
+            {selected?.status === 'In Progress' ? (
+              <Button variant="primary" icon={LogOut} onClick={() => openCheckFlow(selected, 'checkout')}>
+                Check out & complete
               </Button>
             ) : null}
           </div>
@@ -259,6 +303,35 @@ export function BookingsPage() {
               </div>
             </div>
 
+            {selected.checkIn || selected.checkOut ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {selected.checkIn ? (
+                  <div className="rounded-xl border border-line bg-slate-50 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-faint">Check-in record</span>
+                      <StatusBadge status="Verified" size="sm" />
+                    </div>
+                    <p className="mt-1.5 text-sm font-semibold text-ink">{formatDateTime(selected.checkIn.at)}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+                      <QrCode className="h-3 w-3 text-primary-600" /> {selected.checkIn.qrCode}
+                    </p>
+                  </div>
+                ) : null}
+                {selected.checkOut ? (
+                  <div className="rounded-xl border border-line bg-slate-50 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-faint">Check-out record</span>
+                      <StatusBadge status="Verified" size="sm" />
+                    </div>
+                    <p className="mt-1.5 text-sm font-semibold text-ink">{formatDateTime(selected.checkOut.at)}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+                      <ShieldCheck className="h-3 w-3 text-success-600" /> Selfie captured
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <PriceBreakdown
               subtotal={selected.subtotal}
               platformFee={selected.platformFee}
@@ -270,6 +343,14 @@ export function BookingsPage() {
           </div>
         ) : null}
       </Modal>
+
+      <CheckInOutModal
+        open={Boolean(checkFlow)}
+        onClose={() => setCheckFlow(null)}
+        mode={checkFlow?.mode || 'checkin'}
+        booking={checkFlow?.booking || null}
+        onConfirm={handleCheckConfirm}
+      />
     </div>
   )
 }

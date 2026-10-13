@@ -20,6 +20,7 @@ const LOGO_SIZES = {
   sm: 'h-10',
   md: 'h-14',
   lg: 'h-20',
+  xl: 'h-20 sm:h-24',
 }
 
 export function Logo({ to = '/', light = false, compact = false, size = 'md', className }) {

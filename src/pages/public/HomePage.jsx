@@ -34,6 +34,9 @@ import { SERVICES } from '@/data/services'
 import { featuredCaregivers } from '@/data/caregivers'
 import { FAQS, HOW_IT_WORKS, TESTIMONIALS, WHY_CHOOSE } from '@/data/content'
 import { Button } from '@/components/common/Button'
+import { Container } from '@/components/common/Container'
+import { Section } from '@/components/common/Section'
+import { SectionHeading } from '@/components/common/SectionHeading'
 import { Avatar, ImageWithFallback } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
 import { CaregiverCard } from '@/components/caregiver/CaregiverCard'
@@ -161,7 +164,7 @@ export function HomePage() {
         />
         <div className="hero-wash" aria-hidden="true" />
 
-        <div className="relative z-[1] mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
+        <Container className="relative z-[1] py-14 sm:py-20 lg:py-24">
           <motion.div
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
@@ -207,7 +210,7 @@ export function HomePage() {
                 iconRight={ArrowRight}
                 className="shadow-[0_18px_35px_-16px_rgba(15,118,110,0.85)] transition-all hover:-translate-y-0.5"
               >
-                Find a Caregiver
+                Find a Caretaker
               </Button>
               <Button
                 to="/register/caregiver"
@@ -235,7 +238,7 @@ export function HomePage() {
               </span>
             </div>
           </motion.div>
-        </div>
+        </Container>
 
         <div className="absolute bottom-24 right-[6%] z-10 hidden flex-col items-end gap-3 lg:flex">
           <motion.div
@@ -280,6 +283,7 @@ export function HomePage() {
           aria-label="Search caregivers"
           className="rounded-card border border-line bg-white p-4 shadow-raised sm:p-5 lg:p-6"
         >
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1.1fr_1.2fr_1fr_1fr] xl:grid-cols-[1.1fr_1.2fr_1fr_1fr_auto] xl:items-end">
             <FormField label="Location" htmlFor="home-city">
               <Select id="home-city" value={city} onChange={(e) => setCity(e.target.value)}>
@@ -343,16 +347,16 @@ export function HomePage() {
       </section>
 
       {/* ---------------- stats strip ---------------- */}
-      <section className="mx-auto mt-14 max-w-7xl px-4 sm:mt-16 sm:px-6 lg:px-8">
+      <Container className="mt-14 sm:mt-16">
         <div className="grid gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
           {STATS.map((stat, i) => (
             <motion.div
               key={stat.label}
               {...reveal}
               transition={{ duration: 0.45, delay: i * 0.06 }}
-              className="flex items-center gap-3.5 bg-white px-5 py-5"
+              className="group flex items-center gap-3.5 bg-white px-5 py-5 transition-colors hover:bg-mint-50"
             >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700 transition-transform duration-300 group-hover:scale-105">
                 <stat.icon className="h-5 w-5" />
               </span>
               <div className="min-w-0">
@@ -365,24 +369,22 @@ export function HomePage() {
             </motion.div>
           ))}
         </div>
-      </section>
+      </Container>
 
       {/* ---------------- services ---------------- */}
-      <section id="services" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <motion.div {...reveal} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-700">Popular services</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
-              Care built around the patient, not the package
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
-              Every service is delivered by a caregiver whose qualification matches the task — nurses for clinical
-              work, trained attendants for daily living support.
-            </p>
-          </div>
-          <Button to="/services" variant="outline" size="sm" iconRight={ArrowRight}>
-            All services
-          </Button>
+      <Section id="services">
+        <Container>
+        <motion.div {...reveal}>
+          <SectionHeading
+            eyebrow="Popular services"
+            title="Care built around the patient, not the package"
+            description="Every service is delivered by a caregiver whose qualification matches the task — nurses for clinical work, trained attendants for daily living support."
+            action={
+              <Button to="/services" variant="outline" size="sm" iconRight={ArrowRight}>
+                All services
+              </Button>
+            }
+          />
         </motion.div>
 
         <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -391,10 +393,14 @@ export function HomePage() {
               key={svc.id}
               {...reveal}
               transition={{ duration: 0.45, delay: (i % 3) * 0.07 }}
-              className="group flex flex-col rounded-card border border-line bg-white p-5 shadow-card transition hover:-translate-y-1 hover:border-primary-200 hover:shadow-raised"
+              className="group relative flex flex-col overflow-hidden rounded-card border border-line bg-white p-5 shadow-card transition hover:-translate-y-1 hover:border-primary-200 hover:shadow-raised"
             >
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary-400 via-primary-600 to-primary-800 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+              />
               <div className="flex items-start justify-between gap-3">
-                <span className="grid h-12 w-12 place-items-center rounded-xl bg-mint-100 text-primary-700 transition group-hover:bg-mint-200">
+                <span className="grid h-12 w-12 place-items-center rounded-xl bg-mint-100 text-primary-700 transition group-hover:scale-105 group-hover:bg-mint-200">
                   <svc.icon className="h-6 w-6" />
                 </span>
                 {svc.popular ? (
@@ -404,7 +410,9 @@ export function HomePage() {
                 ) : null}
               </div>
 
-              <h3 className="mt-4 font-display text-lg font-bold text-ink">{svc.name}</h3>
+              <h3 className="mt-4 font-display text-lg font-bold text-ink transition-colors group-hover:text-primary-800">
+                {svc.name}
+              </h3>
               <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{svc.short}</p>
 
               <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
@@ -418,21 +426,20 @@ export function HomePage() {
               </div>
             </motion.article>
           ))}
-        </div>
-      </section>
+          </div>
+        </Container>
+      </Section>
 
       {/* ---------------- how it works ---------------- */}
-      <section id="how-it-works" className="scroll-mt-24 border-y border-line bg-canvas py-16 sm:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.div {...reveal} className="mx-auto max-w-2xl text-center">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-700">How it works</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
-              Four steps from requirement to recovery
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
-              No phone tag, no negotiation with agencies. State the need, pick a verified caregiver and let the
-              platform handle payments, records and reminders.
-            </p>
+      <Section id="how-it-works" tone="canvas" divider="both">
+        <Container>
+          <motion.div {...reveal}>
+            <SectionHeading
+              align="center"
+              eyebrow="How it works"
+              title="Four steps from requirement to recovery"
+              description="No phone tag, no negotiation with agencies. State the need, pick a verified caregiver and let the platform handle payments, records and reminders."
+            />
           </motion.div>
 
           <ol className="mt-12 grid gap-10 sm:grid-cols-2 sm:gap-8 lg:mt-16 lg:grid-cols-4 lg:gap-6">
@@ -470,23 +477,23 @@ export function HomePage() {
 
           <motion.div {...reveal} className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Button to="/caregivers" iconRight={ArrowRight}>
-              Find a caregiver now
+              Find a caretaker now
             </Button>
             <Button to="/register/customer" variant="secondary">
               Create a free account
             </Button>
           </motion.div>
-        </div>
-      </section>
+        </Container>
+      </Section>
 
       {/* ---------------- why choose ---------------- */}
-      <section className="relative overflow-hidden">
+      <Section className="overflow-hidden">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(163,229,218,0.45),transparent)] blur-2xl"
         />
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <motion.div {...reveal} className="mx-auto max-w-2xl text-center">
+        <Container className="relative">
+          <motion.div {...reveal}>
             <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-primary-700">
               <ShieldCheck className="h-3.5 w-3.5" />
               Why CareMate
@@ -497,11 +504,11 @@ export function HomePage() {
                 from private care
               </span>
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">
               Every promise below is a working process, not a marketing line — here is what you can hold us to on
               every booking.
             </p>
-            <div className="mx-auto mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-primary-400 to-primary-700" />
+            <div className="mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-primary-400 to-primary-700" />
           </motion.div>
 
           <div className="mt-11 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -529,26 +536,23 @@ export function HomePage() {
               )
             })}
           </div>
-        </div>
-      </section>
+        </Container>
+      </Section>
 
       {/* ---------------- featured caregivers ---------------- */}
-      <section className="border-y border-line bg-canvas py-16 sm:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.div {...reveal} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-700">Featured caregivers</p>
-              <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
-                Verified professionals families book again
-              </h2>
-              <p className="mt-3 text-sm leading-relaxed text-muted sm:text-base">
-                Ranked by rating, response rate and repeat bookings — all identities and registrations confirmed by
-                our operations team.
-              </p>
-            </div>
-            <Button to="/caregivers" variant="outline" size="sm" iconRight={ArrowRight}>
-              View all caregivers
-            </Button>
+      <Section tone="canvas" divider="both">
+        <Container>
+          <motion.div {...reveal}>
+            <SectionHeading
+              eyebrow="Featured caregivers"
+              title="Verified professionals families book again"
+              description="Ranked by rating, response rate and repeat bookings — all identities and registrations confirmed by our operations team."
+              action={
+                <Button to="/caregivers" variant="outline" size="sm" iconRight={ArrowRight}>
+                  View all caregivers
+                </Button>
+              }
+            />
           </motion.div>
 
           <div className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -562,13 +566,14 @@ export function HomePage() {
               </motion.div>
             ))}
           </div>
-        </div>
-      </section>
+        </Container>
+      </Section>
 
       {/* ---------------- trust & safety ---------------- */}
-      <section
+      <Section
         id="trust"
-        className="relative scroll-mt-24 overflow-hidden bg-gradient-to-b from-white via-canvas to-white py-16 sm:py-20 lg:py-24"
+        size="lg"
+        className="overflow-hidden bg-gradient-to-b from-white via-canvas to-white"
       >
         <div aria-hidden="true" className="grid-pattern pointer-events-none absolute inset-0 opacity-40" />
         <div
@@ -584,7 +589,7 @@ export function HomePage() {
           className="pointer-events-none absolute top-1/3 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(163,229,218,0.25),transparent)] blur-3xl"
         />
 
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <Container className="relative">
           <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-16">
             <motion.div {...reveal}>
               <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.24em] text-primary-600 shadow-card">
@@ -733,11 +738,11 @@ export function HomePage() {
               </motion.div>
             ))}
           </div>
-        </div>
-      </section>
+        </Container>
+      </Section>
 
       {/* ---------------- testimonials ---------------- */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800">
+      <Section tone="dark" size="lg" className="overflow-hidden">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -top-32 -left-24 h-[420px] w-[420px] rounded-full border-[30px] border-white/5"
@@ -752,7 +757,7 @@ export function HomePage() {
         />
         <div aria-hidden="true" className="grid-pattern pointer-events-none absolute inset-0 opacity-[0.15]" />
 
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
+        <Container className="relative">
           <motion.div {...reveal} className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-2xl">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-accent-300 backdrop-blur-sm">
@@ -813,21 +818,19 @@ export function HomePage() {
               </motion.figure>
             ))}
           </div>
-        </div>
-      </section>
+        </Container>
+      </Section>
 
       {/* ---------------- FAQ ---------------- */}
-      <section id="faq" className="scroll-mt-24 border-y border-line bg-canvas py-16 sm:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+      <Section id="faq" tone="canvas" divider="both">
+        <Container>
+          <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-start lg:gap-14">
             <motion.div {...reveal}>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-700">FAQs</p>
-              <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
-                Questions families ask us first
-              </h2>
-              <p className="mt-3 text-sm leading-relaxed text-muted">
-                Still unsure about something? Our care advisors answer on phone and chat, 7am to 11pm.
-              </p>
+              <SectionHeading
+                eyebrow="FAQs"
+                title="Questions families ask us first"
+                description="Still unsure about something? Our care advisors answer on phone and chat, 7am to 11pm."
+              />
               <Button to="/contact" variant="outline" size="sm" className="mt-5" iconRight={ArrowRight}>
                 Talk to a care advisor
               </Button>
@@ -840,7 +843,7 @@ export function HomePage() {
               {FAQS.map((faq, i) => {
                 const open = openFaq === i
                 return (
-                  <div key={faq.q}>
+                  <div key={faq.q} className={cn(open && 'bg-mint-50/60')}>
                     <button
                       type="button"
                       id={`faq-btn-${i}`}
@@ -849,7 +852,14 @@ export function HomePage() {
                       onClick={() => setOpenFaq(open ? -1 : i)}
                       className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-50"
                     >
-                      <span className="font-display text-sm font-bold text-ink sm:text-base">{faq.q}</span>
+                      <span
+                        className={cn(
+                          'font-display text-sm font-bold transition-colors sm:text-base',
+                          open ? 'text-primary-800' : 'text-ink',
+                        )}
+                      >
+                        {faq.q}
+                      </span>
                       <ChevronDown
                         className={cn(
                           'h-4 w-4 shrink-0 text-faint transition-transform duration-200',
@@ -877,30 +887,38 @@ export function HomePage() {
               })}
             </motion.div>
           </div>
-        </div>
-      </section>
+        </Container>
+      </Section>
 
       {/* ---------------- closing CTA ---------------- */}
-      <section className="border-t border-line bg-mint-100">
-        <div className="mx-auto flex max-w-7xl flex-col items-start gap-5 px-4 py-12 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+      <section className="relative overflow-hidden border-t border-line bg-gradient-to-br from-mint-100 via-mint-50 to-accent-50">
+        <div
+          aria-hidden="true"
+          className="grid-pattern pointer-events-none absolute inset-0 opacity-50"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -bottom-28 h-80 w-80 rounded-full bg-[radial-gradient(closest-side,rgba(56,189,248,0.28),transparent)] blur-2xl"
+        />
+        <Container className="relative flex flex-col items-start gap-6 py-14 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
-            <h2 className="font-display text-2xl font-extrabold text-primary-900">
+            <h2 className="font-display text-2xl font-extrabold text-primary-900 sm:text-3xl">
               Care starts with one conversation
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-primary-800/80">
+            <p className="mt-2.5 text-sm leading-relaxed text-primary-800/80 sm:text-base">
               Browse verified caregivers near you, or join CareMate as a caregiver and get paid for work you are
               already qualified to do.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
             <Button to="/caregivers" size="lg" iconRight={ArrowRight}>
-              Find a Caregiver
+              Find a Caretaker
             </Button>
             <Button to="/register/caregiver" variant="secondary" size="lg">
               Become a Caregiver
             </Button>
           </div>
-        </div>
+        </Container>
       </section>
     </div>
   )

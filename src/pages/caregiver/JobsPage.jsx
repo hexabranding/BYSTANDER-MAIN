@@ -32,7 +32,7 @@ export function JobsPage() {
   const [sort, setSort] = useState('newest')
   const [dialog, setDialog] = useState(null)
 
-  const myJobs = useMemo(() => jobs.filter((j) => j.caregiverId === myId), [jobs, myId])
+  const myJobs = useMemo(() => jobs.filter((j) => j.status === 'Open' || j.caregiverId === myId), [jobs, myId])
 
   const counts = useMemo(
     () => ({
@@ -72,7 +72,7 @@ export function JobsPage() {
   const handleConfirm = () => {
     if (!dialog) return
     if (dialog.type === 'accept') {
-      acceptJob(dialog.job.id, caregiver)
+      acceptJob(dialog.job.id, caregiver?.id)
       toast.success('Job accepted — added to your schedule')
     } else {
       rejectJob(dialog.job.id)

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { SosButton } from '@/components/common/SosButton'
 import { Sidebar, MobileSidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 
@@ -53,6 +54,8 @@ export function DashboardLayout({ nav, variant = 'customer', sidebarFooter, topb
           <Outlet />
         </main>
       </div>
+
+      {variant === 'customer' || variant === 'caregiver' ? <SosButton /> : null}
     </div>
   )
 }

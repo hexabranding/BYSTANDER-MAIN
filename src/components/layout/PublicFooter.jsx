@@ -26,7 +26,7 @@ const columns = [
     title: 'Platform',
     links: [
       { label: 'Browse services', to: '/services' },
-      { label: 'Find a caregiver', to: '/caregivers' },
+      { label: 'Find a caretaker', to: '/caregivers' },
       { label: 'How it works', to: '/#how-it-works' },
       { label: 'Trust & safety', to: '/#trust' },
     ],
@@ -63,7 +63,7 @@ export function PublicFooter() {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div className="max-w-sm">
-            <Logo size="lg" />
+            <Logo size="xl" />
             <p className="mt-4 text-sm leading-relaxed text-muted">
               CareMate connects families and patients with verified caregivers, professional nurses and nursing students
               for home care and hospital care — with escrow payments, documented verification and 24×7 SOS support.

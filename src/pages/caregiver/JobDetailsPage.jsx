@@ -7,8 +7,11 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  LogIn,
+  LogOut,
   MapPin,
   PlayCircle,
+  Star,
   User,
   Wallet,
 } from 'lucide-react'
@@ -16,7 +19,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
-import { formatCurrency, formatDate } from '@/utils/format'
+import { formatCurrency, formatDate, formatDateTime } from '@/utils/format'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -24,12 +27,21 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { EmptyState } from '@/components/common/States'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { BookingTimeline } from '@/components/common/TimelinePrice'
+import { CheckInOutModal } from '@/components/booking/CheckInOutModal'
+import { RatingModal } from '@/components/booking/RatingModal'
+
+const CUSTOMER_CRITERIA = [
+  { key: 'cooperation', label: 'Cooperation' },
+  { key: 'clarity', label: 'Clarity of instructions' },
+  { key: 'punctuality', label: 'Handover punctuality' },
+  { key: 'overall', label: 'Overall experience' },
+]
 
 export function JobDetailsPage() {
   const { id } = useParams()
 
   const { user } = useAuth()
-  const { jobs, bookings, caregivers, acceptJob, rejectJob, advanceBooking } = useData()
+  const { jobs, bookings, caregivers, acceptJob, rejectJob, advanceBooking, updateBooking } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
   const caregiver = caregivers.find((c) => c.id === myId) || caregivers[0]
@@ -40,6 +52,8 @@ export function JobDetailsPage() {
   useDocumentTitle(job ? `Job ${job.id}` : booking ? `Booking ${booking.id}` : 'Job details')
 
   const [dialog, setDialog] = useState(null)
+  const [checkFlow, setCheckFlow] = useState(null)
+  const [rateOpen, setRateOpen] = useState(false)
 
   if (!job && !booking) {
     return (
@@ -64,7 +78,7 @@ export function JobDetailsPage() {
   const handleConfirm = () => {
     if (!dialog || !job) return
     if (dialog === 'accept') {
-      acceptJob(job.id, caregiver)
+      acceptJob(job.id, caregiver?.id)
       toast.success('Job accepted — added to your schedule')
     } else {
       rejectJob(job.id)
@@ -73,14 +87,26 @@ export function JobDetailsPage() {
     setDialog(null)
   }
 
-  const handleCheckIn = () => {
-    advanceBooking(booking.id, 'start')
-    toast.success('Checked in — the service is now in progress')
+  const handleCheckConfirm = (payload) => {
+    if (!checkFlow) return
+    const { mode } = checkFlow
+    advanceBooking(booking.id, mode === 'checkin' ? 'start' : 'complete', payload)
+    toast.success(
+      mode === 'checkin'
+        ? 'Checked in — the service is now in progress'
+        : 'Shift marked complete — payment releases after customer confirmation',
+      { description: `QR ${payload.qrCode} verified at ${formatDateTime(payload.capturedAt)}.` },
+    )
+    setCheckFlow(null)
   }
 
-  const handleComplete = () => {
-    advanceBooking(booking.id, 'complete')
-    toast.success('Shift marked complete — payment releases after customer confirmation')
+  const handleRateCustomer = ({ criteria, average, comment }) => {
+    updateBooking(booking.id, {
+      caregiverRating: { ...criteria, average, at: new Date().toISOString(), comment },
+    })
+    toast.success('Thanks for rating this customer', {
+      description: `${booking.patient?.name || 'The patient'}'s family received ${average} stars.`,
+    })
   }
 
   if (job) {
@@ -131,7 +157,7 @@ export function JobDetailsPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader title="Patient information" subtitle="Who you will be caring for" icon={User} />
             <CardBody className="space-y-4">
@@ -266,7 +292,7 @@ export function JobDetailsPage() {
               </p>
             </div>
           </div>
-          <Button variant="primary" size="sm" icon={PlayCircle} onClick={handleCheckIn}>
+          <Button variant="primary" size="sm" icon={LogIn} onClick={() => setCheckFlow({ mode: 'checkin', booking })}>
             Service check-in
           </Button>
         </div>
@@ -283,9 +309,53 @@ export function JobDetailsPage() {
               <p className="mt-0.5 text-sm text-accent-600/90">Mark the shift complete once the handover is done.</p>
             </div>
           </div>
-          <Button variant="primary" size="sm" icon={CheckCircle2} onClick={handleComplete}>
-            Mark complete
+          <Button variant="primary" size="sm" icon={LogOut} onClick={() => setCheckFlow({ mode: 'checkout', booking })}>
+            Check out & complete
           </Button>
+        </div>
+      ) : null}
+
+      {booking.status === 'Completed' && !booking.caregiverRating ? (
+        <div className="flex flex-col gap-3 rounded-card border border-success-500/30 bg-success-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-success-100 text-success-700">
+              <Star className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="font-display text-sm font-bold text-success-700">Shift completed</p>
+              <p className="mt-0.5 text-sm text-success-700/80">
+                Rate {booking.patient?.name || 'the customer'} so we can keep the community trustworthy.
+              </p>
+            </div>
+          </div>
+          <Button variant="primary" size="sm" icon={Star} onClick={() => setRateOpen(true)}>
+            Rate customer
+          </Button>
+        </div>
+      ) : null}
+
+      {booking.checkIn || booking.checkOut ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {booking.checkIn ? (
+            <div className="rounded-xl border border-line bg-slate-50 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-faint">Check-in record</span>
+                <StatusBadge status="Verified" size="sm" />
+              </div>
+              <p className="mt-1.5 text-sm font-semibold text-ink">{formatDateTime(booking.checkIn.at)}</p>
+              <p className="mt-1 text-xs text-muted">QR {booking.checkIn.qrCode}</p>
+            </div>
+          ) : null}
+          {booking.checkOut ? (
+            <div className="rounded-xl border border-line bg-slate-50 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-faint">Check-out record</span>
+                <StatusBadge status="Verified" size="sm" />
+              </div>
+              <p className="mt-1.5 text-sm font-semibold text-ink">{formatDateTime(booking.checkOut.at)}</p>
+              <p className="mt-1 text-xs text-muted">QR {booking.checkOut.qrCode}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -354,6 +424,23 @@ export function JobDetailsPage() {
           <BookingTimeline steps={booking.timeline} />
         </CardBody>
       </Card>
+
+      <CheckInOutModal
+        open={Boolean(checkFlow)}
+        onClose={() => setCheckFlow(null)}
+        mode={checkFlow?.mode || 'checkin'}
+        booking={booking}
+        onConfirm={handleCheckConfirm}
+      />
+
+      <RatingModal
+        open={rateOpen}
+        onClose={() => setRateOpen(false)}
+        title="Rate this customer"
+        subjectName={booking.patient?.name || 'the customer'}
+        criteria={CUSTOMER_CRITERIA}
+        onSubmit={handleRateCustomer}
+      />
     </div>
   )
 }

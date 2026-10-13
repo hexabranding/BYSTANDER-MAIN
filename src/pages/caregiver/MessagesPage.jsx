@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ArrowLeft, MessageSquare, Phone, Send } from 'lucide-react'
 import { useData } from '@/context/DataContext'
@@ -23,9 +24,10 @@ export function MessagesPage() {
     [conversations],
   )
 
+  const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState('')
-  const [activeId, setActiveId] = useState(caregiverConversations[0]?.id || null)
-  const [showThread, setShowThread] = useState(false)
+  const [activeId, setActiveId] = useState(() => searchParams.get('thread'))
+  const [showThread, setShowThread] = useState(() => Boolean(searchParams.get('thread')))
   const [draft, setDraft] = useState('')
   const threadRef = useRef(null)
 
@@ -36,6 +38,17 @@ export function MessagesPage() {
   }, [caregiverConversations, query])
 
   const active = caregiverConversations.find((c) => c.id === activeId) || null
+
+  useEffect(() => {
+    if (!caregiverConversations.length) return
+    if (!activeId || !caregiverConversations.some((c) => c.id === activeId)) {
+      setActiveId(caregiverConversations[0].id)
+      if (searchParams.get('thread')) {
+        setShowThread(false)
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [caregiverConversations, activeId, searchParams, setSearchParams])
 
   useEffect(() => {
     if (active?.unread) markConversationRead(active.id)

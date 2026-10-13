@@ -38,6 +38,7 @@ export function AuthProvider({ children }) {
         city: payload.city || 'Mumbai, MH',
         area: payload.area || '',
         address: payload.address || '',
+        pincode: payload.pincode || '',
         patientInfo: payload.patientInfo || null,
         joinedOn: new Date().toISOString().slice(0, 10),
         isDemoAccount: true,
@@ -50,20 +51,28 @@ export function AuthProvider({ children }) {
 
   const registerCaregiver = useCallback(
     (payload) => {
+      const id = `cg-${Math.floor(130 + Math.random() * 600)}`
       const created = {
-        id: `cg-${Math.floor(130 + Math.random() * 600)}`,
+        id,
         role: 'caregiver',
-        caregiverId: `cg-${Math.floor(130 + Math.random() * 600)}`,
+        caregiverId: id,
         name: payload.fullName,
         email: payload.email,
         phone: payload.mobile,
         password: payload.password,
         avatar: '',
+        dob: payload.dob || '',
         city: payload.city || 'Mumbai, MH',
         area: payload.area || '',
         address: payload.address || '',
         qualification: payload.qualification,
         experienceYears: Number(payload.experience || 0),
+        languages: payload.languages || [],
+        careSettings: payload.careSettings || [],
+        nursingRegNo: payload.nursingRegNo || '',
+        documents: payload.documents || [],
+        emergencyContact: payload.emergencyContact || null,
+        bank: payload.bank || null,
         verificationStatus: 'Pending',
         joinedOn: new Date().toISOString().slice(0, 10),
         isDemoAccount: true,

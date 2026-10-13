@@ -21,7 +21,7 @@ import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/States'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 
-const CATEGORIES = ['Service quality', 'No-show', 'Behaviour', 'Billing', 'Safety', 'Other']
+const CATEGORIES = ['Misbehavior', 'Theft', 'Abuse', 'Harassment', 'Medical negligence', 'Other']
 const PRIORITIES = ['High', 'Medium', 'Low']
 const STATUS_TABS = ['All', ...COMPLAINT_STATUSES]
 
@@ -81,14 +81,14 @@ function ComplaintDetail({ complaint }) {
         <StatusBadge status={complaint.status} />
         <StatusBadge status={complaint.priority} size="sm" dot={false} />
         <Chip>{complaint.category}</Chip>
-        <Chip>{`Booking ${complaint.bookingId || 'â€”'}`}</Chip>
+        <Chip>{`Booking ${complaint.bookingId || '”'}`}</Chip>
       </div>
 
       <div>
         <p className="text-[10px] font-bold uppercase tracking-wider text-faint">What happened</p>
         <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">{complaint.description}</p>
         <p className="mt-3 text-xs text-faint">
-          Reported on {formatDate(complaint.submittedOn, { long: true })} at {formatTime(complaint.submittedOn)} Â·
+          Reported on {formatDate(complaint.submittedOn, { long: true })} at {formatTime(complaint.submittedOn)} ·
           Against {complaint.against} ({complaint.againstType})
         </p>
       </div>
@@ -131,7 +131,7 @@ function ComplaintDetail({ complaint }) {
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-bold text-ink">{n.by}</p>
                   <p className="text-[11px] text-faint">
-                    {formatDate(n.at)} Â· {formatTime(n.at)}
+                    {formatDate(n.at)} · {formatTime(n.at)}
                   </p>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed text-muted">{n.note}</p>
@@ -160,7 +160,7 @@ function ComplaintDetail({ complaint }) {
               <li key={`${a.at}-${i}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                 <span className="text-sm font-semibold text-ink">{a.action}</span>
                 <span className="text-xs text-muted">
-                  {a.by} Â· {formatDate(a.at)} {formatTime(a.at)}
+                  {a.by} · {formatDate(a.at)} {formatTime(a.at)}
                 </span>
               </li>
             ))
@@ -191,8 +191,7 @@ export function ComplaintsPage() {
 
   const mine = useMemo(() => {
     const bookingIds = new Set(myBookings.map((b) => b.id))
-    const list = complaints.filter((c) => c.complainant === customerName || bookingIds.has(c.bookingId))
-    return list.length ? list : complaints
+    return complaints.filter((c) => c.complainant === customerName || bookingIds.has(c.bookingId))
   }, [complaints, myBookings, customerName])
 
   const counts = useMemo(() => {
@@ -338,7 +337,7 @@ export function ComplaintsPage() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search by ID, subject or categoryâ€¦"
+          placeholder="Search by ID, subject or category…"
           className="sm:max-w-sm sm:flex-1"
         />
         <Tabs
@@ -404,7 +403,7 @@ export function ComplaintsPage() {
         open={raiseOpen}
         onClose={closeRaise}
         title="Raise a complaint"
-        subtitle="Tell us what went wrong â€” our operations desk reviews every case."
+        subtitle="Tell us what went wrong ” our operations desk reviews every case."
         size="lg"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -420,10 +419,10 @@ export function ComplaintsPage() {
         <form id="raise-complaint-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
           <FormField label="Related booking" htmlFor="cp-booking" error={errors.bookingId?.message}>
             <Select id="cp-booking" error={errors.bookingId?.message} {...register('bookingId')}>
-              <option value="">General â€” not linked to a booking</option>
+              <option value="">General ” not linked to a booking</option>
               {myBookings.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.id} Â· {b.service} Â· {formatDate(b.date)}
+                  {b.id} · {b.service} · {formatDate(b.date)}
                 </option>
               ))}
             </Select>
@@ -473,7 +472,7 @@ export function ComplaintsPage() {
             <Textarea
               id="cp-description"
               rows={5}
-              placeholder="Share the full story so we can investigate quicklyâ€¦"
+              placeholder="Share the full story so we can investigate quickly…"
               error={errors.description?.message}
               {...register('description', {
                 required: 'Please describe the issue',
@@ -494,7 +493,7 @@ export function ComplaintsPage() {
       <Modal
         open={Boolean(viewing)}
         onClose={() => setViewing(null)}
-        title={viewing ? `${viewing.id} Â· ${viewing.subject}` : 'Complaint'}
+        title={viewing ? `${viewing.id} · ${viewing.subject}` : 'Complaint'}
         subtitle={viewing ? `Reported on ${formatDate(viewing.submittedOn, { long: true })}` : ''}
         size="lg"
         footer={

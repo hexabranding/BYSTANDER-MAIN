@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ArrowLeft, MessageSquare, SearchX, Send } from 'lucide-react'
 import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
@@ -19,9 +20,10 @@ export function MessagesPage() {
   const { conversations, sendMessage, markConversationRead } = useData()
 
   const [search, setSearch] = useState('')
-  const [activeId, setActiveId] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeId, setActiveId] = useState(() => searchParams.get('thread'))
   const [draft, setDraft] = useState('')
-  const [mobilePane, setMobilePane] = useState('list')
+  const [mobilePane, setMobilePane] = useState(() => (searchParams.get('thread') ? 'chat' : 'list'))
   const debouncedSearch = useDebouncedValue(search)
   const threadRef = useRef(null)
 
@@ -49,8 +51,12 @@ export function MessagesPage() {
   const active = useMemo(() => mine.find((c) => c.id === activeId) || null, [mine, activeId])
 
   useEffect(() => {
-    if (!activeId && sorted.length) setActiveId(sorted[0].id)
-  }, [sorted, activeId])
+    if (!sorted.length) return
+    if (!activeId || !mine.some((c) => c.id === activeId)) {
+      setActiveId(sorted[0].id)
+      if (searchParams.get('thread')) setSearchParams({}, { replace: true })
+    }
+  }, [sorted, mine, activeId, searchParams, setSearchParams])
 
   const messageCount = active?.messages?.length || 0
   useEffect(() => {

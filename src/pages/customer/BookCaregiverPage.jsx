@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -19,7 +19,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { SERVICES } from '@/data/services'
-import { CITIES, GST_RATE, PLATFORM_COMMISSION, PLATFORM_FEE } from '@/utils/constants'
+import { CITIES, GST_RATE, PLATFORM_FEE } from '@/utils/constants'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { cn } from '@/utils/cn'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -36,6 +36,7 @@ const STEP_LABELS = [
   'Care setting',
   'Schedule',
   'Instructions',
+  'Caregivers',
   'Price',
   'Confirm',
 ]
@@ -56,16 +57,21 @@ const todayISO = () => new Date().toISOString().slice(0, 10)
 export function BookCaregiverPage() {
   useDocumentTitle('Book a caregiver')
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const { caregivers, createBooking } = useData()
 
   const patientInfo = user?.patientInfo
+  const preselectedId = searchParams.get('caregiver') || ''
 
   const [step, setStep] = useState(0)
   const [maxStep, setMaxStep] = useState(0)
   const [terms, setTerms] = useState(false)
   const [created, setCreated] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [selectedCaregiverId, setSelectedCaregiverId] = useState(() =>
+    caregivers.some((c) => c.id === preselectedId) ? preselectedId : '',
+  )
   const [form, setForm] = useState(() => ({
     service: null,
     patientName: patientInfo?.name || '',
@@ -86,28 +92,30 @@ export function BookCaregiverPage() {
   const set = (patch) => setForm((f) => ({ ...f, ...patch }))
 
   const matchedCaregiver = useMemo(() => {
+    if (selectedCaregiverId) {
+      const picked = caregivers.find((c) => c.id === selectedCaregiverId)
+      if (picked) return picked
+    }
     if (!form.service) return null
     return (
       caregivers.find((c) => c.verified && c.services?.includes(form.service.name)) ||
       caregivers.find((c) => c.services?.includes(form.service.name)) ||
       null
     )
-  }, [caregivers, form.service])
+  }, [caregivers, form.service, selectedCaregiverId])
 
   const rate = matchedCaregiver?.hourlyRate || form.service?.startingPrice || 399
   const hours = Number(form.hours) || 0
   const subtotal = rate * hours
   const platformFee = PLATFORM_FEE
-  const commission = Math.round(subtotal * PLATFORM_COMMISSION)
   const tax = Math.round((subtotal + platformFee) * GST_RATE)
   const total = subtotal + platformFee + tax
 
   const stripCaregivers = useMemo(() => {
     const pool = form.service
-      ? caregivers.filter((c) => c.services?.includes(form.service.name))
-      : caregivers
-    const verified = pool.filter((c) => c.verified)
-    return (verified.length >= 3 ? verified : pool).slice(0, 3)
+      ? caregivers.filter((c) => c.services?.includes(form.service.name) && c.verified)
+      : caregivers.filter((c) => c.verified)
+    return (pool.length ? pool : caregivers).slice(0, 6)
   }, [caregivers, form.service])
 
   const stepValid = [
@@ -116,6 +124,7 @@ export function BookCaregiverPage() {
     Boolean(form.careType) && Boolean(form.address.trim()) && Boolean(form.city) && Boolean(form.area.trim()),
     Boolean(form.date) && Boolean(form.startTime) && Number(form.hours) > 0,
     true,
+    Boolean(matchedCaregiver),
     true,
     terms,
   ]
@@ -141,13 +150,14 @@ export function BookCaregiverPage() {
   const handleConfirm = () => {
     if (!form.service || submitting) return
     setSubmitting(true)
-    const location =
+    const locationLabel =
       form.careType === 'Hospital Care'
         ? `${form.address}, ${form.area}, ${form.city}`
         : `${form.address}, ${form.area}, ${form.city}`
     const booking = createBooking({
       customerId: user?.id || 'cu-201',
       caregiverId: matchedCaregiver?.id || '',
+      caregiverName: matchedCaregiver?.name || '',
       service: form.service.name,
       patient: {
         name: form.patientName.trim(),
@@ -155,7 +165,7 @@ export function BookCaregiverPage() {
         relation: form.relation,
       },
       careType: form.careType,
-      address: location,
+      address: locationLabel,
       city: form.city,
       date: form.date,
       startTime: form.startTime,
@@ -163,7 +173,6 @@ export function BookCaregiverPage() {
       hourlyRate: rate,
       subtotal,
       platformFee,
-      commission,
       tax,
       total,
       notes: form.requirements.trim(),
@@ -172,7 +181,7 @@ export function BookCaregiverPage() {
     setCreated(booking)
     setSubmitting(false)
     toast.success('Booking request sent', {
-      description: `Reference ${booking.ref} — we will confirm a caregiver shortly.`,
+      description: `Reference ${booking.ref} — ${matchedCaregiver?.name || 'Your caregiver'} has been notified.`,
     })
   }
 
@@ -563,6 +572,81 @@ export function BookCaregiverPage() {
               ) : null}
 
               {step === 5 ? (
+                <Card>
+                  <CardHeader
+                    title="Choose your caregiver"
+                    subtitle="Pick a verified professional, or let CareMate assign the best match for your shift."
+                  />
+                  <CardBody className="space-y-3">
+                    {stripCaregivers.length === 0 ? (
+                      <p className="text-sm text-muted">No matching caregivers found — a coordinator will assign one after you confirm.</p>
+                    ) : null}
+                    {stripCaregivers.map((cg) => {
+                      const selected = matchedCaregiver?.id === cg.id
+                      return (
+                        <button
+                          key={cg.id}
+                          type="button"
+                          onClick={() => setSelectedCaregiverId(cg.id)}
+                          className={cn(
+                            'flex w-full items-center gap-4 rounded-card border p-4 text-left transition',
+                            selected
+                              ? 'border-primary-600 bg-mint-50 ring-2 ring-primary-200'
+                              : 'border-line bg-white hover:border-primary-200 hover:shadow-card',
+                          )}
+                        >
+                          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-mint-100 font-display text-sm font-extrabold text-primary-800">
+                            {cg.name
+                              .split(' ')
+                              .map((p) => p[0])
+                              .slice(0, 2)
+                              .join('')}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-bold text-ink">{cg.name}</span>
+                              {cg.verified ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-bold text-success-700">
+                                  <ShieldCheck className="h-3 w-3" /> Verified
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-muted">
+                              {cg.qualification} · {cg.experienceYears} yrs · {cg.area || cg.city}
+                            </span>
+                            <span className="mt-1 flex items-center gap-2">
+                              <RatingStars value={cg.rating} size={11} showValue />
+                              <span className="text-xs font-semibold text-primary-700">{formatCurrency(cg.hourlyRate)}/hr</span>
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2',
+                              selected ? 'border-primary-700 bg-primary-700 text-white' : 'border-line-strong bg-white',
+                            )}
+                          >
+                            {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+                          </span>
+                        </button>
+                      )
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCaregiverId('')}
+                      className={cn(
+                        'w-full rounded-card border border-dashed p-3.5 text-left text-sm font-semibold transition',
+                        selectedCaregiverId === ''
+                          ? 'border-primary-400 bg-mint-50 text-primary-800'
+                          : 'border-line-strong text-muted hover:border-primary-300',
+                      )}
+                    >
+                      Let CareMate assign the best available match automatically
+                    </button>
+                  </CardBody>
+                </Card>
+              ) : null}
+
+              {step === 6 ? (
                 <div className="space-y-6">
                   <PriceBreakdown
                     items={[
@@ -575,7 +659,6 @@ export function BookCaregiverPage() {
                     subtotal={subtotal}
                     platformFee={platformFee}
                     tax={tax}
-                    commission={commission}
                     total={total}
                     currencyNote="Final price is confirmed once a caregiver accepts. You pay into escrow and funds are released after the service completes."
                   />
@@ -591,7 +674,7 @@ export function BookCaregiverPage() {
                 </div>
               ) : null}
 
-              {step === 6 ? (
+              {step === 7 ? (
                 <Card>
                   <CardHeader title="Review & confirm" subtitle="Please check the details before sending your request." />
                   <CardBody className="space-y-5">

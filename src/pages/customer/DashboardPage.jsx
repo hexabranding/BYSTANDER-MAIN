@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
@@ -11,8 +11,10 @@ import {
   Receipt,
   ShieldAlert,
   Stethoscope,
+  Star,
   UserRound,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -26,6 +28,7 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { Avatar } from '@/components/common/Avatar'
 import { ProgressBar } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
+import { RatingModal } from '@/components/booking/RatingModal'
 
 const toneIcons = {
   success: CheckCircle2,
@@ -45,12 +48,14 @@ const QUICK_LINKS = [
   { to: '/customer/invoices', label: 'Invoices', hint: 'Download GST invoices', icon: Receipt },
   { to: '/customer/messages', label: 'Messages', hint: 'Chat with caregivers', icon: MessageSquare },
   { to: '/customer/complaints', label: 'Complaints', hint: 'Raise or track issues', icon: ShieldAlert },
+  { to: '/customer/profile', label: 'Profile', hint: 'Personal details & preferences', icon: UserRound },
 ]
 
 export function DashboardPage() {
   useDocumentTitle('Dashboard')
   const { user } = useAuth()
-  const { bookings, caregivers, notifications, markNotificationRead } = useData()
+  const { bookings, caregivers, notifications, markNotificationRead, addReview, updateBooking } = useData()
+  const [rateTarget, setRateTarget] = useState(null)
 
   const customerId = user?.id || 'cu-201'
   const firstName = (user?.name || 'Priya Sharma').split(' ')[0]
@@ -58,7 +63,7 @@ export function DashboardPage() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
-  const { myBookings, active, upcoming, completedCount, totalSpent, caregiverFor } = useMemo(() => {
+  const { myBookings, active, upcoming, previous, completedCount, totalSpent, caregiverFor } = useMemo(() => {
     const list = bookings.filter((b) => b.customerId === customerId)
     const today = new Date().toISOString().slice(0, 10)
     const activeList = list.filter((b) => b.status === 'In Progress' || b.status === 'Confirmed')
@@ -67,6 +72,7 @@ export function DashboardPage() {
       .filter((b) => (b.status === 'Pending' || b.status === 'Confirmed') && b.date >= today)
       .sort((a, b) => a.date.localeCompare(b.date))
     const completed = list.filter((b) => b.status === 'Completed')
+    const previousList = [...completed].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3)
     const spent = list
       .filter((b) => b.status !== 'Cancelled')
       .reduce((sum, b) => sum + (b.total || 0), 0)
@@ -75,6 +81,7 @@ export function DashboardPage() {
       myBookings: list,
       active: inProgress,
       upcoming: upcomingList,
+      previous: previousList,
       completedCount: completed.length,
       totalSpent: spent,
       caregiverFor: (b) => (b ? cgMap.get(b.caregiverId) : null),
@@ -89,6 +96,22 @@ export function DashboardPage() {
   const activeCaregiver = caregiverFor(active)
   const activeStepsDone = active?.timeline?.filter((t) => t.status === 'completed').length || 1
   const activeStepsTotal = active?.timeline?.length || 5
+
+  const handleSubmitRating = (b, { criteria, average, comment }) => {
+    addReview({
+      bookingId: b.id,
+      caregiverId: b.caregiverId,
+      customerId: b.customerId,
+      customerName: user?.name || 'Customer',
+      rating: average,
+      criteria,
+      comment: comment || 'Great service, thank you!',
+    })
+    updateBooking(b.id, { customerRating: { ...criteria, average, at: new Date().toISOString() } })
+    toast.success('Thank you for your review!', {
+      description: `${caregiverFor(b)?.name || 'Your caregiver'} received your ${average}-star rating.`,
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -263,6 +286,66 @@ export function DashboardPage() {
 
           <Card>
             <CardHeader
+              title="Previous bookings"
+              subtitle="Completed visits — revisit or rate them"
+              action={
+                <Button to="/customer/bookings" variant="link" size="sm" iconRight={ArrowRight}>
+                  View all
+                </Button>
+              }
+            />
+            <CardBody className="divide-y divide-line p-0">
+              {previous.length ? (
+                previous.map((b) => {
+                  const cg = caregiverFor(b)
+                  return (
+                    <div key={b.id} className="flex items-center gap-4 px-5 py-4">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-success-50 text-success-700">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </span>
+                      <Link to={`/customer/bookings/${b.id}`} className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-ink">{b.service}</p>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> {formatDate(b.date)}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <UserRound className="h-3 w-3" /> {cg?.name || 'Caregiver'}
+                          </span>
+                        </p>
+                      </Link>
+                      <div className="hidden text-right sm:block">
+                        <p className="text-sm font-bold tabular-nums text-ink">{formatCurrency(b.total)}</p>
+                        {b.customerRating ? (
+                          <p className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" /> {b.customerRating.average}
+                          </p>
+                        ) : (
+                          <StatusBadge status={b.status} size="sm" />
+                        )}
+                      </div>
+                      {!b.customerRating ? (
+                        <Button size="xs" variant="outline" icon={Star} onClick={() => setRateTarget(b)}>
+                          Rate
+                        </Button>
+                      ) : null}
+                      <ArrowRight className="h-4 w-4 shrink-0 text-faint" />
+                    </div>
+                  )
+                })
+              ) : (
+                <EmptyState
+                  icon={CheckCircle2}
+                  title="No previous bookings"
+                  description="Completed visits will appear here once your first service finishes."
+                  className="py-10"
+                />
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
               title="Your spending"
               subtitle="Last 6 months across all services"
               action={
@@ -395,6 +478,13 @@ export function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      <RatingModal
+        open={Boolean(rateTarget)}
+        onClose={() => setRateTarget(null)}
+        subjectName={rateTarget ? caregiverFor(rateTarget)?.name || '' : ''}
+        onSubmit={(rating) => rateTarget && handleSubmitRating(rateTarget, rating)}
+      />
     </div>
   )
 }

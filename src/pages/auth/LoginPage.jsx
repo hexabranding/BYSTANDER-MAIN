@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { ArrowRight, Eye, EyeOff, HeartHandshake, KeyRound, ShieldCheck, Stethoscope } from 'lucide-react'
@@ -47,9 +47,11 @@ const homeFor = (role) =>
 export function LoginPage() {
   useDocumentTitle('Sign in')
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [rememberedEmail, setRememberedEmail] = useLocalStorage('caremate.rememberedEmail', '')
+  const redirectTo = location.state?.from || null
 
   const initialRole = ROLE_OPTIONS.some((r) => r.id === searchParams.get('role')) ? searchParams.get('role') : 'customer'
   const [role, setRole] = useState(initialRole)
@@ -79,7 +81,10 @@ export function LoginPage() {
     if (remember) setRememberedEmail(email.trim())
     else setRememberedEmail('')
     toast.success(`Welcome back, ${result.user.name}`)
-    navigate(homeFor(result.user.role), { replace: true })
+    const roleHome = homeFor(result.user.role)
+    const canUseRedirect =
+      redirectTo && typeof redirectTo === 'string' && redirectTo.startsWith(roleHome.replace('/dashboard', ''))
+    navigate(canUseRedirect ? redirectTo : roleHome, { replace: true })
   }
 
   const applyDemoAccount = (user) => {
@@ -175,7 +180,7 @@ export function LoginPage() {
           </span>
         </div>
         <p className="mt-1 text-xs text-muted">
-          Seeded demo profiles â€” password <span className="font-semibold text-ink-soft">{DEMO_PASSWORD}</span>. Nothing
+          Seeded demo profiles ” password <span className="font-semibold text-ink-soft">{DEMO_PASSWORD}</span>. Nothing
           here is a real person.
         </p>
         <ul className="mt-3 space-y-2">
@@ -187,7 +192,7 @@ export function LoginPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
                 <p className="truncate text-xs capitalize text-muted">
-                  {user.role} Â· {user.email}
+                  {user.role} · {user.email}
                 </p>
               </div>
               <Button variant="secondary" size="xs" onClick={() => applyDemoAccount(user)}>

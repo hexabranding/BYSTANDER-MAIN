@@ -49,26 +49,36 @@ export function DashboardPage() {
   useDocumentTitle('Caregiver Dashboard')
 
   const { user } = useAuth()
-  const { caregivers, jobs, bookings, notifications, earnings, acceptJob } = useData()
+  const { caregivers, jobs, bookings, notifications, earnings, acceptJob, confirmBooking, cancelBooking } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
   const caregiver = caregivers.find((c) => c.id === myId) || caregivers[0]
   const verified = (caregiver?.verificationStatus || 'Pending') === 'Verified'
 
   const [acceptTarget, setAcceptTarget] = useState(null)
+  const [requestTarget, setRequestTarget] = useState(null)
 
-  const myJobs = useMemo(() => jobs.filter((j) => j.caregiverId === myId), [jobs, myId])
+  const myJobs = useMemo(() => jobs.filter((j) => j.status === 'Open' || j.caregiverId === myId), [jobs, myId])
   const myBookings = useMemo(() => bookings.filter((b) => b.caregiverId === myId), [bookings, myId])
 
   const openJobs = myJobs.filter((j) => j.status === 'Open')
   const acceptedJobs = myJobs.filter((j) => j.status === 'Accepted')
+  const bookingRequests = useMemo(
+    () => myBookings.filter((b) => b.status === 'Pending').sort((a, b) => a.date.localeCompare(b.date)),
+    [myBookings],
+  )
   const upcoming = myBookings
-    .filter((b) => ['Pending', 'Confirmed', 'In Progress'].includes(b.status))
+    .filter((b) => ['Confirmed', 'In Progress'].includes(b.status))
     .sort((a, b) => a.date.localeCompare(b.date))
   const completedJobs = myBookings.filter((b) => b.status === 'Completed')
 
-  const totalEarned = earnings.reduce((sum, e) => sum + e.net, 0)
-  const pendingPayout = earnings.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
+  const myBookingIds = useMemo(() => new Set(myBookings.map((b) => b.id)), [myBookings])
+  const myEarnings = useMemo(
+    () => earnings.filter((e) => e.caregiverId === myId || (e.caregiverId == null && myBookingIds.has(e.bookingId))),
+    [earnings, myId, myBookingIds],
+  )
+  const totalEarned = myEarnings.reduce((sum, e) => sum + e.net, 0)
+  const pendingPayout = myEarnings.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
 
   const caregiverNotifications = useMemo(
     () =>
@@ -87,9 +97,23 @@ export function DashboardPage() {
 
   const handleAccept = () => {
     if (!acceptTarget) return
-    acceptJob(acceptTarget.id, caregiver)
+    acceptJob(acceptTarget.id, caregiver?.id)
     toast.success('Job accepted — added to your schedule')
     setAcceptTarget(null)
+  }
+
+  const handleRequestConfirm = () => {
+    if (!requestTarget) return
+    if (requestTarget.action === 'accept') {
+      confirmBooking(requestTarget.booking.id)
+      toast.success('Booking request accepted', {
+        description: `${requestTarget.booking.service} on ${formatDate(requestTarget.booking.date, { long: true })} is confirmed.`,
+      })
+    } else {
+      cancelBooking(requestTarget.booking.id, 'Declined by caregiver')
+      toast.info('Booking request declined', { description: 'The customer has been notified.' })
+    }
+    setRequestTarget(null)
   }
 
   return (
@@ -330,6 +354,61 @@ export function DashboardPage() {
         </Card>
       </div>
 
+      {bookingRequests.length ? (
+        <section>
+          <div className="mb-3">
+            <h2 className="font-display text-base font-bold text-ink">Booking requests</h2>
+            <p className="text-sm text-muted">Customers waiting for your response — accept to lock the shift in.</p>
+          </div>
+          <Card>
+            <CardBody className="divide-y divide-line p-0">
+              {bookingRequests.map((b) => {
+                const customerName = b.patient?.name
+                return (
+                  <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-bold text-ink">{b.service}</p>
+                        <StatusBadge status={b.status} size="sm" />
+                      </div>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                        <span className="inline-flex items-center gap-1">
+                          <CalendarCheck className="h-3 w-3" />
+                          {formatDate(b.date, { long: true })} · {b.startTime} · {b.hours} hrs
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {b.city || b.address}
+                        </span>
+                        <span className="font-semibold text-ink">{formatCurrency(b.total)}</span>
+                      </p>
+                      {customerName ? <p className="mt-0.5 text-xs text-faint">Patient {customerName}</p> : null}
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setRequestTarget({ booking: b, action: 'decline' })}
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        icon={CheckCircle2}
+                        onClick={() => setRequestTarget({ booking: b, action: 'accept' })}
+                      >
+                        Accept
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </CardBody>
+          </Card>
+        </section>
+      ) : null}
+
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -399,6 +478,24 @@ export function DashboardPage() {
             : ''
         }
         confirmLabel="Accept job"
+      />
+
+      <ConfirmationDialog
+        open={Boolean(requestTarget)}
+        onClose={() => setRequestTarget(null)}
+        onConfirm={handleRequestConfirm}
+        tone={requestTarget?.action === 'accept' ? 'success' : 'danger'}
+        title={requestTarget?.action === 'accept' ? 'Accept this booking?' : 'Decline this booking?'}
+        message={
+          requestTarget
+            ? `${requestTarget.booking.service} on ${formatDate(requestTarget.booking.date, { long: true })} at ${requestTarget.booking.startTime} for ${requestTarget.booking.hours} hrs. ${
+                requestTarget.action === 'accept'
+                  ? 'The shift is confirmed and payment is held in escrow.'
+                  : 'The customer will be notified and matched with another caregiver.'
+              }`
+            : ''
+        }
+        confirmLabel={requestTarget?.action === 'accept' ? 'Accept booking' : 'Decline booking'}
       />
     </div>
   )

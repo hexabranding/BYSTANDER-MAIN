@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { useAuth } from '@/context/AuthContext'
+import { useData } from '@/context/DataContext'
 import { FormField, Input, Select } from '@/components/forms/FormField'
 import { FileUpload } from '@/components/forms/FileUpload'
 import { Button } from '@/components/common/Button'
@@ -99,6 +100,7 @@ export function RegisterCaregiverPage() {
   useDocumentTitle('Apply as caregiver')
   const navigate = useNavigate()
   const { register: registerCaregiver } = useAuth()
+  const { registerCaregiverProfile } = useData()
   const [step, setStep] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
   const [docError, setDocError] = useState('')
@@ -226,6 +228,22 @@ export function RegisterCaregiverPage() {
   }
 
   const onSubmit = (values) => {
+    const DOC_LABELS = {
+      nursingCertificate: 'Nursing certificate',
+      nursingStudentId: 'Nursing student ID',
+      identityDoc: 'Identity proof',
+      addressProof: 'Address proof',
+      policeClearance: 'Police clearance',
+      bankProof: 'Bank proof',
+    }
+    const documentList = Object.entries(values.docs || {})
+      .filter(([, file]) => file)
+      .map(([key, file]) => ({
+        docId: key,
+        type: DOC_LABELS[key] || key,
+        file: { name: file?.name || String(file) },
+        optional: key === 'bankProof',
+      }))
     const payload = {
       fullName: values.fullName.trim(),
       mobile: values.mobile.trim(),
@@ -238,6 +256,7 @@ export function RegisterCaregiverPage() {
       languages: values.languages,
       careSettings: values.careSettings,
       docs: values.docs,
+      documents: documentList,
       emergencyContact: {
         name: values.emergencyName.trim(),
         relationship: values.emergencyRelationship.trim(),
@@ -254,6 +273,19 @@ export function RegisterCaregiverPage() {
       toast.error('Could not submit your application. Please try again.')
       return
     }
+    registerCaregiverProfile({
+      caregiverId: result.user.id,
+      name: payload.fullName,
+      city: payload.city,
+      area: payload.area,
+      qualification: payload.qualification,
+      experience: payload.experience,
+      nursingRegNo: payload.nursingRegNo,
+      languages: payload.languages,
+      careSettings: payload.careSettings,
+      documents: documentList,
+      bio: '',
+    })
     pendingEmail.current = payload.email
     setSubmitted(true)
     toast.success('Application submitted — pending verification')

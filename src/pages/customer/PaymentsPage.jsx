@@ -32,8 +32,7 @@ export function PaymentsPage() {
   const customerId = user?.id || 'cu-201'
 
   const mine = useMemo(() => {
-    const list = transactions.filter((t) => t.customerId === customerId)
-    return list.length ? list : transactions
+    return transactions.filter((t) => t.customerId === customerId)
   }, [transactions, customerId])
 
   const { totalSpent, escrowHeld, refunded } = useMemo(() => {

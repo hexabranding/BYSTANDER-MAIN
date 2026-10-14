@@ -59,7 +59,9 @@ export function Topbar({ onMenuClick, search, searchPlaceholder = 'Search…', a
             <Avatar src={user?.avatar} name={user?.name} size="sm" />
             <span className="hidden text-left sm:block">
               <span className="block max-w-[9rem] truncate text-xs font-bold text-ink">{user?.name}</span>
-              <span className="block text-[10px] capitalize text-faint">{user?.role}</span>
+              <span className="block text-[10px] capitalize text-faint">
+                {user?.role === 'caregiver' ? 'caretaker' : user?.role}
+              </span>
             </span>
           </button>
 

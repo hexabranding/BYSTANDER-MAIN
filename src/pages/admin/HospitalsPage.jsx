@@ -291,7 +291,7 @@ export function HospitalsPage() {
                 { label: 'ICU support', value: selected.icuSupport ? 'Yes' : 'No' },
                 { label: 'Joined', value: formatDate(selected.joinedOn) },
               ].map((item) => (
-                <div key={item.label} className="rounded-xl border border-line px-3 py-3 text-center">
+                <div key={item.label} className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-3 py-3 text-center">
                   <p className="font-display text-base font-extrabold tabular-nums text-ink">{item.value}</p>
                   <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-faint">{item.label}</p>
                 </div>

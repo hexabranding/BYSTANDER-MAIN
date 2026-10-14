@@ -44,7 +44,7 @@ export function DataTable({
       <div className="thin-scrollbar overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
-            <tr className="border-b border-line bg-slate-50/80">
+            <tr className="border-b border-line bg-gradient-to-r from-mint-50 to-slate-50">
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -90,11 +90,11 @@ export function DataTable({
                 key={keyExtractor(row, index)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={cn(
-                  'bg-white transition hover:bg-mint-50/60',
+                  'group bg-white transition hover:bg-mint-50/60',
                   onRowClick && 'cursor-pointer',
                 )}
               >
-                {columns.map((col) => (
+                {columns.map((col, ci) => (
                   <td
                     key={col.key}
                     className={cn(
@@ -102,6 +102,7 @@ export function DataTable({
                       dense ? 'px-4 py-2.5' : 'px-4 py-3.5',
                       col.align === 'right' && 'text-right',
                       col.align === 'center' && 'text-center',
+                      ci === 0 && 'group-hover:shadow-[inset_3px_0_0_0_var(--color-primary-500)]',
                       col.className,
                     )}
                   >

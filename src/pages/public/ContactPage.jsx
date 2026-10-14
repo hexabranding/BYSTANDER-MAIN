@@ -18,6 +18,7 @@ import {
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { uid } from '@/utils/format'
+import { reveal } from '@/utils/motion'
 import { FAQS } from '@/data/content'
 import { Button } from '@/components/common/Button'
 import { Container } from '@/components/common/Container'
@@ -64,7 +65,7 @@ const OFFICES = [
     tag: 'South India operations',
     address: 'Level 3, Prestige Trade Tower, Palace Road, Bengaluru 560001',
     phone: '+91 80 4711 2200',
-    team: 'Caregiver onboarding, hospital partnerships',
+    team: 'Caretaker onboarding, hospital partnerships',
   },
   {
     city: 'Delhi NCR',
@@ -76,9 +77,9 @@ const OFFICES = [
 ]
 
 const SUBJECTS = [
-  'Booking a caregiver',
+  'Booking a caretaker',
   'Hospital care requirement',
-  'Caregiver registration',
+  'Caretaker registration',
   'Payment or invoice query',
   'Complaint or feedback',
   'Partnership enquiry',
@@ -112,13 +113,13 @@ export function ContactPage() {
         icon={MessageSquare}
         title="Talk to the"
         highlight="CareMate team"
-        description="Booking help, hospital requirements, caregiver onboarding or a billing question — write to us here or call the care helpline. Urgent issues on an active booking are handled through the in-app SOS button."
+        description="Booking help, hospital requirements, caretaker onboarding or a billing question — write to us here or call the care helpline. Urgent issues on an active booking are handled through the in-app SOS button."
         items={[{ label: 'Contact' }]}
       />
 
       {/* contact cards */}
       <Container className="pt-10 sm:pt-12">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div {...reveal} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CONTACT_CARDS.map((card) => (
             <div
               key={card.label}
@@ -132,12 +133,12 @@ export function ContactPage() {
               <p className="mt-1 text-xs text-muted">{card.hint}</p>
             </div>
           ))}
-        </div>
+        </motion.div>
       </Container>
 
       {/* form + offices */}
       <Container className="py-10 sm:py-14">
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+        <motion.div {...reveal} className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
           <div className="rounded-card border border-line bg-white shadow-raised">
             <div className="border-b border-line px-5 py-4 sm:px-6">
               <h2 className="font-display text-xl font-extrabold text-ink">Send an enquiry</h2>
@@ -327,13 +328,13 @@ export function ContactPage() {
               </span>
             </div>
           </div>
-        </div>
+        </motion.div>
       </Container>
 
       {/* FAQ mini accordion */}
       <section className="border-t border-line bg-canvas">
         <Container className="py-12 sm:py-16">
-          <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:items-start lg:gap-14">
+          <motion.div {...reveal} className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:items-start lg:gap-14">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-700">Quick answers</p>
               <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
@@ -395,7 +396,7 @@ export function ContactPage() {
                 )
               })}
             </div>
-          </div>
+          </motion.div>
         </Container>
       </section>
     </div>

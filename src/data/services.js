@@ -16,7 +16,7 @@ export const SERVICES = [
     name: 'Patient Monitoring',
     short: 'Vitals, recovery tracking and round-the-clock observation at home.',
     description:
-      'A trained caregiver tracks blood pressure, pulse, sugar levels, oxygen saturation and medication response, and keeps the family updated with structured daily reports.',
+      'A trained caretaker tracks blood pressure, pulse, sugar levels, oxygen saturation and medication response, and keeps the family updated with structured daily reports.',
     icon: Activity,
     startingPrice: 449,
     unit: 'hour',
@@ -88,7 +88,7 @@ export const SERVICES = [
     name: 'Dementia & Alzheimer’s Support',
     short: 'Specialised memory-care routines with trained dementia handlers.',
     description:
-      'Calm, structured support for memory-care patients — orientation cues, wandering prevention, safe nutrition, behavioural de-escalation and caregiver respite.',
+      'Calm, structured support for memory-care patients — orientation cues, wandering prevention, safe nutrition, behavioural de-escalation and caretaker respite.',
     icon: Brain,
     startingPrice: 649,
     unit: 'hour',

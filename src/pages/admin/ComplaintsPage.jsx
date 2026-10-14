@@ -212,12 +212,12 @@ function ComplaintsList() {
   if (!complaints.length) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Complaints" subtitle="Investigate, resolve and audit every customer or caregiver complaint." />
+        <PageHeader title="Complaints" subtitle="Investigate, resolve and audit every customer or caretaker complaint." />
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={ShieldAlert}
             title="No complaints raised"
-            description="When a customer or caregiver raises an issue, it will land here for the operations desk."
+            description="When a customer or caretaker raises an issue, it will land here for the operations desk."
           />
         </div>
       </div>
@@ -552,7 +552,7 @@ function ComplaintDetail({ id }) {
                     rows={3}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="e.g. Called the caregiver — written explanation expected within 48 hours."
+                    placeholder="e.g. Called the caretaker — written explanation expected within 48 hours."
                   />
                 </FormField>
                 <Button size="sm" onClick={handleAddNote} disabled={!note.trim()}>
@@ -608,7 +608,7 @@ function ComplaintDetail({ id }) {
                   </p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-success-100 bg-success-50 p-3.5 text-center">
+                <div className="rounded-xl border border-success-100 bg-gradient-to-br from-success-50 to-white p-3.5 text-center">
                   <p className="flex items-center justify-center gap-1.5 text-xs font-bold text-success-700">
                     <CheckCircle2 className="h-4 w-4" /> Fully resolved
                   </p>
@@ -622,7 +622,7 @@ function ComplaintDetail({ id }) {
             <CardHeader title="Resolution" subtitle="Outcome shared with the complainant" icon={CheckCircle2} />
             <CardBody className="space-y-4">
               {isResolved && complaint.resolution ? (
-                <div className="rounded-xl border border-success-100 bg-success-50 p-4">
+                <div className="rounded-xl border border-success-100 bg-gradient-to-br from-success-50 to-white p-4">
                   <p className="text-xs font-bold uppercase tracking-wider text-success-700">Resolution recorded</p>
                   <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{complaint.resolution}</p>
                 </div>
@@ -638,7 +638,7 @@ function ComplaintDetail({ id }) {
                   rows={5}
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value)}
-                  placeholder="e.g. Pro-rata refund of ₹392 issued, handover training assigned to the caregiver."
+                  placeholder="e.g. Pro-rata refund of ₹392 issued, handover training assigned to the caretaker."
                 />
               </FormField>
 

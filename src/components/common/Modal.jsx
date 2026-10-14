@@ -47,7 +47,7 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
                 sizes[size],
               )}
             >
-              <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+              <div className="flex items-start justify-between gap-4 border-b border-line bg-gradient-to-r from-mint-50 to-white px-5 py-4">
                 <div>
                   <h2 className="font-display text-lg font-bold text-ink">{title}</h2>
                   {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}

@@ -88,7 +88,7 @@ export function PayoutsPage() {
       'CAREMATE — PAYOUT STATEMENT (DEMO)',
       '==================================',
       line('Payout ID', payout.id),
-      line('Caregiver', payout.caregiverName),
+      line('Caretaker', payout.caregiverName),
       line('Statement period', payout.period),
       line('Requested on', formatDate(payout.requestedOn, { long: true })),
       line('Status', payout.status),
@@ -113,7 +113,7 @@ export function PayoutsPage() {
       header: 'Payout ID',
       render: (p) => <span className="font-display text-sm font-bold text-ink">{p.id}</span>,
     },
-    { key: 'caregiverName', header: 'Caregiver' },
+    { key: 'caregiverName', header: 'Caretaker' },
     { key: 'period', header: 'Period' },
     { key: 'jobs', header: 'Jobs', align: 'right', render: (p) => <span className="tabular-nums">{p.jobs}</span> },
     {
@@ -180,7 +180,7 @@ export function PayoutsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Payouts"
-        subtitle="Review and settle caregiver payouts — gross earnings less the 12% platform commission."
+        subtitle="Review and settle caretaker payouts — gross earnings less the 12% platform commission."
         meta={<span className="text-sm text-muted">Payouts settle to the registered bank within 2 working days</span>}
       />
 
@@ -207,13 +207,13 @@ export function PayoutsPage() {
           value={stats.settled}
           icon={CheckCircle2}
           tone="success"
-          hint="Credited to caregivers"
+          hint="Credited to caretakers"
           delay={0.15}
         />
       </div>
 
       <Card>
-        <CardHeader title="Payout trend" subtitle="Total amount disbursed to caregivers each month" icon={TrendingUp} />
+        <CardHeader title="Payout trend" subtitle="Total amount disbursed to caretakers each month" icon={TrendingUp} />
         <CardBody>
           <div dir="ltr" className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -251,7 +251,7 @@ export function PayoutsPage() {
           <SearchBar
             value={search}
             onChange={setSearch}
-            placeholder="Search payout ID, caregiver or period…"
+            placeholder="Search payout ID, caretaker or period…"
             className="sm:max-w-sm sm:flex-1"
           />
           <Tabs
@@ -371,7 +371,7 @@ export function PayoutsPage() {
               </table>
             </div>
 
-            <div className="rounded-xl border border-line bg-slate-50/70 p-4 text-xs leading-relaxed text-muted">
+            <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 text-xs leading-relaxed text-muted">
               <p className="font-semibold text-ink">Disbursal details</p>
               <p className="mt-1.5">
                 Credited to {viewing.method} for period {viewing.period}. Settlement typically completes within 2

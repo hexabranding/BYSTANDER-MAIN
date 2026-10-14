@@ -1,5 +1,8 @@
-import { Mail, MapPin, Phone } from 'lucide-react'
+import { ArrowRight, Info, Lock, Mail, MapPin, Phone, ShieldCheck, Siren } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
+import { Button } from '@/components/common/Button'
+import { Container } from '@/components/common/Container'
 import { Logo } from '@/components/common/Logo'
 
 const socials = [
@@ -21,21 +24,45 @@ const socials = [
   },
 ]
 
+/** Top assurance bar — the three promises the rest of the site repeats. */
+const assurances = [
+  {
+    icon: ShieldCheck,
+    label: '4-step human verification',
+    hint: 'ID · council registration · address · police',
+  },
+  {
+    icon: Lock,
+    label: 'Escrow-protected payments',
+    hint: 'Held until the shift is complete',
+  },
+  {
+    icon: Siren,
+    label: '24×7 on-call SOS desk',
+    hint: 'A named human on every booking',
+  },
+]
+
+const contact = [
+  { icon: MapPin, text: '4th Floor, One BKC, Bandra Kurla Complex, Mumbai 400051' },
+  { icon: Phone, text: '+91 22 4890 1100' },
+  { icon: Mail, text: 'support@caremate.in' },
+]
+
 const columns = [
   {
     title: 'Platform',
     links: [
       { label: 'Browse services', to: '/services' },
       { label: 'Find a caretaker', to: '/caregivers' },
-      { label: 'How it works', to: '/#how-it-works' },
       { label: 'Trust & safety', to: '/#trust' },
     ],
   },
   {
-    title: 'For caregivers',
+    title: 'For caretakers',
     links: [
-      { label: 'Become a caregiver', to: '/register/caregiver' },
-      { label: 'Caregiver login', to: '/login' },
+      { label: 'Become a caretaker', to: '/register/caregiver' },
+      { label: 'Caretaker login', to: '/login' },
       { label: 'Verification process', to: '/#trust' },
       { label: 'Payouts & commission', to: '/#faq' },
     ],
@@ -52,61 +79,99 @@ const columns = [
 ]
 
 const legal = [
-  { label: 'Privacy policy', to: '/contact' },
-  { label: 'Terms of service', to: '/contact' },
-  { label: 'Refund policy', to: '/contact' },
+  { label: 'Privacy policy', to: '/legal/privacy' },
+  { label: 'Terms of service', to: '/legal/terms' },
+  { label: 'Refund policy', to: '/legal/refunds' },
 ]
 
 export function PublicFooter() {
   return (
-    <footer className="border-t border-line bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_repeat(3,1fr)]">
+    <footer className="relative overflow-hidden border-t border-line bg-white">
+      <div aria-hidden="true" className="grid-pattern pointer-events-none absolute inset-0 opacity-[0.05]" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-28 -left-24 h-72 w-72 rounded-full bg-[radial-gradient(closest-side,rgba(163,229,218,0.6),transparent)] blur-2xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-40 -right-32 h-96 w-96 rounded-full bg-[radial-gradient(closest-side,rgba(125,211,252,0.3),transparent)] blur-2xl"
+      />
+
+      <Container className="py-14 sm:py-16">
+        {/* ------------- assurance bar ------------- */}
+        <ul className="flex flex-col gap-4 border-b border-line pb-8 sm:flex-row sm:items-center sm:justify-center sm:gap-x-8 lg:gap-x-14">
+          {assurances.map((item) => (
+            <li key={item.label} className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
+                <item.icon className="h-4.5 w-4.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-ink">{item.label}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-faint">{item.hint}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {/* ------------- link columns ------------- */}
+        <div className="mt-10 grid gap-10 lg:grid-cols-[1.5fr_repeat(3,1fr)] lg:gap-12">
           <div className="max-w-sm">
             <Logo size="xl" />
             <p className="mt-4 text-sm leading-relaxed text-muted">
-              CareMate connects families and patients with verified caregivers, professional nurses and nursing students
+              CareMate connects families and patients with verified caretakers, professional nurses and nursing students
               for home care and hospital care — with escrow payments, documented verification and 24×7 SOS support.
             </p>
-            <div className="mt-5 space-y-2 text-sm text-muted">
-              <p className="flex items-start gap-2">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-                4th Floor, One BKC, Bandra Kurla Complex, Mumbai 400051
-              </p>
-              <p className="flex items-center gap-2">
-                <Phone className="h-4 w-4 shrink-0 text-primary-600" />
-                +91 22 4890 1100
-              </p>
-              <p className="flex items-center gap-2">
-                <Mail className="h-4 w-4 shrink-0 text-primary-600" />
-                support@caremate.in
-              </p>
+
+            <div className="mt-6 space-y-3">
+              {contact.map((row) => (
+                <p key={row.text} className="flex items-start gap-3 text-sm text-muted">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line bg-canvas text-primary-600">
+                    <row.icon className="h-4 w-4" />
+                  </span>
+                  <span className="pt-1 leading-relaxed">{row.text}</span>
+                </p>
+              ))}
             </div>
-            <div className="mt-5 flex gap-2">
+
+            <div className="mt-6 flex gap-2.5">
               {socials.map((social) => (
-                <a
+                <button
                   key={social.label}
-                  href="#"
-                  onClick={(e) => e.preventDefault()}
-                  className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted transition hover:border-primary-300 hover:bg-mint-50 hover:text-primary-700"
+                  type="button"
+                  onClick={() =>
+                    toast.info(`${social.label} profile is not linked in this demo`, {
+                      description: 'Social channels will be connected before launch.',
+                    })
+                  }
+                  className="grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-muted shadow-card transition hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-700"
                   aria-label={social.label}
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
                     <path d={social.path} />
                   </svg>
-                </a>
+                </button>
               ))}
             </div>
           </div>
 
           {columns.map((col) => (
             <div key={col.title}>
-              <h4 className="font-display text-sm font-bold uppercase tracking-wider text-ink">{col.title}</h4>
+              <h4 className="font-display text-xs font-bold uppercase tracking-[0.18em] text-primary-700">
+                {col.title}
+              </h4>
+              <span
+                aria-hidden="true"
+                className="mt-3 block h-1 w-8 rounded-full bg-gradient-to-r from-primary-500 to-accent-400"
+              />
               <ul className="mt-4 space-y-2.5">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    <Link to={link.to} className="text-sm text-muted transition hover:text-primary-700">
+                    <Link
+                      to={link.to}
+                      className="group inline-flex items-center gap-1.5 text-sm text-muted transition hover:text-primary-700"
+                    >
                       {link.label}
+                      <ArrowRight className="h-3.5 w-3.5 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" />
                     </Link>
                   </li>
                 ))}
@@ -115,22 +180,57 @@ export function PublicFooter() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-col gap-4 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted">
+        {/* ------------- quick action ------------- */}
+        <div className="mt-12 flex flex-col gap-5 rounded-panel border border-primary-100 bg-gradient-to-r from-mint-50 via-white to-primary-50 p-5 shadow-card sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-xl">
+            <p className="font-display text-base font-extrabold text-ink sm:text-lg">
+              Care can’t wait for office hours
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              Search verified caretakers near you, or call the on-call desk — it answers around the clock, every day
+              of the week.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-3">
+            <Button to="/caregivers" iconRight={ArrowRight}>
+              Find a caretaker
+            </Button>
+            <Button to="/contact" variant="outline" icon={Phone}>
+              Talk to us
+            </Button>
+          </div>
+        </div>
+
+        {/* ------------- demo notice ------------- */}
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-line bg-canvas p-4">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-primary-600 ring-1 ring-inset ring-line">
+            <Info className="h-3.5 w-3.5" />
+          </span>
+          <p className="text-[11px] leading-relaxed text-faint">
+            Demo notice: CareMate is presented here as a frontend demonstration. OTP delivery, identity verification,
+            payments, SOS dispatch, camera and QR checks are simulated with sample data and do not touch real services.
+          </p>
+        </div>
+      </Container>
+
+      {/* ------------- base bar ------------- */}
+      <div className="relative border-t border-primary-900/60 bg-primary-950">
+        <Container className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-white/55">
             © {new Date().getFullYear()} CareMate Healthcare Technologies Pvt. Ltd. All rights reserved.
           </p>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
             {legal.map((l) => (
-              <Link key={l.label} to={l.to} className="text-xs text-muted transition hover:text-primary-700">
+              <Link
+                key={l.label}
+                to={l.to}
+                className="text-xs text-white/55 transition hover:text-white hover:underline hover:underline-offset-4"
+              >
                 {l.label}
               </Link>
             ))}
           </div>
-        </div>
-        <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-[11px] leading-relaxed text-faint">
-          Demo notice: CareMate is presented here as a frontend demonstration. OTP delivery, identity verification,
-          payments, SOS dispatch, camera and QR checks are simulated with sample data and do not touch real services.
-        </p>
+        </Container>
       </div>
     </footer>
   )

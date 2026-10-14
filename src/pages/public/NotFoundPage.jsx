@@ -37,13 +37,13 @@ export function NotFoundPage() {
           <h1 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">Page not found</h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
             The page you are looking for may have moved, been renamed, or never existed. Check the address, search
-            for a caregiver, or head back to the homepage.
+            for a caretaker, or head back to the homepage.
           </p>
 
           <form onSubmit={onSearch} className="mx-auto mt-8 flex max-w-lg flex-col gap-2.5 sm:flex-row">
             <div className="relative flex-1">
               <label htmlFor="nf-search" className="sr-only">
-                Search caregivers
+                Search caretakers
               </label>
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
               <input

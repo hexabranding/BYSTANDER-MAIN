@@ -22,6 +22,7 @@ import { usePagination } from '@/hooks/usePagination'
 import { getCustomerById } from '@/data/bookings'
 import { BOOKING_STATUSES } from '@/utils/constants'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
+import { durationBasis, formatDuration } from '@/utils/duration'
 import { cn } from '@/utils/cn'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -110,7 +111,7 @@ export function BookingsPage() {
       service: b.service,
       date: b.date,
       startTime: b.startTime,
-      hours: b.hours,
+      duration: formatDuration(b.hours),
       amount: b.total,
       paymentStatus: b.paymentStatus,
       bookingStatus: b.status,
@@ -145,7 +146,7 @@ export function BookingsPage() {
     if (action.kind === 'complete') {
       advanceBooking(selected.id, 'complete')
       toast.success(`Booking ${selected.id} marked complete`, {
-        description: 'Escrow releases to the caregiver within 24 hours.',
+        description: 'Escrow releases to the caretaker within 24 hours.',
       })
     } else {
       cancelBooking(selected.id, action.reason)
@@ -189,7 +190,7 @@ export function BookingsPage() {
         </div>
       ),
     },
-    { key: 'caregiverName', header: 'Caregiver' },
+    { key: 'caregiverName', header: 'Caretaker' },
     { key: 'service', header: 'Service' },
     {
       key: 'date',
@@ -204,7 +205,7 @@ export function BookingsPage() {
     {
       key: 'hours',
       header: 'Duration',
-      render: (b) => <span className="tabular-nums">{b.hours} hrs</span>,
+      render: (b) => <span className="tabular-nums">{formatDuration(b.hours, { short: true })}</span>,
     },
     {
       key: 'total',
@@ -262,7 +263,7 @@ export function BookingsPage() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search booking ID, customer, caregiver or service…"
+          placeholder="Search booking ID, customer, caretaker or service…"
           className="xl:max-w-sm xl:flex-1"
         />
         <Tabs
@@ -327,7 +328,7 @@ export function BookingsPage() {
         title={selected ? `${selected.id} · ${selected.service}` : 'Booking'}
         subtitle={
           selected
-            ? `${formatDate(selected.date, { long: true })} · ${selected.startTime} · ${selected.hours} hrs · ${selected.careType}`
+            ? `${formatDate(selected.date, { long: true })} · ${selected.startTime} · ${formatDuration(selected.hours, { short: true })} · ${selected.careType}`
             : ''
         }
         size="xl"
@@ -373,7 +374,7 @@ export function BookingsPage() {
                     <span className="font-semibold text-ink">{selected.careType}</span>
                   </div>
                   <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Caregiver</span>
+                    <span className="text-muted">Caretaker</span>
                     <span className="text-right font-semibold text-ink">
                       {selectedCaregiver?.name || 'Not assigned'} · {formatCurrency(selected.hourlyRate)}/hr
                     </span>
@@ -387,7 +388,7 @@ export function BookingsPage() {
                     <span className="max-w-[65%] text-right font-semibold text-ink">{selected.address}</span>
                   </div>
                   {selected.specialInstructions ? (
-                    <div className="rounded-xl border border-line bg-slate-50/70 px-3.5 py-3">
+                    <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-3.5 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">
                         Special instructions
                       </p>
@@ -403,7 +404,7 @@ export function BookingsPage() {
                 items={[
                   {
                     label: selected.service,
-                    meta: `${formatCurrency(selected.hourlyRate)}/hr × ${selected.hours} hrs`,
+                    meta: `${formatCurrency(selected.hourlyRate)}/hr × ${durationBasis(selected.hours)}`,
                     amount: selected.subtotal,
                   },
                 ]}
@@ -412,7 +413,7 @@ export function BookingsPage() {
                 tax={selected.tax}
                 commission={selected.commission}
                 total={selected.total}
-                currencyNote="18% GST applies to service and platform charges. Platform commission is deducted before the caregiver payout is released."
+                currencyNote="18% GST applies to service and platform charges. Platform commission is deducted before the caretaker payout is released."
               />
 
               <Card>
@@ -459,7 +460,7 @@ export function BookingsPage() {
           setCancelReasonError('')
         }}
         title="Cancel this booking?"
-        subtitle="A reason is required — it is shared with the customer and caregiver."
+        subtitle="A reason is required — it is shared with the customer and caretaker."
         size="sm"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -486,7 +487,7 @@ export function BookingsPage() {
             setCancelReason(e.target.value)
             setCancelReasonError('')
           }}
-          placeholder="e.g. Caregiver unavailable and no replacement found for this shift."
+          placeholder="e.g. Caretaker unavailable and no replacement found for this shift."
           aria-label="Cancellation reason"
           error={cancelReasonError}
         />
@@ -503,8 +504,8 @@ export function BookingsPage() {
         title={dialog?.kind === 'cancel' ? 'Confirm cancellation?' : 'Force complete this booking?'}
         message={
           dialog?.kind === 'cancel'
-            ? `${selected?.id} will be cancelled. Reason: “${dialog.reason}” — escrow is released back to the customer and the caregiver is notified.`
-            : `${selected?.id} will be marked Completed immediately, releasing escrow to ${selectedCaregiver?.name || 'the caregiver'} within 24 hours. Use this only after the shift has been delivered.`
+            ? `${selected?.id} will be cancelled. Reason: “${dialog.reason}” — escrow is released back to the customer and the caretaker is notified.`
+            : `${selected?.id} will be marked Completed immediately, releasing escrow to ${selectedCaregiver?.name || 'the caretaker'} within 24 hours. Use this only after the shift has been delivered.`
         }
         confirmLabel={dialog?.kind === 'cancel' ? 'Cancel booking' : 'Force complete'}
       />

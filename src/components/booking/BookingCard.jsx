@@ -2,6 +2,7 @@ import { CalendarDays, Clock, MapPin, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/utils/cn'
 import { formatDate, formatCurrency } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { StatusBadge } from '@/components/common/StatusBadge'
 
 export function BookingCard({ booking, caregiverName, customerName, to, actions, className }) {
@@ -47,7 +48,7 @@ export function BookingCard({ booking, caregiverName, customerName, to, actions,
         </span>
         <span className="inline-flex items-center gap-2">
           <Clock className="h-4 w-4 shrink-0 text-faint" />
-          {booking.startTime} · {booking.hours} hrs
+          {booking.startTime} · {formatDuration(booking.hours, { short: true })}
         </span>
         <span className="inline-flex items-center gap-2 sm:col-span-2">
           <MapPin className="h-4 w-4 shrink-0 text-faint" />

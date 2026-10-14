@@ -18,6 +18,7 @@ import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { CUSTOMERS } from '@/data/bookings'
 import { formatDate, formatCurrency, maskEmail, maskPhone } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -102,7 +103,7 @@ export function CustomersPage() {
       next === 'Active'
         ? `${suspendTarget.name}'s account reactivated`
         : `${suspendTarget.name}'s account suspended`,
-      { description: next === 'Active' ? 'They can book and message caregivers again.' : 'New bookings are blocked until you reactivate.' },
+      { description: next === 'Active' ? 'They can book and message caretakers again.' : 'New bookings are blocked until you reactivate.' },
     )
     setSuspendTarget(null)
   }
@@ -293,11 +294,11 @@ export function CustomersPage() {
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:shrink-0">
-                <div className="rounded-xl border border-line px-4 py-3 text-center">
+                <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-center">
                   <p className="font-display text-xl font-extrabold tabular-nums text-ink">{selected.totalBookings}</p>
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">Bookings</p>
                 </div>
-                <div className="rounded-xl border border-line px-4 py-3 text-center">
+                <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-center">
                   <p className="font-display text-xl font-extrabold tabular-nums text-primary-700">
                     {formatCurrency(selected.totalSpent)}
                   </p>
@@ -362,7 +363,7 @@ export function CustomersPage() {
               <CardBody className="divide-y divide-line p-0">
                 {selectedBookings.length ? (
                   selectedBookings.map((b) => (
-                    <div key={b.id} className="flex items-center gap-3 px-5 py-3.5">
+                    <div key={b.id} className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-mint-50/60">
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
                         <CalendarDays className="h-4.5 w-4.5" size={18} />
                       </span>
@@ -371,7 +372,7 @@ export function CustomersPage() {
                           {b.id} · {b.service}
                         </p>
                         <p className="mt-0.5 text-xs text-muted">
-                          {formatDate(b.date, { long: true })} · {b.startTime} · {b.hours} hrs
+                          {formatDate(b.date, { long: true })} · {b.startTime} · {formatDuration(b.hours, { short: true })}
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
@@ -384,7 +385,7 @@ export function CustomersPage() {
                   <EmptyState
                     icon={CalendarDays}
                     title="No bookings yet"
-                    description="This customer has not booked a caregiver on CareMate."
+                    description="This customer has not booked a caretaker on CareMate."
                     className="py-8"
                   />
                 )}
@@ -402,8 +403,8 @@ export function CustomersPage() {
         title={suspendTarget?.status === 'Active' ? 'Suspend this account?' : 'Reactivate this account?'}
         message={
           suspendTarget?.status === 'Active'
-            ? `${suspendTarget?.name} will not be able to book caregivers or start new conversations. Existing bookings stay unaffected and you can reactivate at any time.`
-            : `${suspendTarget?.name} will be able to book caregivers and message the care team again.`
+            ? `${suspendTarget?.name} will not be able to book caretakers or start new conversations. Existing bookings stay unaffected and you can reactivate at any time.`
+            : `${suspendTarget?.name} will be able to book caretakers and message the care team again.`
         }
         confirmLabel={suspendTarget?.status === 'Active' ? 'Suspend account' : 'Reactivate account'}
       />

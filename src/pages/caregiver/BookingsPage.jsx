@@ -8,6 +8,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { bookingsForCaregiver, getCustomerById } from '@/data/bookings'
 import { formatCurrency, formatDate, formatDateTime, formatTime } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { StatCard } from '@/components/common/StatCard'
@@ -74,7 +75,7 @@ export function BookingsPage() {
         description: `${selected.service} on ${formatDate(selected.date, { long: true })} is confirmed.`,
       })
     } else {
-      cancelBooking(selected.id, 'Declined by caregiver')
+      cancelBooking(selected.id, 'Declined by caretaker')
       toast.info('Booking request declined', { description: 'The customer has been notified.' })
     }
     setSelected(null)
@@ -130,7 +131,7 @@ export function BookingsPage() {
         </div>
       ),
     },
-    { key: 'hours', header: 'Duration', align: 'right', render: (row) => `${row.hours} hrs` },
+    { key: 'hours', header: 'Duration', align: 'right', render: (row) => formatDuration(row.hours, { short: true }) },
     {
       key: 'net',
       header: 'Earnings',
@@ -276,21 +277,21 @@ export function BookingsPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-faint">Patient</p>
                 <p className="mt-1.5 text-sm font-semibold text-ink">{selected.patient?.name}</p>
                 <p className="text-xs text-muted">
                   {selected.patient?.age} yrs · {selected.patient?.relation}
                 </p>
               </div>
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-faint">Schedule</p>
                 <p className="mt-1.5 text-sm font-semibold text-ink">{formatDate(selected.date, { long: true })}</p>
                 <p className="text-xs text-muted">
-                  {selected.startTime} · {selected.hours} hrs
+                  {selected.startTime} · {formatDuration(selected.hours, { short: true })}
                 </p>
               </div>
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4 sm:col-span-2">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 sm:col-span-2">
                 <p className="text-xs font-bold uppercase tracking-wider text-faint">Address</p>
                 <p className="mt-1.5 text-sm text-ink-soft">{selected.address}</p>
               </div>

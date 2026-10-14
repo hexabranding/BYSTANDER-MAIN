@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Check, CheckCircle2, Eye, FileText, Lock, Plus, SearchX, ShieldAlert } from 'lucide-react'
+import { Check, CheckCircle2, Eye, FileText, Lock, Paperclip, Plus, SearchX, ShieldAlert, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -181,6 +181,7 @@ export function ComplaintsPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
   const [raiseOpen, setRaiseOpen] = useState(false)
+  const [evidence, setEvidence] = useState([])
   const [viewing, setViewing] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
@@ -236,7 +237,16 @@ export function ComplaintsPage() {
 
   const closeRaise = () => {
     setRaiseOpen(false)
+    setEvidence([])
     reset()
+  }
+
+  const onPickFiles = (event) => {
+    const picked = Array.from(event.target.files || []).map((file) => file.name)
+    if (!picked.length) return
+    setEvidence((prev) => [...new Set([...prev, ...picked])])
+    toast.success(`${picked.length} file${picked.length > 1 ? 's' : ''} attached`)
+    event.target.value = ''
   }
 
   const onSubmit = (values) => {
@@ -247,11 +257,12 @@ export function ComplaintsPage() {
       complainant: customerName,
       complainantType: 'Customer',
       against: caregiver?.name || 'CareMate Platform',
-      againstType: caregiver ? 'Caregiver' : 'Platform',
+      againstType: caregiver ? 'Caretaker' : 'Platform',
       category: values.category,
       priority: values.priority,
       subject: values.subject.trim(),
       description: values.description.trim(),
+      evidence,
     })
     toast.success(`Complaint ${created.id} submitted`, {
       description: 'Our operations team will review it within 24 hours.',
@@ -453,7 +464,7 @@ export function ComplaintsPage() {
           <FormField label="Subject" htmlFor="cp-subject" required error={errors.subject?.message}>
             <Input
               id="cp-subject"
-              placeholder="e.g. Caregiver arrived 40 minutes late"
+              placeholder="e.g. Caretaker arrived 40 minutes late"
               error={errors.subject?.message}
               {...register('subject', {
                 required: 'Add a short subject',
@@ -480,6 +491,45 @@ export function ComplaintsPage() {
               })}
             />
           </FormField>
+
+          <div className="rounded-xl border border-dashed border-line-strong bg-slate-50 px-4 py-3.5">
+            <label className="flex cursor-pointer items-start gap-3">
+              <Paperclip className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" />
+              <span className="text-sm leading-relaxed text-muted">
+                <span className="font-semibold text-ink">Attach evidence</span> — photos, invoices or screenshots.
+                Filenames only are stored in this demo; files are never uploaded.
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf"
+                  onChange={onPickFiles}
+                  className="sr-only"
+                  aria-label="Attach evidence files"
+                />
+              </span>
+            </label>
+            {evidence.length ? (
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {evidence.map((file) => (
+                  <li
+                    key={file}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-primary-700" />
+                    <span className="max-w-[10rem] truncate">{file}</span>
+                    <button
+                      type="button"
+                      onClick={() => setEvidence((prev) => prev.filter((name) => name !== file))}
+                      className="grid h-4 w-4 place-items-center rounded-full text-faint transition hover:bg-danger-50 hover:text-danger-500"
+                      aria-label={`Remove ${file}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
 
           <p className="flex items-start gap-2 rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
             <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-700" />

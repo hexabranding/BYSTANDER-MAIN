@@ -92,14 +92,21 @@ export function RatingModal({
             <Button variant="ghost" onClick={onClose}>
               Later
             </Button>
-            <Button onClick={submit} disabled={!allRated}>
+            <Button type="submit" form="rating-modal-form" disabled={!allRated}>
               Submit review
             </Button>
           </div>
         </div>
       }
     >
-      <div className="space-y-4">
+      <form
+        id="rating-modal-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          submit()
+        }}
+        className="space-y-4"
+      >
         <div className="space-y-3">
           {criteria.map((c) => (
             <StarRow key={c.key} label={c.label} value={form[c.key] || 0} onChange={(v) => set(c.key, v)} />
@@ -114,7 +121,7 @@ export function RatingModal({
           />
         </FormField>
         {error ? <p className="text-xs font-semibold text-danger-600">{error}</p> : null}
-      </div>
+      </form>
     </Modal>
   )
 }

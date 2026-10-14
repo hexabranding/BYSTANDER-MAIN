@@ -4,7 +4,7 @@ import { cn } from '@/utils/cn'
 export function FilterPanel({ title = 'Filters', activeCount = 0, onReset, children, className, collapsible = false, open = true }) {
   return (
     <section className={cn('rounded-card border border-line bg-white shadow-card', className)}>
-      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+      <header className="flex items-center justify-between gap-3 border-b border-line bg-gradient-to-r from-mint-50 to-white px-4 py-3">
         <h2 className="inline-flex items-center gap-2 text-sm font-bold text-ink">
           <SlidersHorizontal className="h-4 w-4 text-primary-600" />
           {title}

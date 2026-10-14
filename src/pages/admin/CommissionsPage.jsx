@@ -88,7 +88,7 @@ export function CommissionsPage() {
       render: (c) => <span className="font-display text-sm font-bold text-ink">{c.id}</span>,
     },
     { key: 'bookingId', header: 'Booking', render: (c) => <span className="text-primary-700">{c.bookingId}</span> },
-    { key: 'caregiverName', header: 'Caregiver' },
+    { key: 'caregiverName', header: 'Caretaker' },
     {
       key: 'base',
       header: 'Base amount',
@@ -214,7 +214,7 @@ export function CommissionsPage() {
             </div>
             <p className="text-xs leading-relaxed text-muted">
               Commission is deducted at the moment an escrow payment is released, then reconciled against the
-              caregiver payout cycle every fortnight.
+              caretaker payout cycle every fortnight.
             </p>
           </CardBody>
         </Card>
@@ -225,7 +225,7 @@ export function CommissionsPage() {
           <SearchBar
             value={search}
             onChange={setSearch}
-            placeholder="Search commission ID, booking or caregiver…"
+            placeholder="Search commission ID, booking or caretaker…"
             className="sm:max-w-sm sm:flex-1"
           />
           <Tabs
@@ -308,7 +308,7 @@ export function CommissionsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={selected.status} />
               <span className="rounded-full border border-line-strong bg-slate-50 px-3 py-1 text-xs font-semibold text-muted">
-                Caregiver · {selected.caregiverName}
+                Caretaker · {selected.caregiverName}
               </span>
             </div>
 
@@ -325,11 +325,11 @@ export function CommissionsPage() {
               </table>
             </div>
 
-            <div className="rounded-xl border border-line bg-slate-50/70 p-4 text-xs leading-relaxed text-muted">
+            <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 text-xs leading-relaxed text-muted">
               <p className="font-semibold text-ink">Reconciliation note</p>
               <p className="mt-1.5">
                 {formatCurrency(selected.base)} × {selected.rate} = {formatCurrency(selected.amount)}. Accrued
-                entries are matched against the caregiver payout batch before the ledger is closed.
+                entries are matched against the caretaker payout batch before the ledger is closed.
               </p>
             </div>
           </div>

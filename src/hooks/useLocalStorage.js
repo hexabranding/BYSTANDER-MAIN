@@ -1,15 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
 
+const resolve = (v) => (typeof v === 'function' ? v() : v)
+const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v)
+
 export function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
-    if (typeof window === 'undefined') return initialValue
+    const fallback = () => resolve(initialValue)
+    if (typeof window === 'undefined') return fallback()
     try {
       const raw = window.localStorage.getItem(key)
-      if (raw !== null) return JSON.parse(raw)
+      if (raw !== null) {
+        const stored = JSON.parse(raw)
+        // Backfill keys added to the defaults since this payload was saved, so
+        // storage from an older app version can't leave new fields undefined.
+        const defaults = fallback()
+        if (isPlainObject(defaults) && isPlainObject(stored)) return { ...defaults, ...stored }
+        return stored
+      }
     } catch {
       /* corrupted payload — fall through to initial value */
     }
-    return typeof initialValue === 'function' ? initialValue() : initialValue
+    return fallback()
   })
 
   useEffect(() => {

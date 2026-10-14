@@ -1,38 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion, useInView } from 'framer-motion'
+import { AnimatePresence, motion, useInView, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import {
   ArrowRight,
   BadgeCheck,
   CalendarDays,
   Check,
   ChevronDown,
-  ClipboardList,
   Clock,
   EyeOff,
   Lock,
   MapPin,
-  MessageSquare,
   Quote,
-  Receipt,
-  RotateCcw,
   Search,
   ShieldCheck,
   Siren,
   Sparkles,
   Star,
   Stethoscope,
-  UserCheck,
   Users,
-  Wallet,
 } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatCurrency } from '@/utils/format'
 import { CARE_TYPES, CITIES } from '@/utils/constants'
+import { reveal, clamp01 } from '@/utils/motion'
 import { SERVICES } from '@/data/services'
 import { featuredCaregivers } from '@/data/caregivers'
-import { FAQS, HOW_IT_WORKS, TESTIMONIALS, WHY_CHOOSE } from '@/data/content'
+import { FAQS, TESTIMONIALS } from '@/data/content'
 import { Button } from '@/components/common/Button'
 import { Container } from '@/components/common/Container'
 import { Section } from '@/components/common/Section'
@@ -42,23 +37,12 @@ import { RatingStars } from '@/components/common/RatingStars'
 import { CaregiverCard } from '@/components/caregiver/CaregiverCard'
 import { FormField, Input, Select } from '@/components/forms/FormField'
 
-const reveal = {
-  initial: { opacity: 0, y: 18 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, amount: 0.15 },
-  transition: { duration: 0.5, ease: 'easeOut' },
-}
-
 const STATS = [
-  { value: '4,200+', label: 'Verified caregivers', icon: Users },
+  { value: '4,200+', label: 'Verified caretakers', icon: Users },
   { value: '61,000+', label: 'Shifts completed', icon: Check },
   { value: '4.9', label: 'Average family rating', icon: Star },
   { value: '18', label: 'Cities served', icon: MapPin },
 ]
-
-const WHY_ICONS = { ShieldCheck, BadgeCheck, Wallet, Siren, MessageSquare, Receipt }
-
-const STEP_ICONS = [ClipboardList, UserCheck, Lock, RotateCcw]
 
 const TRUST_ITEMS = [
   {
@@ -69,7 +53,7 @@ const TRUST_ITEMS = [
   {
     icon: Lock,
     title: 'Escrow-protected payments',
-    body: 'Your estimate is held securely the moment you confirm. The caregiver is paid only after the shift is marked complete, and every rupee is itemised on the invoice.',
+    body: 'Your estimate is held securely the moment you confirm. The caretaker is paid only after the shift is marked complete, and every rupee is itemised on the invoice.',
   },
   {
     icon: Siren,
@@ -79,11 +63,11 @@ const TRUST_ITEMS = [
   {
     icon: EyeOff,
     title: 'Masked contact until you book',
-    body: 'Messaging and calls run through CareMate, so personal numbers stay private. Your address is shared only with the caregiver assigned to your shift.',
+    body: 'Messaging and calls run through CareMate, so personal numbers stay private. Your address is shared only with the caretaker assigned to your shift.',
   },
 ]
 
-const DURATIONS = ['4 hours', '8 hours', '12 hours', 'Live-in (24 hours)']
+const DURATIONS = ['4 hours', '8 hours', '12 hours', 'Live-in (24 hours)', '2 days', '3 days', '1 week']
 
 function CountUpText({ text, className }) {
   const ref = useRef(null)
@@ -130,6 +114,24 @@ export function HomePage() {
   const [duration, setDuration] = useState(DURATIONS[0])
   const [openFaq, setOpenFaq] = useState(0)
 
+  // ---- hero parallax -------------------------------------------------
+  // One scroll position drives four layers: the photo drifts and settles,
+  // the headline lifts away, and the two floating cards travel at
+  // different speeds so they read as depth instead of stickers.
+  const heroRef = useRef(null)
+  const reduceMotion = useReducedMotion()
+  const { scrollYProgress: rawProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start'],
+  })
+  const heroProgress = useTransform(rawProgress, clamp01)
+  const photoY = useTransform(heroProgress, [0, 1], ['0%', '15%'])
+  const photoScale = useTransform(heroProgress, [0, 1], [1, 1.1])
+  const copyY = useTransform(heroProgress, [0, 1], [0, 64])
+  const copyFade = useTransform(heroProgress, [0, 0.8], [1, 0])
+  const cardsY = useTransform(heroProgress, [0, 1], [0, -78])
+  const heroLayer = (style) => (reduceMotion ? undefined : style)
+
   const popularServices = [
     ...SERVICES.filter((s) => s.popular),
     ...SERVICES.filter((s) => !s.popular),
@@ -146,101 +148,115 @@ export function HomePage() {
   return (
     <div className="bg-white">
       {/* ---------------- hero ---------------- */}
-      <section className="relative overflow-hidden border-b border-line bg-canvas lg:min-h-[575px]">
-        <ImageWithFallback
-          src="https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=1920&q=80"
-          alt="Nurse caring for a senior patient at home"
-          className="absolute inset-0 h-full w-full"
-          imgClassName="object-[center_43%]"
-          fallback={
-            <div className="flex flex-col items-center gap-3 p-8 text-center text-white">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15">
-                <Stethoscope className="h-7 w-7" />
-              </span>
-              <p className="font-display text-lg font-bold">Verified care, at home</p>
-              <p className="text-sm text-white/70">Nursing-led support for recovery and elder care</p>
-            </div>
-          }
-        />
+      <section ref={heroRef} className="relative overflow-hidden border-b border-line bg-canvas lg:min-h-[575px]">
+        <motion.div
+          style={heroLayer({ y: photoY, scale: photoScale })}
+          className="absolute inset-0"
+        >
+          <ImageWithFallback
+            src="https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=1920&q=80"
+            alt="Nurse caring for a senior patient at home"
+            className="absolute inset-0 h-full w-full"
+            imgClassName="object-[center_43%]"
+            fallback={
+              <div className="flex flex-col items-center gap-3 p-8 text-center text-white">
+                <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15">
+                  <Stethoscope className="h-7 w-7" />
+                </span>
+                <p className="font-display text-lg font-bold">Verified care, at home</p>
+                <p className="text-sm text-white/70">Nursing-led support for recovery and elder care</p>
+              </div>
+            }
+          />
+        </motion.div>
         <div className="hero-wash" aria-hidden="true" />
 
-        <Container className="relative z-[1] py-14 sm:py-20 lg:py-24">
-          <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, ease: 'easeOut' }}
-            className="max-w-[520px]"
-          >
-            <motion.span
-              initial={{ opacity: 0, y: 12 }}
+        <motion.div
+          style={heroLayer({ y: copyY, opacity: copyFade })}
+          className="relative z-[1]"
+        >
+          <Container className="py-14 sm:py-20 lg:py-24">
+            <motion.div
+              initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, delay: 0.1 }}
-              className="inline-flex items-center gap-2.5 rounded-full border border-primary-200/80 bg-white/75 px-3.5 py-1.5 text-[11px] font-bold text-primary-800 shadow-card backdrop-blur"
+              transition={{ duration: 0.55, ease: 'easeOut' }}
+              className="max-w-[520px]"
             >
-              <span className="relative flex h-2 w-2" aria-hidden="true">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success-500 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-success-500" />
-              </span>
-              Same-day verified caregivers in 18 cities
-            </motion.span>
-
-            <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-primary-700">
-              CareMate · Never alone
-            </p>
-
-            <h1 className="mt-2 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-[3.75rem]">
-              Trusted care,
-              <br />
-              right when you
-              <br />
-              <span className="bg-gradient-to-r from-primary-700 via-primary-600 to-accent-500 bg-clip-text text-transparent">
-                need it.
-              </span>
-            </h1>
-
-            <p className="mt-5 max-w-[420px] text-[15px] leading-relaxed text-muted">
-              Rigorously verified caregivers for home and hospital care — post-surgery recovery, night-duty vigil
-              and daily companionship. Book in minutes, pay into escrow, track every shift.
-            </p>
-
-            <div className="hero-actions mt-7 flex flex-wrap gap-3">
-              <Button
-                to="/caregivers"
-                size="lg"
-                iconRight={ArrowRight}
-                className="shadow-[0_18px_35px_-16px_rgba(15,118,110,0.85)] transition-all hover:-translate-y-0.5"
+              <motion.span
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.1 }}
+                className="inline-flex items-center gap-2.5 rounded-full border border-primary-200/80 bg-white/75 px-3.5 py-1.5 text-[11px] font-bold text-primary-800 shadow-card backdrop-blur"
               >
-                Find a Caretaker
-              </Button>
-              <Button
-                to="/register/caregiver"
-                variant="outline"
-                size="lg"
-                className="bg-white/80 backdrop-blur transition-all hover:-translate-y-0.5"
-              >
-                Become a Caregiver
-              </Button>
-            </div>
+                <span className="relative flex h-2 w-2" aria-hidden="true">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success-500 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success-500" />
+                </span>
+                Same-day verified caretakers in 18 cities
+              </motion.span>
 
-            <div className="hero-social-proof mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
-              <div className="flex -space-x-2.5">
-                {featuredCaregivers.slice(0, 4).map((cg) => (
-                  <Avatar key={cg.id} src={cg.photo} name={cg.name} size="sm" verified />
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <RatingStars value={4.9} />
-                <span className="text-xs text-muted">12,400+ family reviews</span>
-              </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-mint-100 px-2.5 py-1 text-[11px] font-bold text-primary-800">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Escrow protected
-              </span>
-            </div>
-          </motion.div>
-        </Container>
+              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-primary-700">
+                CareMate · Never alone
+              </p>
 
-        <div className="absolute bottom-24 right-[6%] z-10 hidden flex-col items-end gap-3 lg:flex">
+              <h1 className="mt-2 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-[3.75rem]">
+                Trusted care,
+                <br />
+                right when you
+                <br />
+                <span className="bg-gradient-to-r from-primary-700 via-primary-600 to-accent-500 bg-clip-text text-transparent">
+                  need it.
+                </span>
+              </h1>
+
+              <p className="mt-5 max-w-[420px] text-[15px] leading-relaxed text-muted">
+                Rigorously verified caretakers for home and hospital care — post-surgery recovery, night-duty vigil
+                and daily companionship. Book in minutes, pay into escrow, track every shift.
+              </p>
+
+              <div className="hero-actions mt-7 flex flex-wrap gap-3">
+                <Button
+                  to="/caregivers"
+                  size="lg"
+                  iconRight={ArrowRight}
+                  className="shadow-[0_18px_35px_-16px_rgba(15,118,110,0.85)] transition-all hover:-translate-y-0.5"
+                >
+                  Find a Caretaker
+                </Button>
+                <Button
+                  to="/register/caregiver"
+                  variant="outline"
+                  size="lg"
+                  className="bg-white/80 backdrop-blur transition-all hover:-translate-y-0.5"
+                >
+                  Become a Caretaker
+                </Button>
+              </div>
+
+              <div className="hero-social-proof mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
+                <div className="flex -space-x-2.5">
+                  {featuredCaregivers.slice(0, 4).map((cg) => (
+                    <Avatar key={cg.id} src={cg.photo} name={cg.name} size="sm" verified />
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <RatingStars value={4.9} />
+                  <span className="text-xs text-muted">12,400+ family reviews</span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-mint-100 px-2.5 py-1 text-[11px] font-bold text-primary-800">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Escrow protected
+                </span>
+              </div>
+            </motion.div>
+          </Container>
+        </motion.div>
+
+        <motion.div
+          aria-hidden="true"
+          style={heroLayer({ y: cardsY })}
+          className="absolute bottom-24 right-[6%] z-10 hidden flex-col items-end gap-3 lg:flex"
+        >
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -262,15 +278,15 @@ export function HomePage() {
             transition={{ duration: 0.5, delay: 0.35, ease: 'easeOut' }}
             className="animate-float-slow mr-8 flex items-center gap-3 rounded-2xl border border-white/70 bg-white/90 px-5 py-4 shadow-raised backdrop-blur"
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-warning-100 text-warning-700">
-              <Star className="h-4 w-4 fill-warning-400 text-warning-400" />
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent-100 text-accent-600">
+              <Clock className="h-4.5 w-4.5" />
             </span>
             <div>
-              <p className="text-sm font-bold tabular-nums text-ink">4.9 / 5 average rating</p>
-              <p className="mt-0.5 text-xs text-muted">Loved by families across 18 cities</p>
+              <p className="text-sm font-bold text-ink">Shifts from 4 hours to 1 week</p>
+              <p className="mt-0.5 text-xs text-muted">Hourly, daily or weekly — same rate</p>
             </div>
           </motion.div>
-        </div>
+        </motion.div>
       </section>
 
       {/* ---------------- booking search widget ---------------- */}
@@ -280,7 +296,7 @@ export function HomePage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.15 }}
-          aria-label="Search caregivers"
+          aria-label="Search caretakers"
           className="rounded-card border border-line bg-white p-4 shadow-raised sm:p-5 lg:p-6"
         >
 
@@ -340,7 +356,7 @@ export function HomePage() {
             <span className="hidden text-faint sm:inline">·</span>
             <span className="flex items-center gap-1.5">
               <CalendarDays className="h-3.5 w-3.5 shrink-0 text-primary-600" />
-              No booking fee — pay only after the caregiver is confirmed
+              No booking fee — pay only after the caretaker is confirmed
             </span>
           </div>
         </motion.form>
@@ -378,7 +394,7 @@ export function HomePage() {
           <SectionHeading
             eyebrow="Popular services"
             title="Care built around the patient, not the package"
-            description="Every service is delivered by a caregiver whose qualification matches the task — nurses for clinical work, trained attendants for daily living support."
+            description="Every service is delivered by a caretaker whose qualification matches the task — nurses for clinical work, trained attendants for daily living support."
             action={
               <Button to="/services" variant="outline" size="sm" iconRight={ArrowRight}>
                 All services
@@ -420,121 +436,12 @@ export function HomePage() {
                   <p className="font-display text-lg font-extrabold text-ink">{formatCurrency(svc.startingPrice)}</p>
                   <p className="text-[11px] uppercase tracking-wide text-faint">per {svc.unit}</p>
                 </div>
-                <Button to="/services" variant="outline" size="sm">
-                  Book Now
+                <Button to={`/caregivers?service=${svc.id}`} variant="outline" size="sm" iconRight={ArrowRight}>
+                  View caretakers
                 </Button>
               </div>
             </motion.article>
           ))}
-          </div>
-        </Container>
-      </Section>
-
-      {/* ---------------- how it works ---------------- */}
-      <Section id="how-it-works" tone="canvas" divider="both">
-        <Container>
-          <motion.div {...reveal}>
-            <SectionHeading
-              align="center"
-              eyebrow="How it works"
-              title="Four steps from requirement to recovery"
-              description="No phone tag, no negotiation with agencies. State the need, pick a verified caregiver and let the platform handle payments, records and reminders."
-            />
-          </motion.div>
-
-          <ol className="mt-12 grid gap-10 sm:grid-cols-2 sm:gap-8 lg:mt-16 lg:grid-cols-4 lg:gap-6">
-            {HOW_IT_WORKS.map((step, i) => {
-              const Icon = STEP_ICONS[i] ?? Check
-              return (
-                <motion.li
-                  key={step.step}
-                  {...reveal}
-                  transition={{ duration: 0.45, delay: i * 0.08 }}
-                  className="relative"
-                >
-                  {i < HOW_IT_WORKS.length - 1 ? (
-                    <span
-                      aria-hidden="true"
-                      className="absolute left-1/2 top-7 hidden h-px w-full bg-[repeating-linear-gradient(90deg,var(--color-primary-300)_0_8px,transparent_8px_16px)] lg:block"
-                    />
-                  ) : null}
-
-                  <div className="relative z-[1] grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 text-white shadow-[0_14px_28px_-12px_rgba(15,118,110,0.7)] ring-4 ring-white">
-                    <Icon className="h-6 w-6" />
-                  </div>
-
-                  <div className="mt-5 rounded-card border border-line bg-white p-5 shadow-card transition hover:-translate-y-1 hover:border-primary-200 hover:shadow-raised">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary-600">
-                      Step {step.step}
-                    </p>
-                    <h3 className="mt-1.5 font-display text-base font-bold text-ink">{step.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-muted">{step.description}</p>
-                  </div>
-                </motion.li>
-              )
-            })}
-          </ol>
-
-          <motion.div {...reveal} className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <Button to="/caregivers" iconRight={ArrowRight}>
-              Find a caretaker now
-            </Button>
-            <Button to="/register/customer" variant="secondary">
-              Create a free account
-            </Button>
-          </motion.div>
-        </Container>
-      </Section>
-
-      {/* ---------------- why choose ---------------- */}
-      <Section className="overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 left-1/2 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(163,229,218,0.45),transparent)] blur-2xl"
-        />
-        <Container className="relative">
-          <motion.div {...reveal}>
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-primary-700">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Why CareMate
-            </span>
-            <h2 className="mt-4 font-display text-2xl font-extrabold text-ink sm:text-3xl lg:text-4xl">
-              Built to remove the guesswork{' '}
-              <span className="bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                from private care
-              </span>
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">
-              Every promise below is a working process, not a marketing line — here is what you can hold us to on
-              every booking.
-            </p>
-            <div className="mt-5 h-1 w-16 rounded-full bg-gradient-to-r from-primary-400 to-primary-700" />
-          </motion.div>
-
-          <div className="mt-11 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {WHY_CHOOSE.map((item, i) => {
-              const Icon = WHY_ICONS[item.icon] ?? ShieldCheck
-              return (
-                <motion.div
-                  key={item.title}
-                  {...reveal}
-                  transition={{ duration: 0.45, delay: (i % 3) * 0.08 }}
-                  className="group relative overflow-hidden rounded-panel border border-line bg-white p-6 shadow-card transition duration-300 hover:-translate-y-1 hover:border-primary-200 hover:shadow-raised"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary-400 via-primary-600 to-primary-800 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                  />
-                  <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 text-white shadow-[0_12px_24px_-12px_rgba(15,118,110,0.7)] transition-transform duration-300 group-hover:scale-105">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <h3 className="mt-5 font-display text-base font-bold text-ink transition-colors group-hover:text-primary-800">
-                    {item.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted">{item.description}</p>
-                </motion.div>
-              )
-            })}
           </div>
         </Container>
       </Section>
@@ -544,12 +451,12 @@ export function HomePage() {
         <Container>
           <motion.div {...reveal}>
             <SectionHeading
-              eyebrow="Featured caregivers"
+              eyebrow="Featured caretakers"
               title="Verified professionals families book again"
               description="Ranked by rating, response rate and repeat bookings — all identities and registrations confirmed by our operations team."
               action={
                 <Button to="/caregivers" variant="outline" size="sm" iconRight={ArrowRight}>
-                  View all caregivers
+                  View all caretakers
                 </Button>
               }
             />
@@ -589,7 +496,7 @@ export function HomePage() {
           className="pointer-events-none absolute top-1/3 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(163,229,218,0.25),transparent)] blur-3xl"
         />
 
-        <Container className="relative">
+        <Container>
           <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-16">
             <motion.div {...reveal}>
               <span className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.24em] text-primary-600 shadow-card">
@@ -630,21 +537,10 @@ export function HomePage() {
                   About us now
                 </Button>
                 <Button to="/caregivers" variant="outline" size="lg" iconRight={ArrowRight}>
-                  Browse caregivers
+                  Browse caretakers
                 </Button>
               </div>
 
-              <div className="mt-10 grid grid-cols-2 gap-x-6 gap-y-8 border-t border-line-strong pt-8 sm:grid-cols-4">
-                {STATS.map((s) => (
-                  <div key={s.label}>
-                    <CountUpText
-                      text={s.value}
-                      className="block font-display text-3xl font-extrabold tracking-tight text-primary-800 sm:text-4xl"
-                    />
-                    <p className="mt-1.5 text-xs font-semibold leading-snug text-muted">{s.label}</p>
-                  </div>
-                ))}
-              </div>
             </motion.div>
 
             <motion.div
@@ -663,7 +559,7 @@ export function HomePage() {
               <div className="group relative overflow-hidden rounded-[2rem] border-4 border-white shadow-raised">
                 <ImageWithFallback
                   src="https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=1200&q=80"
-                  alt="Caregiver supporting a senior at home"
+                  alt="Caretaker supporting a senior at home"
                   className="h-[300px] w-full sm:h-[360px] lg:h-[400px]"
                   imgClassName="object-[center_35%] transition-transform duration-700 ease-out group-hover:scale-105"
                   fallback={
@@ -697,7 +593,7 @@ export function HomePage() {
                 </span>
                 <div className="text-xs leading-tight">
                   <p className="font-display font-extrabold text-ink">100%</p>
-                  <p className="text-muted">ID-verified caregivers</p>
+                  <p className="text-muted">ID-verified caretakers</p>
                 </div>
               </div>
 
@@ -757,7 +653,7 @@ export function HomePage() {
         />
         <div aria-hidden="true" className="grid-pattern pointer-events-none absolute inset-0 opacity-[0.15]" />
 
-        <Container className="relative">
+        <Container>
           <motion.div {...reveal} className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-2xl">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-accent-300 backdrop-blur-sm">
@@ -900,13 +796,13 @@ export function HomePage() {
           aria-hidden="true"
           className="pointer-events-none absolute -right-24 -bottom-28 h-80 w-80 rounded-full bg-[radial-gradient(closest-side,rgba(56,189,248,0.28),transparent)] blur-2xl"
         />
-        <Container className="relative flex flex-col items-start gap-6 py-14 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
+        <Container className="flex flex-col items-start gap-6 py-14 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
             <h2 className="font-display text-2xl font-extrabold text-primary-900 sm:text-3xl">
               Care starts with one conversation
             </h2>
             <p className="mt-2.5 text-sm leading-relaxed text-primary-800/80 sm:text-base">
-              Browse verified caregivers near you, or join CareMate as a caregiver and get paid for work you are
+              Browse verified caretakers near you, or join CareMate as a caretaker and get paid for work you are
               already qualified to do.
             </p>
           </div>
@@ -915,7 +811,7 @@ export function HomePage() {
               Find a Caretaker
             </Button>
             <Button to="/register/caregiver" variant="secondary" size="lg">
-              Become a Caregiver
+              Become a Caretaker
             </Button>
           </div>
         </Container>

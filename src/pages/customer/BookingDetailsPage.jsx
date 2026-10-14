@@ -26,6 +26,8 @@ import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { getBookingById, CUSTOMERS } from '@/data/bookings'
 import { downloadText, formatCurrency, formatDate, formatDateTime, toCSV } from '@/utils/format'
+import { GST_RATE, PLATFORM_COMMISSION, PLATFORM_FEE } from '@/utils/constants'
+import { durationBasis, DURATION_GROUPS, formatDuration } from '@/utils/duration'
 import { cn } from '@/utils/cn'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -90,6 +92,8 @@ export function BookingDetailsPage() {
   const [rateOpen, setRateOpen] = useState(false)
   const [rateForm, setRateForm] = useState({ serviceQuality: 5, behaviour: 5, punctuality: 5, overall: 5, comment: '' })
   const [settleOpen, setSettleOpen] = useState(false)
+  const [rescheduleOpen, setRescheduleOpen] = useState(false)
+  const [reschedule, setReschedule] = useState(() => ({ date: '', startTime: '', hours: 0 }))
 
   if (!booking) {
     return (
@@ -123,6 +127,7 @@ export function BookingDetailsPage() {
   const canRate = booking.status === 'Completed' && !booking.customerRating
   const hasCheckedIn = Boolean(booking.checkIn)
   const hasCheckedOut = Boolean(booking.checkOut)
+  const canReschedule = canCancel && !hasCheckedIn
 
   const handleDownloadInvoice = () => {
     const rows = [
@@ -133,7 +138,7 @@ export function BookingDetailsPage() {
         Service: booking.service,
         Patient: booking.patient?.name,
         Date: booking.date,
-        'Hours': booking.hours,
+        Duration: formatDuration(booking.hours),
         'Hourly Rate': booking.hourlyRate,
         Subtotal: booking.subtotal,
         'Platform Fee': booking.platformFee,
@@ -156,7 +161,7 @@ export function BookingDetailsPage() {
       complainant: customer?.name || user?.name || 'Priya Sharma',
       complainantType: 'Customer',
       against: caregiver?.name || 'CareMate Platform',
-      againstType: caregiver ? 'Caregiver' : 'Platform',
+      againstType: caregiver ? 'Caretaker' : 'Platform',
       category: complaint.category,
       priority: 'Medium',
       subject: complaint.subject.trim(),
@@ -179,7 +184,7 @@ export function BookingDetailsPage() {
         bookingId: booking.id,
         customerId: booking.customerId,
         caregiverId: booking.caregiverId,
-        names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caregiver'}`,
+        names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caretaker'}`,
         service: booking.service,
         amount: booking.total,
         commission: booking.commission || Math.round(booking.subtotal * 0.12),
@@ -202,7 +207,7 @@ export function BookingDetailsPage() {
       bookingId: booking.id,
       customerId: booking.customerId,
       caregiverId: booking.caregiverId,
-      names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caregiver'}`,
+      names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caretaker'}`,
       service: booking.service,
       amount: booking.total,
       commission: booking.commission || Math.round(booking.subtotal * 0.12),
@@ -224,7 +229,7 @@ export function BookingDetailsPage() {
     }
     setSettleOpen(false)
     toast.success('Service confirmed & payment released', {
-      description: `Payout of ${formatCurrency(booking.subtotal)} is on its way to ${caregiver?.name || 'your caregiver'}. Tx ${tx.id}.`,
+      description: `Payout of ${formatCurrency(booking.subtotal)} is on its way to ${caregiver?.name || 'your caretaker'}. Tx ${tx.id}.`,
     })
   }
 
@@ -246,7 +251,7 @@ export function BookingDetailsPage() {
     })
     setRateOpen(false)
     toast.success('Thank you for your review!', {
-      description: `${caregiver?.name || 'Your caregiver'} received your ${avg}-star rating.`,
+      description: `${caregiver?.name || 'Your caretaker'} received your ${avg}-star rating.`,
     })
   }
 
@@ -260,6 +265,44 @@ export function BookingDetailsPage() {
       firstMessage: `Hi, I'm reaching out regarding booking ${booking.id} (${booking.service} on ${formatDate(booking.date)}).`,
     })
     navigate(`/customer/messages?thread=${threadId}`)
+  }
+
+  const openReschedule = () => {
+    setReschedule({ date: booking.date, startTime: booking.startTime, hours: booking.hours })
+    setRescheduleOpen(true)
+  }
+
+  const handleReschedule = () => {
+    if (!reschedule.date || !reschedule.startTime) {
+      toast.error('Pick a new date and start time')
+      return
+    }
+    const hours = Number(reschedule.hours) || booking.hours
+    const hourlyRate = Number(booking.hourlyRate) || 0
+    const subtotal = hourlyRate * hours
+    const platformFee = Number(booking.platformFee) || PLATFORM_FEE
+    const tax = Math.round((subtotal + platformFee) * GST_RATE)
+    updateBooking(booking.id, {
+      date: reschedule.date,
+      startTime: reschedule.startTime,
+      hours,
+      subtotal,
+      tax,
+      total: subtotal + platformFee + tax,
+      ...(booking.commission != null ? { commission: Math.round(subtotal * PLATFORM_COMMISSION) } : {}),
+      timeline: [
+        ...(booking.timeline || []),
+        {
+          at: new Date().toISOString(),
+          label: `Rescheduled to ${formatDate(reschedule.date, { long: true })} at ${reschedule.startTime}`,
+          status: 'completed',
+        },
+      ],
+    })
+    setRescheduleOpen(false)
+    toast.success('Booking rescheduled', {
+      description: `${booking.id} moved to ${formatDate(reschedule.date, { long: true })}, ${reschedule.startTime}.`,
+    })
   }
 
   return (
@@ -277,14 +320,14 @@ export function BookingDetailsPage() {
               <CalendarDays className="h-3.5 w-3.5" /> {formatDate(booking.date, { long: true })}
             </span>
             <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-              <Clock className="h-3.5 w-3.5" /> {booking.startTime} · {booking.hours} hrs
+              <Clock className="h-3.5 w-3.5" /> {booking.startTime} · {formatDuration(booking.hours, { short: true })}
             </span>
           </>
         }
         action={
           <>
             <Button variant="outline" size="sm" icon={MessageSquare} onClick={handleSendMessage}>
-              Message caregiver
+              Message caretaker
             </Button>
             <Button variant="outline" size="sm" icon={Download} onClick={handleDownloadInvoice}>
               Download invoice
@@ -292,6 +335,11 @@ export function BookingDetailsPage() {
             <Button variant="dangerGhost" size="sm" icon={ShieldAlert} onClick={() => setComplaintOpen(true)}>
               Raise complaint
             </Button>
+            {canReschedule ? (
+              <Button variant="outline" size="sm" icon={CalendarDays} onClick={openReschedule}>
+                Reschedule
+              </Button>
+            ) : null}
             {canCancel ? (
               <Button variant="danger" size="sm" icon={XCircle} onClick={() => setCancelOpen(true)}>
                 Cancel booking
@@ -318,8 +366,8 @@ export function BookingDetailsPage() {
                   {canSettle
                     ? 'Service completed — confirm to release payment'
                     : canRate
-                      ? 'How was your experience with ' + (caregiver?.name || 'your caregiver') + '?'
-                      : 'Your caregiver has checked in'}
+                      ? 'How was your experience with ' + (caregiver?.name || 'your caretaker') + '?'
+                      : 'Your caretaker has checked in'}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
                   {canSettle
@@ -338,7 +386,7 @@ export function BookingDetailsPage() {
               ) : null}
               {canRate ? (
                 <Button icon={Star} onClick={() => setRateOpen(true)}>
-                  Rate caregiver
+                  Rate caretaker
                 </Button>
               ) : null}
             </div>
@@ -354,6 +402,90 @@ export function BookingDetailsPage() {
               <BookingTimeline steps={booking.timeline || []} />
             </CardBody>
           </Card>
+
+          {!hasCheckedOut && (
+            <Card className="overflow-hidden">
+              <CardHeader
+                title="Your visit pass"
+                icon={QrCode}
+                subtitle="Show this code to your caretaker at check-in"
+              />
+              <CardBody className="space-y-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="grid shrink-0 place-items-center rounded-2xl border border-line bg-white p-3 shadow-card">
+                    <div
+                      className="grid h-28 w-28 gap-[3px] p-1"
+                      style={{ gridTemplateColumns: 'repeat(11, 1fr)' }}
+                      role="img"
+                      aria-label={`Booking QR code ${booking.qrCode || `CM-QR-${booking.id}`}`}
+                    >
+                      {Array.from({ length: 121 }).map((_, i) => {
+                        const code = booking.qrCode || `CM-QR-${booking.id}`
+                        const dark =
+                          (i * 7 + code.charCodeAt(i % code.length)) % 3 === 0 ||
+                          i % 11 === 0 ||
+                          Math.floor(i / 11) % 5 === 0
+                        return (
+                          <span
+                            key={i}
+                            className="rounded-[1px]"
+                            style={{ background: dark ? '#0F172A' : 'transparent' }}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-faint">Booking code</p>
+                    <p className="font-display mt-1 text-lg font-extrabold tracking-wide text-ink tabular-nums">
+                      {booking.qrCode || `CM-QR-${booking.id}`}
+                    </p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                      Your caretaker will ask for this at arrival and again at check-out. It proves the visit
+                      started at your address, at the recorded time.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        icon={QrCode}
+                        onClick={() => {
+                          navigator.clipboard
+                            ?.writeText(booking.qrCode || `CM-QR-${booking.id}`)
+                            .then(() => toast.success('Booking code copied'))
+                            .catch(() => toast.error('Could not copy the code'))
+                        }}
+                      >
+                        Copy code
+                      </Button>
+                      {hasCheckedIn ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-3 py-1.5 text-xs font-bold text-success-700 ring-1 ring-inset ring-success-400/50">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Checked in
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-mint-100 px-3 py-1.5 text-xs font-bold text-primary-800">
+                          <Clock className="h-3.5 w-3.5" /> Awaiting check-in
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <ol className="grid gap-2 border-t border-line pt-4 text-xs text-muted sm:grid-cols-3">
+                  {[
+                    '1. Caretaker arrives and opens check-in',
+                    '2. They scan or enter your booking code',
+                    '3. Both of you confirm — timestamps recorded',
+                  ].map((step) => (
+                    <li key={step} className="rounded-xl bg-slate-50 px-3 py-2.5 leading-relaxed">
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </CardBody>
+            </Card>
+          )}
 
           {(hasCheckedIn || hasCheckedOut) && (
             <Card>
@@ -395,7 +527,7 @@ export function BookingDetailsPage() {
                 />
                 <InfoRow label="City" value={booking.city} />
                 <InfoRow label="Start time" value={booking.startTime} />
-                <InfoRow label="Duration" value={`${booking.hours} hours`} />
+                <InfoRow label="Duration" value={formatDuration(booking.hours)} />
                 <div className="flex items-center gap-2 rounded-xl bg-mint-50 px-3 py-2.5 text-xs font-semibold text-primary-800">
                   {booking.careType === 'Hospital Care' ? <Building2 className="h-4 w-4 shrink-0" /> : <Home className="h-4 w-4 shrink-0" />}
                   {booking.careType === 'Hospital Care' ? 'Hospital attendant care' : 'Home visit care'}
@@ -434,7 +566,7 @@ export function BookingDetailsPage() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Your caregiver" />
+            <CardHeader title="Your caretaker" />
             <CardBody className="space-y-4">
               {caregiver ? (
                 <>
@@ -459,7 +591,7 @@ export function BookingDetailsPage() {
                   </Button>
                 </>
               ) : (
-                <p className="text-sm text-muted">A verified caregiver will be assigned shortly.</p>
+                <p className="text-sm text-muted">A verified caretaker will be assigned shortly.</p>
               )}
             </CardBody>
           </Card>
@@ -468,7 +600,7 @@ export function BookingDetailsPage() {
             items={[
               {
                 label: booking.service,
-                meta: `${formatCurrency(booking.hourlyRate)}/hr × ${booking.hours} hrs`,
+                meta: `${formatCurrency(booking.hourlyRate)}/hr × ${durationBasis(booking.hours)}`,
                 amount: booking.subtotal,
               },
             ]}
@@ -492,7 +624,7 @@ export function BookingDetailsPage() {
                     ? 'This booking has been fully paid and settled.'
                     : booking.paymentStatus === 'Refunded'
                       ? 'A refund was processed for this booking to your original payment method.'
-                      : 'Complete the payment to confirm your caregiver in escrow.'}
+                      : 'Complete the payment to confirm your caretaker in escrow.'}
               </p>
               {canPay ? (
                 <Button className="w-full" icon={ShieldCheck} onClick={() => setPayOpen(true)}>
@@ -507,6 +639,87 @@ export function BookingDetailsPage() {
           </Button>
         </div>
       </div>
+
+      <Modal
+        open={rescheduleOpen}
+        onClose={() => setRescheduleOpen(false)}
+        title="Reschedule booking"
+        subtitle={`${booking.id} · ${booking.service}`}
+        size="sm"
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setRescheduleOpen(false)}>
+              Keep original time
+            </Button>
+            <Button type="submit" form="reschedule-form" icon={CalendarDays}>
+              Confirm new time
+            </Button>
+          </div>
+        }
+      >
+        <form
+          id="reschedule-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            handleReschedule()
+          }}
+          className="space-y-4"
+        >
+          <FormField label="New date" htmlFor="rs-date" required>
+            <Input
+              id="rs-date"
+              type="date"
+              value={reschedule.date}
+              onChange={(e) => setReschedule((r) => ({ ...r, date: e.target.value }))}
+            />
+          </FormField>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Start time" htmlFor="rs-time" required>
+              <Input
+                id="rs-time"
+                type="time"
+                value={reschedule.startTime}
+                onChange={(e) => setReschedule((r) => ({ ...r, startTime: e.target.value }))}
+              />
+            </FormField>
+            <FormField
+              label="Duration"
+              htmlFor="rs-hours"
+              required
+              hint="Same presets as booking — hours, whole days or weeks"
+            >
+              <Select
+                id="rs-hours"
+                value={reschedule.hours}
+                onChange={(e) => setReschedule((r) => ({ ...r, hours: Number(e.target.value) }))}
+              >
+                {DURATION_GROUPS.map((group) => (
+                  <optgroup key={group.id} label={group.label}>
+                    {group.options.map((h) => (
+                      <option key={h} value={h}>
+                        {formatDuration(h)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
+            </FormField>
+          </div>
+
+          <p className="rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
+            Your caretaker is notified of the change immediately. Rescheduling more than 24 hours ahead is free;
+            inside 24 hours the caretaker must agree before the slot moves.
+            {Number(reschedule.hours) !== booking.hours ? (
+              <>
+                {' '}
+                The price is recalculated at {formatCurrency(booking.hourlyRate)}/hr for{' '}
+                {durationBasis(reschedule.hours)}.
+              </>
+            ) : null}
+          </p>
+        </form>
+      </Modal>
 
       <ConfirmationDialog
         open={cancelOpen}
@@ -533,7 +746,7 @@ export function BookingDetailsPage() {
         onConfirm={handleSettle}
         tone="success"
         title="Confirm service completed?"
-        message="By confirming, you verify the service was delivered as scheduled and authorise release of escrow funds to your caregiver. This cannot be undone."
+        message="By confirming, you verify the service was delivered as scheduled and authorise release of escrow funds to your caretaker. This cannot be undone."
         confirmLabel="Yes, release payment"
         cancelLabel="Not yet"
       />
@@ -549,13 +762,20 @@ export function BookingDetailsPage() {
             <Button variant="ghost" onClick={() => setPayOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handlePayNow} loading={paying} icon={ShieldCheck}>
+            <Button type="submit" form="bd-pay-form" loading={paying} icon={ShieldCheck}>
               Pay {formatCurrency(booking.total)}
             </Button>
           </div>
         }
       >
-        <div className="space-y-4">
+        <form
+          id="bd-pay-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            handlePayNow()
+          }}
+          className="space-y-4"
+        >
           <div className="rounded-xl border border-line bg-canvas px-4 py-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted">Amount</span>
@@ -603,27 +823,34 @@ export function BookingDetailsPage() {
             Payments are simulated in this demo — no real money is charged. In production this step runs through the
             PCI-compliant gateway with escrow protection.
           </p>
-        </div>
+        </form>
       </Modal>
 
       <Modal
         open={rateOpen}
         onClose={() => setRateOpen(false)}
-        title="Rate your caregiver"
-        subtitle={`${caregiver?.name || 'Your caregiver'} · ${booking.service}`}
+        title="Rate your caretaker"
+        subtitle={`${caregiver?.name || 'Your caretaker'} · ${booking.service}`}
         size="md"
         footer={
           <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={() => setRateOpen(false)}>
               Skip for now
             </Button>
-            <Button onClick={handleRate} icon={Star}>
+            <Button type="submit" form="bd-rate-form" icon={Star}>
               Submit rating
             </Button>
           </div>
         }
       >
-        <div className="space-y-4">
+        <form
+          id="bd-rate-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            handleRate()
+          }}
+          className="space-y-4"
+        >
           {RATING_CRITERIA.map((c) => (
             <div key={c.key} className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-ink">{c.label}</span>
@@ -656,7 +883,7 @@ export function BookingDetailsPage() {
               placeholder="Share what went well, or what we can improve…"
             />
           </FormField>
-        </div>
+        </form>
       </Modal>
 
       <Modal
@@ -670,13 +897,20 @@ export function BookingDetailsPage() {
             <Button variant="outline" onClick={() => setComplaintOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleRaiseComplaint} icon={ShieldAlert}>
+            <Button type="submit" form="bd-complaint-form" icon={ShieldAlert}>
               Submit complaint
             </Button>
           </div>
         }
       >
-        <div className="space-y-4">
+        <form
+          id="bd-complaint-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            handleRaiseComplaint()
+          }}
+          className="space-y-4"
+        >
           <FormField label="Category" htmlFor="cp-category" required>
             <Select
               id="cp-category"
@@ -707,7 +941,7 @@ export function BookingDetailsPage() {
               placeholder="Describe the issue in detail…"
             />
           </FormField>
-        </div>
+        </form>
       </Modal>
     </div>
   )

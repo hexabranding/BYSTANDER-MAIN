@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { SERVICES } from '@/data/services'
 import { CITIES, GST_RATE, PLATFORM_FEE } from '@/utils/constants'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { DURATION_GROUPS, durationBasis, formatDuration } from '@/utils/duration'
 import { cn } from '@/utils/cn'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
@@ -36,12 +37,10 @@ const STEP_LABELS = [
   'Care setting',
   'Schedule',
   'Instructions',
-  'Caregivers',
+  'Caretakers',
   'Price',
   'Confirm',
 ]
-
-const DURATIONS = [2, 4, 6, 8, 12]
 
 const EXTRAS = ['Night supervision', 'Wound dressing', 'Mobility support', 'Vegetarian meal prep']
 
@@ -55,7 +54,7 @@ const TIME_OPTIONS = Array.from({ length: 31 }, (_, i) => {
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
 export function BookCaregiverPage() {
-  useDocumentTitle('Book a caregiver')
+  useDocumentTitle('Book a caretaker')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user } = useAuth()
@@ -181,7 +180,7 @@ export function BookCaregiverPage() {
     setCreated(booking)
     setSubmitting(false)
     toast.success('Booking request sent', {
-      description: `Reference ${booking.ref} — ${matchedCaregiver?.name || 'Your caregiver'} has been notified.`,
+      description: `Reference ${booking.ref} — ${matchedCaregiver?.name || 'Your caretaker'} has been notified.`,
     })
   }
 
@@ -203,7 +202,7 @@ export function BookCaregiverPage() {
             </motion.span>
             <h2 className="mt-5 font-display text-2xl font-extrabold text-ink">You're all set, {(user?.name || 'Priya').split(' ')[0]}!</h2>
             <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
-              We are matching you with a verified caregiver for {created.service}. You will get a confirmation
+              We are matching you with a verified caretaker for {created.service}. You will get a confirmation
               notification once they accept.
             </p>
             <div className="mt-6 grid w-full max-w-sm grid-cols-2 gap-3">
@@ -221,14 +220,14 @@ export function BookCaregiverPage() {
                 View booking
               </Button>
               <Button size="lg" variant="outline" onClick={() => navigate('/customer/caregivers')}>
-                Browse caregivers
+                Browse caretakers
               </Button>
             </div>
           </CardBody>
         </Card>
 
         <div>
-          <h3 className="font-display text-base font-bold text-ink">Caregivers we recommend</h3>
+          <h3 className="font-display text-base font-bold text-ink">Caretakers we recommend</h3>
           <p className="mt-0.5 text-sm text-muted">Verified professionals matching your care needs.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {stripCaregivers.map((cg) => (
@@ -245,7 +244,7 @@ export function BookCaregiverPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Book a caregiver"
+        title="Book a caretaker"
         subtitle="Answer a few quick questions and we'll match you with a verified professional."
         action={
           <Button to="/customer/bookings" variant="ghost" size="sm">
@@ -500,23 +499,33 @@ export function BookCaregiverPage() {
                         ))}
                       </Select>
                     </FormField>
-                    <FormField label="Duration" htmlFor="duration" required hint="Hours of continuous care">
+                    <FormField
+                      label="Duration"
+                      htmlFor="duration"
+                      required
+                      hint="Book by the hour, by the day, or for a full week of care"
+                    >
                       <Select
                         id="duration"
                         value={form.hours}
                         onChange={(e) => set({ hours: Number(e.target.value) })}
                       >
-                        {DURATIONS.map((h) => (
-                          <option key={h} value={h}>
-                            {h} hours
-                          </option>
+                        {DURATION_GROUPS.map((group) => (
+                          <optgroup key={group.id} label={group.label}>
+                            {group.options.map((h) => (
+                              <option key={h} value={h}>
+                                {formatDuration(h)}
+                              </option>
+                            ))}
+                          </optgroup>
                         ))}
                       </Select>
                     </FormField>
                     {form.date ? (
                       <p className="inline-flex items-center gap-2 rounded-xl bg-mint-50 px-4 py-3 text-sm font-semibold text-primary-800 sm:col-span-3">
                         <CalendarDays className="h-4 w-4" />
-                        {formatDate(form.date, { long: true })} · starts {form.startTime} · {form.hours} hours
+                        {formatDate(form.date, { long: true })} · starts {form.startTime} ·{' '}
+                        {formatDuration(form.hours)}
                       </p>
                     ) : null}
                   </CardBody>
@@ -525,10 +534,10 @@ export function BookCaregiverPage() {
 
               {step === 4 ? (
                 <Card>
-                  <CardHeader title="Special instructions" subtitle="Anything the caregiver should know before arriving." />
+                  <CardHeader title="Special instructions" subtitle="Anything the caretaker should know before arriving." />
                   <CardBody className="space-y-5">
                     <FormField
-                      label="Instructions for the caregiver"
+                      label="Instructions for the caretaker"
                       htmlFor="instructions"
                       hint="Dressing timing, doctor's advice, food preferences, emergency contacts…"
                     >
@@ -574,12 +583,12 @@ export function BookCaregiverPage() {
               {step === 5 ? (
                 <Card>
                   <CardHeader
-                    title="Choose your caregiver"
+                    title="Choose your caretaker"
                     subtitle="Pick a verified professional, or let CareMate assign the best match for your shift."
                   />
                   <CardBody className="space-y-3">
                     {stripCaregivers.length === 0 ? (
-                      <p className="text-sm text-muted">No matching caregivers found — a coordinator will assign one after you confirm.</p>
+                      <p className="text-sm text-muted">No matching caretakers found — a coordinator will assign one after you confirm.</p>
                     ) : null}
                     {stripCaregivers.map((cg) => {
                       const selected = matchedCaregiver?.id === cg.id
@@ -652,7 +661,7 @@ export function BookCaregiverPage() {
                     items={[
                       {
                         label: form.service?.name || 'Care service',
-                        meta: `${formatCurrency(rate)}/hr × ${hours} hrs${matchedCaregiver ? ` · ${matchedCaregiver.name}` : ''}`,
+                        meta: `${formatCurrency(rate)}/hr × ${durationBasis(hours)}${matchedCaregiver ? ` · ${matchedCaregiver.name}` : ''}`,
                         amount: subtotal,
                       },
                     ]}
@@ -660,13 +669,13 @@ export function BookCaregiverPage() {
                     platformFee={platformFee}
                     tax={tax}
                     total={total}
-                    currencyNote="Final price is confirmed once a caregiver accepts. You pay into escrow and funds are released after the service completes."
+                    currencyNote="Final price is confirmed once a caretaker accepts. You pay into escrow and funds are released after the service completes."
                   />
                   <Card>
                     <CardBody className="flex items-start gap-3">
                       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary-700" />
                       <p className="text-sm leading-relaxed text-muted">
-                        All CareMate caregivers are ID-verified, background-checked and insured. Platform fee of{' '}
+                        All CareMate caretakers are ID-verified, background-checked and insured. Platform fee of{' '}
                         {formatCurrency(platformFee)} includes 24×7 support and the CareMate protection plan.
                       </p>
                     </CardBody>
@@ -686,9 +695,9 @@ export function BookCaregiverPage() {
                         {
                           icon: CalendarDays,
                           label: 'Schedule',
-                          value: `${formatDate(form.date, { long: true })} · ${form.startTime} · ${form.hours} hrs`,
+                          value: `${formatDate(form.date, { long: true })} · ${form.startTime} · ${formatDuration(form.hours)}`,
                         },
-                        { icon: Clock, label: 'Estimated caregiver', value: matchedCaregiver?.name || 'To be assigned' },
+                        { icon: Clock, label: 'Estimated caretaker', value: matchedCaregiver?.name || 'To be assigned' },
                         {
                           icon: ShieldCheck,
                           label: 'Instructions',
@@ -705,9 +714,16 @@ export function BookCaregiverPage() {
                       />
                       <span className="text-sm leading-relaxed text-muted">
                         I agree to the CareMate{' '}
-                        <span className="font-semibold text-primary-700">terms of service</span> and understand that
-                        payment is held in escrow until the service is completed. Cancellations within 4 hours of the
-                        start time may attract a fee.
+                        <Link
+                          to="/legal/terms"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-primary-700 underline decoration-primary-300 underline-offset-2 hover:text-primary-800"
+                        >
+                          terms of service
+                        </Link>{' '}
+                        and understand that payment is held in escrow until the service is completed. Cancellations
+                        within 4 hours of the start time may attract a fee.
                       </span>
                     </label>
                   </CardBody>
@@ -739,10 +755,10 @@ export function BookCaregiverPage() {
               <CardBody className="space-y-3">
                 <Row label="Service" value={form.service?.name || 'Not selected'} />
                 <Row
-                  label="Caregiver rate"
+                  label="Caretaker rate"
                   value={matchedCaregiver ? `${formatCurrency(rate)} / hr` : form.service ? `From ${formatCurrency(rate)} / hr` : '—'}
                 />
-                <Row label="Duration" value={hours ? `${hours} hours` : '—'} />
+                <Row label="Duration" value={formatDuration(hours)} />
                 <Row label="Care setting" value={form.careType || '—'} />
                 <Row label="Date" value={form.date ? formatDate(form.date) : '—'} />
                 {matchedCaregiver ? (
@@ -777,7 +793,7 @@ export function BookCaregiverPage() {
 
       {step === 0 ? (
         <div>
-          <h3 className="font-display text-base font-bold text-ink">Matching caregivers</h3>
+          <h3 className="font-display text-base font-bold text-ink">Matching caretakers</h3>
           <p className="mt-0.5 text-sm text-muted">
             {form.service
               ? `Verified professionals who offer ${form.service.name}.`

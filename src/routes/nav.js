@@ -34,7 +34,7 @@ export const CUSTOMER_NAV = [
   {
     section: 'Care',
     items: [
-      { label: 'Book a Caregiver', to: '/customer/book-caregiver', icon: CalendarPlus },
+      { label: 'Book a Caretaker', to: '/customer/book-caregiver', icon: CalendarPlus },
       { label: 'Find Caretaker', to: '/customer/caregivers', icon: Users },
       { label: 'My Bookings', to: '/customer/bookings', icon: CalendarRange },
     ],
@@ -51,6 +51,7 @@ export const CUSTOMER_NAV = [
     items: [
       { label: 'Messages', to: '/customer/messages', icon: MessageSquare, badge: 'key:unreadCustomer' },
       { label: 'Complaints', to: '/customer/complaints', icon: LifeBuoy },
+      { label: 'My Reviews', to: '/customer/reviews', icon: Star },
     ],
   },
   {
@@ -98,7 +99,7 @@ export const ADMIN_NAV = [
     section: 'People',
     items: [
       { label: 'Customers', to: '/admin/customers', icon: Users },
-      { label: 'Caregivers', to: '/admin/caregivers', icon: Briefcase },
+      { label: 'Caretakers', to: '/admin/caregivers', icon: Briefcase },
       { label: 'Nursing Students', to: '/admin/nursing-students', icon: GraduationCap },
       { label: 'Hospitals', to: '/admin/hospitals', icon: Building2 },
     ],

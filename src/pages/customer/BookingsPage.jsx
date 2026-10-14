@@ -7,6 +7,7 @@ import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Tabs } from '@/components/common/Tabs'
@@ -20,6 +21,22 @@ import { EmptyState } from '@/components/common/States'
 import { RatingModal } from '@/components/booking/RatingModal'
 
 const STATUS_TABS = ['All', 'Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled']
+const PHASES = ['All', 'Current', 'Upcoming', 'Previous']
+
+const startOfToday = () => {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  return now
+}
+
+/** Time-based grouping: what is happening now, what is still to come, what is done. */
+const phaseOf = (b) => {
+  if (b.status === 'In Progress') return 'Current'
+  if (b.status === 'Completed' || b.status === 'Cancelled') return 'Previous'
+  const when = new Date(`${b.date}T00:00:00`)
+  if (Number.isNaN(when.getTime())) return 'Upcoming'
+  return when >= startOfToday() ? 'Upcoming' : 'Previous'
+}
 
 export function BookingsPage() {
   useDocumentTitle('My bookings')
@@ -28,6 +45,7 @@ export function BookingsPage() {
   const { bookings, caregivers, updateBooking, addTransaction, addReview, ensureConversation } = useData()
 
   const [search, setSearch] = useState('')
+  const [phase, setPhase] = useState('All')
   const [status, setStatus] = useState('All')
   const [rateTarget, setRateTarget] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
@@ -42,11 +60,9 @@ export function BookingsPage() {
   const caregiverName = (id) => caregivers.find((c) => c.id === id)?.name || 'Assigning…'
 
   const counts = useMemo(() => {
-    const c = { Total: myBookings.length, Active: 0, Completed: 0, Cancelled: 0 }
+    const c = { All: myBookings.length, Current: 0, Upcoming: 0, Previous: 0 }
     myBookings.forEach((b) => {
-      if (b.status === 'Completed') c.Completed += 1
-      else if (b.status === 'Cancelled') c.Cancelled += 1
-      else c.Active += 1
+      c[phaseOf(b)] += 1
     })
     return c
   }, [myBookings])
@@ -54,6 +70,7 @@ export function BookingsPage() {
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
     return myBookings.filter((b) => {
+      const matchesPhase = phase === 'All' || phaseOf(b) === phase
       const matchesStatus = status === 'All' || b.status === status
       const matchesSearch =
         !q ||
@@ -61,15 +78,15 @@ export function BookingsPage() {
         b.ref?.toLowerCase().includes(q) ||
         b.service.toLowerCase().includes(q) ||
         b.patient?.name?.toLowerCase().includes(q)
-      return matchesStatus && matchesSearch
+      return matchesPhase && matchesStatus && matchesSearch
     })
-  }, [myBookings, debouncedSearch, status])
+  }, [myBookings, debouncedSearch, phase, status])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 6)
   useEffect(() => {
     goto(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, status])
+  }, [debouncedSearch, phase, status])
 
   const canPay = (b) => b.paymentStatus === 'Pending' && b.status !== 'Cancelled'
   const canRate = (b) => b.status === 'Completed' && !b.customerRating && Boolean(b.caregiverId)
@@ -144,7 +161,7 @@ export function BookingsPage() {
       ),
     },
     { key: 'service', header: 'Service' },
-    { key: 'caregiver', header: 'Caregiver', sortKey: 'caregiverName', render: (b) => caregiverName(b.caregiverId) },
+    { key: 'caregiver', header: 'Caretaker', sortKey: 'caregiverName', render: (b) => caregiverName(b.caregiverId) },
     {
       key: 'date',
       header: 'Date & duration',
@@ -152,7 +169,7 @@ export function BookingsPage() {
         <div>
           <p className="font-medium text-ink">{formatDate(b.date, { long: true })}</p>
           <p className="text-xs text-faint">
-            {b.startTime} · {b.hours} hrs
+            {b.startTime} · {formatDuration(b.hours, { short: true })}
           </p>
         </div>
       ),
@@ -200,6 +217,8 @@ export function BookingsPage() {
 
   const rows = pageItems.map((b) => ({ ...b, caregiverName: caregiverName(b.caregiverId) }))
 
+  const hasFilters = Boolean(search) || phase !== 'All' || status !== 'All'
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -212,11 +231,12 @@ export function BookingsPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Chip>{`Total · ${counts.Total}`}</Chip>
-        <Chip>{`Active · ${counts.Active}`}</Chip>
-        <Chip>{`Completed · ${counts.Completed}`}</Chip>
-        <Chip>{`Cancelled · ${counts.Cancelled}`}</Chip>
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by time period">
+        {PHASES.map((p) => (
+          <Chip key={p} selected={phase === p} onClick={() => setPhase(p)}>
+            {`${p} · ${counts[p]}`}
+          </Chip>
+        ))}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -244,16 +264,17 @@ export function BookingsPage() {
             icon={SearchX}
             title="No bookings found"
             description={
-              search || status !== 'All'
-                ? 'Try clearing the search or switching the status filter.'
-                : 'You have not booked a caregiver yet.'
+              hasFilters
+                ? 'Try clearing the search or switching the period and status filters.'
+                : 'You have not booked a caretaker yet.'
             }
             action={
-              search || status !== 'All' ? (
+              hasFilters ? (
                 <Button
                   variant="outline"
                   onClick={() => {
                     setSearch('')
+                    setPhase('All')
                     setStatus('All')
                   }}
                 >
@@ -261,7 +282,7 @@ export function BookingsPage() {
                 </Button>
               ) : (
                 <Button to="/customer/book-caregiver" icon={CalendarDays}>
-                  Book a caregiver
+                  Book a caretaker
                 </Button>
               )
             }

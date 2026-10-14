@@ -146,11 +146,11 @@ export function ProfilePage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-3.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">Hourly rate</p>
                 <p className="mt-1 font-display text-lg font-extrabold tabular-nums text-ink">{formatCurrency(caregiver?.hourlyRate)}</p>
               </div>
-              <div className="rounded-xl border border-line bg-slate-50/70 p-3.5">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-3.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">Experience</p>
                 <p className="mt-1 font-display text-lg font-extrabold tabular-nums text-ink">{caregiver?.experienceYears} yrs</p>
               </div>
@@ -190,7 +190,7 @@ export function ProfilePage() {
             </div>
 
             <p className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-muted">
-              Identity, bank and police documents are never shown to customers or other caregivers.
+              Identity, bank and police documents are never shown to customers or other caretakers.
             </p>
           </CardBody>
         </Card>

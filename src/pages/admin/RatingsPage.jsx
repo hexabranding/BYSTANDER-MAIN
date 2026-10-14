@@ -96,7 +96,7 @@ export function RatingsPage() {
   const columns = [
     {
       key: 'caregiverName',
-      header: 'Caregiver',
+      header: 'Caretaker',
       render: (r) => (
         <div>
           <p className="font-display text-sm font-bold text-ink">{r.caregiverName}</p>
@@ -166,9 +166,9 @@ export function RatingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Ratings"
-        subtitle="Caregiver ratings across the platform — spot trends and intervene early."
+        subtitle="Caretaker ratings across the platform — spot trends and intervene early."
         action={
-          <Button variant="outline" icon={MessageSquare} onClick={() => toast.info('Review request queued for caregivers below 4.5')}>
+          <Button variant="outline" icon={MessageSquare} onClick={() => toast.info('Review request queued for caretakers below 4.5')}>
             Request reviews
           </Button>
         }
@@ -188,7 +188,7 @@ export function RatingsPage() {
           value={formatNumber(stats.totalReviews)}
           icon={MessageSquare}
           tone="accent"
-          hint="Across all caregivers"
+          hint="Across all caretakers"
           delay={0.05}
         />
         <StatCard label="5-star share" value={`${stats.fiveShare}%`} icon={Percent} tone="success" hint="Of reviews in context" delay={0.1} />
@@ -197,7 +197,7 @@ export function RatingsPage() {
           value={stats.attention}
           icon={TrendingDown}
           tone="warning"
-          hint="Caregivers rated below 4.5"
+          hint="Caretakers rated below 4.5"
           delay={0.15}
         />
       </div>
@@ -234,7 +234,7 @@ export function RatingsPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Rating by caregiver" subtitle="Platform average per caregiver, out of 5" icon={TrendingUp} />
+          <CardHeader title="Rating by caretaker" subtitle="Platform average per caretaker, out of 5" icon={TrendingUp} />
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -265,7 +265,7 @@ export function RatingsPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search caregiver or city…" />
+        <SearchBar value={search} onChange={setSearch} placeholder="Search caretaker or city…" />
         <div className="grid gap-3 sm:grid-cols-2">
           <FormField label="City" htmlFor="rating-city">
             <Select id="rating-city" value={city} onChange={(e) => setCity(e.target.value)}>
@@ -292,7 +292,7 @@ export function RatingsPage() {
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}
-            title="No caregivers match"
+            title="No caretakers match"
             description="Clear the search, city or status filter to see everyone again."
             action={
               <Button
@@ -361,7 +361,7 @@ export function RatingsPage() {
                   <p className="mt-2 text-sm leading-relaxed text-ink-soft">{r.comment}</p>
                   {r.reply ? (
                     <div className="mt-3 rounded-xl bg-mint-50 px-3.5 py-2.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary-700">Caregiver reply</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary-700">Caretaker reply</p>
                       <p className="mt-1 text-xs leading-relaxed text-primary-900">{r.reply}</p>
                     </div>
                   ) : (
@@ -374,7 +374,7 @@ export function RatingsPage() {
             <EmptyState
               icon={ClipboardList}
               title="No written reviews yet"
-              description="This caregiver has a rating average but no individual written reviews in the demo data."
+              description="This caretaker has a rating average but no individual written reviews in the demo data."
               className="py-8"
             />
           )

@@ -6,6 +6,7 @@ import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { formatCurrency, formatDate, relativeTime } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardFooter } from '@/components/common/Card'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -163,7 +164,7 @@ export function JobsPage() {
                   <div className="shrink-0 text-right">
                     <p className="font-display text-lg font-extrabold tabular-nums text-ink">{formatCurrency(job.payment)}</p>
                     <p className="text-[11px] uppercase tracking-wide text-faint">
-                      {job.hours} hrs · net {formatCurrency(job.payment - Math.round(job.payment * PLATFORM_COMMISSION))}
+                      {formatDuration(job.hours, { short: true })} · net {formatCurrency(job.payment - Math.round(job.payment * PLATFORM_COMMISSION))}
                     </p>
                   </div>
                 </div>
@@ -262,7 +263,7 @@ export function JobsPage() {
           dialog
             ? dialog.type === 'accept'
               ? `${dialog.job.service} on ${formatDate(dialog.job.date, { long: true })} · ${dialog.job.shift} in ${dialog.job.area}. The shift is added to your schedule and the customer is notified.`
-              : `${dialog.job.service} on ${formatDate(dialog.job.date, { long: true })} will be released to other verified caregivers. This cannot be undone.`
+              : `${dialog.job.service} on ${formatDate(dialog.job.date, { long: true })} will be released to other verified caretakers. This cannot be undone.`
             : ''
         }
         confirmLabel={dialog?.type === 'accept' ? 'Accept job' : 'Decline job'}

@@ -57,7 +57,7 @@ export function DataProvider({ children }) {
         invoiceNo: `INV-2026-${Math.floor(1000 + Math.random() * 8000)}`,
         timeline: [
           { label: 'Booking requested', status: 'completed', at: now },
-          { label: 'Caregiver assigned', status: 'upcoming', at: null },
+          { label: 'Caretaker assigned', status: 'upcoming', at: null },
           { label: 'Service started', status: 'upcoming', at: null },
           { label: 'Service completed', status: 'upcoming', at: null },
           { label: 'Payment settled', status: 'upcoming', at: null },
@@ -88,7 +88,7 @@ export function DataProvider({ children }) {
                 status: 'Confirmed',
                 paymentStatus: 'Escrow Held',
                 timeline: b.timeline.map((t) =>
-                  t.label === 'Caregiver assigned' ? { ...t, status: 'completed', at: now } : t,
+                  t.label === 'Caretaker assigned' ? { ...t, status: 'completed', at: now } : t,
                 ),
               }
             : b,
@@ -194,7 +194,7 @@ export function DataProvider({ children }) {
           specialInstructions: '',
           timeline: [
             { label: 'Booking requested', status: 'completed', at: job.postedAt },
-            { label: 'Caregiver assigned', status: 'completed', at: new Date().toISOString() },
+            { label: 'Caretaker assigned', status: 'completed', at: new Date().toISOString() },
             { label: 'Service started', status: 'upcoming', at: null },
             { label: 'Service completed', status: 'upcoming', at: null },
             { label: 'Payment settled', status: 'upcoming', at: null },
@@ -211,7 +211,7 @@ export function DataProvider({ children }) {
               bookingId: job.bookingId,
               customerId: job.customerId || 'cu-202',
               caregiverId,
-              names: `${job.customerName} → ${caregiver?.name || 'Caregiver'}`,
+              names: `${job.customerName} → ${caregiver?.name || 'Caretaker'}`,
               service: job.service,
               date: new Date().toISOString().slice(0, 10),
               amount: subtotal + platformFee + tax,
@@ -249,7 +249,7 @@ export function DataProvider({ children }) {
         {
           id: uid('nt'),
           title: 'Job declined',
-          body: 'The shift has been released to other verified caregivers.',
+          body: 'The shift has been released to other verified caretakers.',
           time: new Date().toISOString(),
           tone: 'info',
           audience: ['caregiver', 'admin'],
@@ -588,7 +588,7 @@ export function DataProvider({ children }) {
           notifications: [
             {
               id: uid('nt'),
-              title: 'New caregiver application',
+              title: 'New caretaker application',
               body: `${profile.name} submitted documents for verification.`,
               time: new Date().toISOString(),
               tone: 'info',

@@ -126,7 +126,7 @@ function ReviewRow({ label, value }) {
 export function RegisterCustomerPage() {
   useDocumentTitle('Register as customer')
   const navigate = useNavigate()
-  const { register: registerUser } = useAuth()
+  const { registerCustomer: registerUser } = useAuth()
   const { registerCustomerRecord } = useData()
   const [step, setStep] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
@@ -226,7 +226,7 @@ export function RegisterCustomerPage() {
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700">Customer registration</p>
         <h1 className="mt-1 font-display text-2xl font-extrabold text-ink">Tell us about your care needs</h1>
-        <p className="mt-1.5 text-sm text-muted">A few quick steps — we&apos;ll match caregivers to your requirements.</p>
+        <p className="mt-1.5 text-sm text-muted">A few quick steps — we&apos;ll match caretakers to your requirements.</p>
       </div>
 
       <StepIndicator step={step} />
@@ -387,7 +387,7 @@ export function RegisterCustomerPage() {
               <div className="space-y-4">
                 <h2 className="font-display text-base font-bold text-ink">Patient information</h2>
                 <p className="text-xs text-muted">
-                  This helps us recommend the right caregiver skills and experience for your family.
+                  This helps us recommend the right caretaker skills and experience for your family.
                 </p>
 
                 <FormField label="Patient name" htmlFor="c-patientName" required error={errors.patientName?.message}>
@@ -436,7 +436,7 @@ export function RegisterCustomerPage() {
                   htmlFor="c-patientCondition"
                   required
                   error={errors.patientCondition?.message}
-                  hint="Surgeries, mobility level, medication schedule, anything a caregiver should know"
+                  hint="Surgeries, mobility level, medication schedule, anything a caretaker should know"
                 >
                   <Textarea
                     id="c-patientCondition"
@@ -561,7 +561,7 @@ export function RegisterCustomerPage() {
           </Link>{' '}
           · Want to earn with CareMate?{' '}
           <Link to="/register/caregiver" className="font-semibold text-primary-700 hover:underline">
-            Apply as a caregiver
+            Apply as a caretaker
           </Link>
         </span>
       </p>

@@ -30,7 +30,7 @@ export function Pagination({ page, totalPages, onPageChange, totalItems, classNa
             className={cn(
               'h-9 min-w-9 rounded-lg px-2.5 text-sm font-semibold transition',
               p === page
-                ? 'bg-primary-700 text-white shadow-[0_8px_18px_-12px_rgba(15,118,110,0.9)]'
+                ? 'bg-gradient-to-br from-primary-600 to-primary-800 text-white shadow-[0_8px_18px_-12px_rgba(15,118,110,0.9)]'
                 : 'border border-line-strong bg-white text-muted hover:border-primary-300 hover:text-primary-700',
             )}
           >

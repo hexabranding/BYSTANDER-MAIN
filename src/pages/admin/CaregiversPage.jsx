@@ -19,6 +19,7 @@ import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { DOCUMENT_TYPES } from '@/data/verifications'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -44,7 +45,7 @@ const SORTS = [
 ]
 
 export function CaregiversPage() {
-  useDocumentTitle('Caregivers')
+  useDocumentTitle('Caretakers')
 
   const navigate = useNavigate()
   const { caregivers, bookings, verifications, setVerificationStatus } = useData()
@@ -137,14 +138,14 @@ export function CaregiversPage() {
       status: c.isSuspended ? 'Suspended' : 'Active',
     }))
     downloadText(`caremate-caregivers-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
-    toast.success(`Exported ${rows.length} caregiver${rows.length === 1 ? '' : 's'} to CSV`)
+    toast.success(`Exported ${rows.length} caretaker${rows.length === 1 ? '' : 's'} to CSV`)
   }
 
   const requestApprove = (caregiver) => {
     const record = verifications.find((v) => v.caregiverId === caregiver.id)
     if (!record) {
       toast.info(`No verification application on file for ${caregiver.name}`, {
-        description: 'Ask them to upload documents from their caregiver profile.',
+        description: 'Ask them to upload documents from their caretaker profile.',
       })
       return
     }
@@ -181,7 +182,7 @@ export function CaregiversPage() {
   const columns = [
     {
       key: 'name',
-      header: 'Caregiver',
+      header: 'Caretaker',
       render: (c) => (
         <div className="flex items-center gap-3">
           <Avatar src={c.photo} name={c.name} size="sm" verified={c.verified} />
@@ -254,7 +255,7 @@ export function CaregiversPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Caregivers"
+        title="Caretakers"
         subtitle="The care supply side — qualifications, verification standing and performance at a glance."
         action={
           <>
@@ -269,7 +270,7 @@ export function CaregiversPage() {
       />
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Total caregivers" value={stats.total} icon={Users} tone="primary" hint="On the platform" delay={0} />
+        <StatCard label="Total caretakers" value={stats.total} icon={Users} tone="primary" hint="On the platform" delay={0} />
         <StatCard label="Verified" value={stats.verified} icon={ShieldCheck} tone="success" trend={7} hint="Approved to accept jobs" delay={0.05} />
         <StatCard label="Pending" value={stats.pending} icon={ShieldAlert} tone="warning" hint="Documents under review" delay={0.1} />
         <StatCard label="Average rating" value={stats.avg} icon={Star} tone="accent" trend={3} hint="Across all reviews" delay={0.15} />
@@ -309,7 +310,7 @@ export function CaregiversPage() {
               </option>
             ))}
           </Select>
-          <Select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort caregivers">
+          <Select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort caretakers">
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
@@ -323,7 +324,7 @@ export function CaregiversPage() {
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}
-            title="No caregivers found"
+            title="No caretakers found"
             description="Adjust the verification tab, city, qualification or search term."
             action={
               <Button
@@ -348,7 +349,7 @@ export function CaregiversPage() {
             keyExtractor={(row) => row.id}
             onRowClick={(row) => setViewingId(row.id)}
             initialSort={{ key: 'rating', dir: 'desc' }}
-            emptyTitle="No caregivers found"
+            emptyTitle="No caretakers found"
             emptyIcon={Stethoscope}
           />
           <Pagination page={page} totalPages={totalPages} onPageChange={goto} totalItems={totalItems} />
@@ -358,7 +359,7 @@ export function CaregiversPage() {
       <Modal
         open={Boolean(selected)}
         onClose={() => setViewingId(null)}
-        title={selected?.name || 'Caregiver'}
+        title={selected?.name || 'Caretaker'}
         subtitle={selected ? `${selected.qualification} · ${selected.regNo}` : ''}
         size="xl"
         footer={
@@ -416,7 +417,7 @@ export function CaregiversPage() {
                 { label: 'Jobs completed', value: selected.completedJobs },
                 { label: 'Hourly rate', value: formatCurrency(selected.hourlyRate) },
               ].map((item) => (
-                <div key={item.label} className="rounded-xl border border-line px-3.5 py-3 text-center">
+                <div key={item.label} className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-3.5 py-3 text-center">
                   <p className="font-display text-lg font-extrabold tabular-nums text-ink">{item.value}</p>
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">{item.label}</p>
                 </div>
@@ -464,7 +465,7 @@ export function CaregiversPage() {
                 />
                 <CardBody className="divide-y divide-line p-0">
                   {docRows.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-3 px-5 py-2.5">
+                    <div key={doc.id} className="flex items-center gap-3 px-5 py-2.5 transition hover:bg-mint-50/60">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-ink">{doc.type}</p>
                         <p className="truncate text-xs text-faint">{doc.file}</p>
@@ -479,7 +480,7 @@ export function CaregiversPage() {
             <Card>
               <CardHeader
                 title="Recent bookings"
-                subtitle="Latest shifts assigned to this caregiver"
+                subtitle="Latest shifts assigned to this caretaker"
                 action={
                   <Button variant="link" size="sm" onClick={() => navigate('/admin/bookings')}>
                     View all
@@ -489,13 +490,13 @@ export function CaregiversPage() {
               <CardBody className="divide-y divide-line p-0">
                 {selectedBookings.length ? (
                   selectedBookings.map((b) => (
-                    <div key={b.id} className="flex items-center gap-3 px-5 py-3">
+                    <div key={b.id} className="flex items-center gap-3 px-5 py-3 transition hover:bg-mint-50/60">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-ink">
                           {b.id} · {b.service}
                         </p>
                         <p className="text-xs text-muted">
-                          {formatDate(b.date)} · {b.startTime} · {b.hours} hrs
+                          {formatDate(b.date)} · {b.startTime} · {formatDuration(b.hours, { short: true })}
                         </p>
                       </div>
                       <span className="hidden text-sm font-semibold tabular-nums text-ink sm:block">
@@ -508,7 +509,7 @@ export function CaregiversPage() {
                   <EmptyState
                     icon={Eye}
                     title="No bookings yet"
-                    description="This caregiver has not been assigned a shift."
+                    description="This caretaker has not been assigned a shift."
                     className="py-8"
                   />
                 )}
@@ -523,7 +524,7 @@ export function CaregiversPage() {
         onClose={() => setApproveTarget(null)}
         onConfirm={confirmApprove}
         tone="success"
-        title="Approve this caregiver?"
+        title="Approve this caretaker?"
         message={`${approveTarget?.name} will be marked Verified, appear in customer search results and can accept paid bookings immediately.`}
         confirmLabel="Approve application"
       />
@@ -533,13 +534,13 @@ export function CaregiversPage() {
         onClose={() => setSuspendTarget(null)}
         onConfirm={confirmSuspend}
         tone={suspendTarget?.isSuspended ? 'success' : 'danger'}
-        title={suspendTarget?.isSuspended ? 'Lift this suspension?' : 'Suspend this caregiver?'}
+        title={suspendTarget?.isSuspended ? 'Lift this suspension?' : 'Suspend this caretaker?'}
         message={
           suspendTarget?.isSuspended
             ? `${suspendTarget?.name} returns to customer search and can accept new jobs right away.`
             : `${suspendTarget?.name} will be hidden from customer search and cannot accept new jobs. Completed bookings and payouts are unaffected.`
         }
-        confirmLabel={suspendTarget?.isSuspended ? 'Lift suspension' : 'Suspend caregiver'}
+        confirmLabel={suspendTarget?.isSuspended ? 'Lift suspension' : 'Suspend caretaker'}
       />
     </div>
   )

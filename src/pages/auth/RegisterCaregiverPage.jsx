@@ -97,9 +97,9 @@ function StepIndicator({ step }) {
 }
 
 export function RegisterCaregiverPage() {
-  useDocumentTitle('Apply as caregiver')
+  useDocumentTitle('Apply as caretaker')
   const navigate = useNavigate()
-  const { register: registerCaregiver } = useAuth()
+  const { registerCaregiver } = useAuth()
   const { registerCaregiverProfile } = useData()
   const [step, setStep] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
@@ -340,8 +340,8 @@ export function RegisterCaregiverPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700">Caregiver application</p>
-        <h1 className="mt-1 font-display text-2xl font-extrabold text-ink">Join CareMate as a caregiver</h1>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700">Caretaker application</p>
+        <h1 className="mt-1 font-display text-2xl font-extrabold text-ink">Join CareMate as a caretaker</h1>
         <p className="mt-1.5 text-sm text-muted">
           Four short steps — your profile goes live after our team verifies your documents.
         </p>
@@ -399,7 +399,7 @@ export function RegisterCaregiverPage() {
                   htmlFor="g-dob"
                   required
                   error={errors.dob?.message}
-                  hint="Caregivers must be at least 18 years old"
+                  hint="Caretakers must be at least 18 years old"
                 >
                   <Input
                     id="g-dob"
@@ -516,7 +516,7 @@ export function RegisterCaregiverPage() {
                   label="Languages you speak"
                   required
                   error={errors.languages?.message}
-                  hint="Families often prefer caregivers who speak their language"
+                  hint="Families often prefer caretakers who speak their language"
                 >
                   <div className="flex flex-wrap gap-2">
                     {LANGUAGES.map((lang) => (
@@ -621,7 +621,7 @@ export function RegisterCaregiverPage() {
                 <FileUpload
                   id="doc-police"
                   label="Police clearance certificate"
-                  hint={`Optional for now, but strongly recommended — families trust verified caregivers more. ${DEMO_UPLOAD_HINT}`}
+                  hint={`Optional for now, but strongly recommended — families trust verified caretakers more. ${DEMO_UPLOAD_HINT}`}
                   value={docs.policeClearance}
                   onChange={(file) => setDoc('policeClearance', file)}
                   error={errors.docs?.policeClearance?.message}

@@ -7,6 +7,7 @@ import { usePagination } from '@/hooks/usePagination'
 import { getCustomerById } from '@/data/bookings'
 import { GST_RATE, PLATFORM_FEE } from '@/utils/constants'
 import { downloadText, formatCurrency, formatDate } from '@/utils/format'
+import { durationBasis, formatDuration } from '@/utils/duration'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { Button } from '@/components/common/Button'
@@ -49,16 +50,16 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
   const details = [
     { label: 'Service', value: booking.service },
     { label: 'Care type', value: booking.careType || '—' },
-    { label: 'Caregiver', value: caregiverName },
+    { label: 'Caretaker', value: caregiverName },
     { label: 'Booking ID', value: booking.id },
     { label: 'Service date', value: formatDate(booking.date, { long: true }) },
-    { label: 'Duration', value: `${booking.startTime} · ${booking.hours} hrs` },
+    { label: 'Duration', value: `${booking.startTime} · ${formatDuration(booking.hours, { short: true })}` },
     { label: 'Patient', value: `${patient.name || '—'} · ${patient.age || '—'} yrs · ${patient.relation || '—'}` },
     { label: 'Reference', value: booking.ref || '—' },
   ]
 
   const lineItems = [
-    { label: 'Care charges', meta: `${booking.hours} hrs × ${formatCurrency(booking.hourlyRate)}/hr`, amount: subtotal },
+    { label: 'Care charges', meta: `${durationBasis(booking.hours)} × ${formatCurrency(booking.hourlyRate)}/hr`, amount: subtotal },
     { label: 'Platform handling fee', meta: 'Booking, support and escrow handling', amount: platformFee },
     { label: `GST @ ${Math.round(GST_RATE * 100)}%`, meta: 'Applicable on platform services', amount: tax },
   ]
@@ -89,7 +90,7 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 rounded-xl border border-line bg-slate-50/70 p-4 sm:grid-cols-2">
+      <div className="mt-5 grid gap-4 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 sm:grid-cols-2">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Billed to</p>
           <p className="mt-1.5 text-sm font-bold text-ink">{customer?.name || 'Customer'}</p>
@@ -205,15 +206,15 @@ function buildInvoiceText(b, caregiverName, customer) {
     pad('Reference', b.ref || '—'),
     pad('Service', b.service),
     pad('Care type', b.careType || '—'),
-    pad('Caregiver', caregiverName),
+    pad('Caretaker', caregiverName),
     pad('Patient', `${patient.name || '—'} (${patient.age || '—'} yrs, ${patient.relation || '—'})`),
     pad('Service date', formatDate(b.date, { long: true })),
-    pad('Duration', `${b.startTime} · ${b.hours} hrs`),
+    pad('Duration', `${b.startTime} · ${formatDuration(b.hours, { short: true })}`),
     pad('Address', b.address),
     '',
     'LINE ITEMS',
     '-'.repeat(56),
-    pad(`Care charges (${b.hours} hrs x ${formatCurrency(b.hourlyRate)})`, formatCurrency(subtotal)),
+    pad(`Care charges (${durationBasis(b.hours)} x ${formatCurrency(b.hourlyRate)})`, formatCurrency(subtotal)),
     pad('Platform handling fee', formatCurrency(platformFee)),
     pad(`GST @ ${Math.round(GST_RATE * 100)}%`, formatCurrency(tax)),
     '-'.repeat(56),

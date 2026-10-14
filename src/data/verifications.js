@@ -298,10 +298,10 @@ export const RATING_ROWS = [
 
 export const REPORTS = [
   { id: 'RP-201', title: 'Monthly booking & revenue report', period: 'Sep 2026', generatedOn: '2026-10-01', rows: 1248, size: '1.8 MB', status: 'Ready' },
-  { id: 'RP-202', title: 'Caregiver verification audit', period: 'Q3 2026', generatedOn: '2026-10-02', rows: 312, size: '640 KB', status: 'Ready' },
+  { id: 'RP-202', title: 'Caretaker verification audit', period: 'Q3 2026', generatedOn: '2026-10-02', rows: 312, size: '640 KB', status: 'Ready' },
   { id: 'RP-203', title: 'Complaint resolution SLA report', period: 'Sep 2026', generatedOn: '2026-10-01', rows: 46, size: '210 KB', status: 'Ready' },
   { id: 'RP-204', title: 'SOS incident audit trail', period: 'Q3 2026', generatedOn: '2026-10-03', rows: 19, size: '96 KB', status: 'Ready' },
-  { id: 'RP-205', title: 'Caregiver payout reconciliation', period: 'Oct 2026 (H1)', generatedOn: '2026-10-10', rows: 204, size: '520 KB', status: 'Processing' },
+  { id: 'RP-205', title: 'Caretaker payout reconciliation', period: 'Oct 2026 (H1)', generatedOn: '2026-10-10', rows: 204, size: '520 KB', status: 'Processing' },
   { id: 'RP-206', title: 'Service distribution by city', period: 'FY 2026–27', generatedOn: '2026-07-04', rows: 61, size: '180 KB', status: 'Ready' },
 ]
 

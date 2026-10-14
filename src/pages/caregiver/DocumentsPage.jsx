@@ -56,7 +56,7 @@ export function DocumentsPage() {
     return {
       id: `VR-${myId.toUpperCase()}`,
       caregiverId: myId,
-      name: caregiver?.name || 'Caregiver',
+      name: caregiver?.name || 'Caretaker',
       regNo: caregiver?.regNo || 'MH-NUR-2018-4471',
       submittedOn: caregiver?.joinedOn,
       status: 'Verified',
@@ -68,7 +68,7 @@ export function DocumentsPage() {
         feedback: '',
         uploadedOn: caregiver?.joinedOn,
       })),
-      history: [{ at: caregiver?.joinedOn, action: 'Application submitted', by: caregiver?.name || 'Caregiver' }],
+      history: [{ at: caregiver?.joinedOn, action: 'Application submitted', by: caregiver?.name || 'Caretaker' }],
     }
   }, [verifications, myId, caregiver])
 
@@ -131,7 +131,7 @@ export function DocumentsPage() {
         'CareMate demo document',
         `Type: ${doc.type}`,
         `File: ${doc.file}`,
-        `Caregiver: ${record.name}`,
+        `Caretaker: ${record.name}`,
         `Identifier: ${maskedReg}`,
         'Sensitive fields are masked in demo mode.',
       ].join('\n'),
@@ -171,7 +171,7 @@ export function DocumentsPage() {
             </div>
           </div>
           <ProgressBar value={verifiedCount} max={DOCUMENT_TYPES.length} tone="primary" />
-          <div className="flex items-start gap-3 rounded-xl border border-line bg-slate-50/70 p-4">
+          <div className="flex items-start gap-3 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
             <p className="text-xs leading-relaxed text-muted">
               Files are encrypted at rest and only accessible to the CareMate verification team. Identifiers are masked everywhere in the

@@ -17,24 +17,25 @@ export function LogoMark({ className = 'h-9 w-9' }) {
 }
 
 const LOGO_SIZES = {
-  sm: 'h-10',
-  md: 'h-14',
-  lg: 'h-20',
-  xl: 'h-20 sm:h-24',
+  sm: { box: 'h-10', pad: 'p-1' },
+  md: { box: 'h-14', pad: 'p-1.5' },
+  lg: { box: 'h-20', pad: 'p-2' },
+  xl: { box: 'h-20 sm:h-24', pad: 'p-2' },
 }
 
-export function Logo({ to = '/', light = false, compact = false, size = 'md', className }) {
+export function Logo({ to = '/', light = false, compact = false, size = 'md', markClass, className }) {
+  const spec = LOGO_SIZES[size] ?? LOGO_SIZES.md
   return (
     <Link to={to} className={cn('group inline-flex items-center', className)} aria-label="Bystander home">
       {compact ? (
-        <LogoMark />
+        <LogoMark className={markClass} />
       ) : (
         <img
           src={LOGO_SRC}
           alt="Bystander — Never alone"
           width={180}
           height={144}
-          className={cn('w-auto object-contain', LOGO_SIZES[size] ?? LOGO_SIZES.md, light && 'rounded-xl bg-white/95 p-1.5 shadow-card')}
+          className={cn('w-auto object-contain', spec.box, light && cn('rounded-xl bg-white/95 shadow-card', spec.pad))}
         />
       )}
     </Link>

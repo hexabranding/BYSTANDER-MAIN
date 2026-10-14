@@ -130,7 +130,7 @@ export function SosAlertsPage() {
     <div className="space-y-6">
       <PageHeader
         title="SOS alerts"
-        subtitle="Live emergency incidents raised by customers and caregivers — triage, assign and close them fast."
+        subtitle="Live emergency incidents raised by customers and caretakers — triage, assign and close them fast."
         action={
           <Button to="/admin/bookings" variant="outline">
             Open bookings
@@ -138,7 +138,7 @@ export function SosAlertsPage() {
         }
       />
 
-      <div className="flex flex-col gap-3 rounded-card border border-danger-200 bg-danger-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-card border border-danger-200 bg-gradient-to-br from-danger-50 to-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span className="relative flex h-3 w-3 shrink-0">
             <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-danger-500 opacity-75" />
@@ -240,7 +240,7 @@ export function SosAlertsPage() {
                       Raised by <span className="font-semibold text-ink">{s.raisedBy}</span> · {s.userType}
                     </p>
                     <p className="text-muted">
-                      Caregiver <span className="font-semibold text-ink">{s.caregiver}</span>
+                      Caretaker <span className="font-semibold text-ink">{s.caregiver}</span>
                     </p>
                     <p className="text-muted">
                       Reported <span className="font-semibold tabular-nums text-ink">{formatDateTime(s.reportedAt)}</span>
@@ -251,7 +251,7 @@ export function SosAlertsPage() {
                     </p>
                   </div>
 
-                  <p className="rounded-xl border border-line bg-slate-50/70 px-4 py-3 text-sm leading-relaxed text-ink-soft">
+                  <p className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-sm leading-relaxed text-ink-soft">
                     {s.summary}
                   </p>
 
@@ -394,14 +394,14 @@ export function SosAlertsPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Reported at</p>
                 <p className="mt-1 text-sm font-semibold tabular-nums text-ink">
                   {formatDateTime(openIncident.reportedAt)}
                 </p>
               </div>
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Caregiver on duty</p>
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Caretaker on duty</p>
                 <p className="mt-1 text-sm font-semibold text-ink">{openIncident.caregiver}</p>
               </div>
             </div>

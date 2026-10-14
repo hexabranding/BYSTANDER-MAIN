@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Menu, X, HeartHandshake } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -11,7 +11,7 @@ const links = [
   { label: 'About', to: '/about' },
   { label: 'Services', to: '/services' },
   { label: 'Find Caretaker', to: '/caregivers' },
-  { label: 'How It Works', to: '/#how-it-works' },
+  { label: 'Trust & safety', to: '/#trust' },
   { label: 'Contact', to: '/contact' },
 ]
 
@@ -20,13 +20,39 @@ const dashboardFor = (role) => (role === 'admin' ? '/admin/dashboard' : role ===
 export function PublicNavbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [hidden, setHidden] = useState(false)
+  const lastY = useRef(0)
+  const openRef = useRef(false)
   const { pathname } = useLocation()
   const { isLoggedIn, user, logout } = useAuth()
 
   useEffect(() => setOpen(false), [pathname])
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12)
+    openRef.current = open
+    if (open) setHidden(false)
+  }, [open])
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    // Tuck the bar away while the page travels down, bring it back the
+    // moment the reader reverses — the standard "focused reading" pattern.
+    const onScroll = () => {
+      const y = window.scrollY
+      const delta = y - lastY.current
+      lastY.current = y
+      setScrolled(y > 12)
+
+      if (reduceMotion || openRef.current || y < 160) {
+        setHidden(false)
+      } else if (delta > 3) {
+        setHidden(true)
+      } else if (delta < -3) {
+        setHidden(false)
+      }
+    }
+
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -34,9 +60,11 @@ export function PublicNavbar() {
 
   return (
     <header
+      onFocusCapture={() => setHidden(false)}
       className={cn(
-        'sticky top-0 z-40 w-full border-b transition-all duration-300',
+        'sticky top-0 z-40 w-full border-b transition-all duration-300 ease-out',
         scrolled ? 'border-line bg-white/90 backdrop-blur-md shadow-card' : 'border-transparent bg-white',
+        hidden && '-translate-y-full',
       )}
     >
       <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-4 px-4 sm:h-28 sm:px-6 lg:px-8">

@@ -101,14 +101,14 @@ export function NursingStudentsPage() {
     setChecks((prev) => ({ ...prev, [selected.id]: CHECKLIST }))
     setVerifiedOverrides((prev) => ({ ...prev, [selected.id]: true }))
     toast.success(`${selected.name} verified`, {
-      description: 'Cleared for supervised, non-critical caregiving shifts.',
+      description: 'Cleared for supervised, non-critical care taking shifts.',
     })
   }
 
   const requestDocument = () => {
     if (!selected) return
     toast.info(`Document requested from ${selected.name}`, {
-      description: 'They have 72 hours to re-upload from the caregiver profile.',
+      description: 'They have 72 hours to re-upload from the caretaker profile.',
     })
   }
 
@@ -173,15 +173,15 @@ export function NursingStudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Nursing students"
-        subtitle="Students placed on CareMate under a supervising faculty member — tracked separately from licensed caregivers."
+        subtitle="Students placed on CareMate under a supervising faculty member — tracked separately from licensed caretakers."
         action={
           <Button to="/admin/caregivers" variant="outline" icon={GraduationCap}>
-            Caregiver directory
+            Caretaker directory
           </Button>
         }
       />
 
-      <div className="flex items-start gap-3 rounded-card border border-accent-200 bg-accent-50/70 px-4 py-3.5">
+      <div className="flex items-start gap-3 rounded-card border border-accent-200 bg-gradient-to-br from-accent-50 to-white px-4 py-3.5">
         <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-accent-600 shadow-card">
           <BookOpen className="h-4 w-4" />
         </span>
@@ -346,7 +346,7 @@ export function NursingStudentsPage() {
               <Card>
                 <CardHeader title="Supervision" icon={ShieldCheck} />
                 <CardBody className="space-y-3 text-sm">
-                  <div className="rounded-xl border border-line bg-slate-50/70 px-3.5 py-3">
+                  <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-3.5 py-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">Faculty supervisor</p>
                     <p className="mt-1 font-semibold text-ink">{selected.supervisor}</p>
                     <p className="mt-1 text-xs leading-relaxed text-muted">

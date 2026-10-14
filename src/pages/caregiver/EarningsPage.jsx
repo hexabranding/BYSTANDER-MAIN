@@ -21,6 +21,7 @@ import { formatCurrency, formatDate, toCSV, downloadText } from '@/utils/format'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatCard } from '@/components/common/StatCard'
+import { SectionLabel } from '@/components/common/SectionLabel'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Tabs, ProgressBar } from '@/components/common/Tabs'
@@ -154,11 +155,17 @@ export function EarningsPage() {
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={WEEKLY_EARNINGS} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="cgEarningsWeekly" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2DD4BF" />
+                      <stop offset="100%" stopColor="#0F766E" />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" vertical={false} />
                   <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
                   <YAxis tickLine={false} axisLine={false} width={48} tick={{ fontSize: 11, fill: '#94A3B8' }} tickFormatter={rupeeTick} />
                   <Tooltip cursor={{ fill: 'rgba(15,118,110,0.06)' }} contentStyle={tooltipStyle} formatter={(v) => formatCurrency(v)} />
-                  <Bar dataKey="earnings" fill="#0F766E" radius={[6, 6, 0, 0]} maxBarSize={38} />
+                  <Bar dataKey="earnings" fill="url(#cgEarningsWeekly)" radius={[6, 6, 0, 0]} maxBarSize={38} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -201,7 +208,7 @@ export function EarningsPage() {
               <span className="text-muted">Platform commission ({Math.round(PLATFORM_COMMISSION * 100)}%)</span>
               <span className="font-semibold tabular-nums text-muted">− {formatCurrency(totalCommission)}</span>
             </div>
-            <div className="flex items-center justify-between gap-4 rounded-xl bg-mint-100 px-4 py-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl bg-gradient-to-br from-mint-100 to-mint-200 px-4 py-3">
               <span className="text-sm font-bold text-primary-900">Net payable to you</span>
               <span className="font-display text-lg font-extrabold tabular-nums text-primary-800">{formatCurrency(totalNet)}</span>
             </div>
@@ -221,7 +228,7 @@ export function EarningsPage() {
         <Card>
           <CardHeader title="Payout request" subtitle="Withdraw your released balance to the bank" icon={HandCoins} />
           <CardBody className="space-y-4">
-            <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+            <div className="rounded-xl border border-primary-100 bg-gradient-to-br from-mint-50 to-white p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-faint">Available balance</p>
               <p className="mt-1.5 font-display text-3xl font-extrabold tabular-nums text-ink">{formatCurrency(pendingPayout)}</p>
               <p className="mt-1 text-xs text-muted">Settles to your registered bank in 2 working days</p>
@@ -239,15 +246,16 @@ export function EarningsPage() {
       </div>
 
       <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-display text-base font-bold text-ink">Earnings transactions</h2>
-            <p className="text-sm text-muted">Every completed booking and its commission deduction.</p>
-          </div>
-          <Button variant="outline" size="sm" icon={Download} onClick={handleExport}>
-            Export CSV
-          </Button>
-        </div>
+        <SectionLabel
+          hint="Every completed booking and its commission deduction."
+          action={
+            <Button variant="outline" size="sm" icon={Download} onClick={handleExport}>
+              Export CSV
+            </Button>
+          }
+        >
+          Earnings transactions
+        </SectionLabel>
 
         <Tabs
           tabs={[

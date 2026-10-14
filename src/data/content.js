@@ -125,28 +125,28 @@ export const reviewsForCaregiver = (caregiverId) =>
 
 export const FAQS = [
   {
-    q: 'How are caregivers verified on CareMate?',
-    a: 'Every caregiver submits a government identity document, nursing registration certificate or nursing student college ID, and an address proof. Our operations team reviews each document manually, checks the registration number against the state nursing council, and only then flips the profile to Verified. A police clearance certificate is optional but earns a higher trust badge.',
+    q: 'How are caretakers verified on CareMate?',
+    a: 'Every caretaker submits a government identity document, nursing registration certificate or nursing student college ID, and an address proof. Our operations team reviews each document manually, checks the registration number against the state nursing council, and only then flips the profile to Verified. A police clearance certificate is optional but earns a higher trust badge.',
   },
   {
     q: 'Can I book care inside a hospital?',
-    a: 'Yes. During booking you can choose Home Care or Hospital Care and enter the ward or room number. Hospital rules on visitor timings still apply and our caregiver will work within them.',
+    a: 'Yes. During booking you can choose Home Care or Hospital Care and enter the ward or room number. Hospital rules on visitor timings still apply and our caretaker will work within them.',
   },
   {
-    q: 'What happens if my caregiver cancels at the last minute?',
+    q: 'What happens if my caretaker cancels at the last minute?',
     a: 'You are notified immediately and CareMate automatically offers the shift to two verified backups with matching skills. If nobody accepts, the escrow amount is refunded to your original payment method within 3–5 working days.',
   },
   {
     q: 'How does payment work?',
-    a: 'The estimated amount is held in escrow when you confirm a booking. It is released to the caregiver only after the service is completed and you mark the shift as done. CareMate deducts a 12% platform commission from the caregiver side — families never pay a hidden fee.',
+    a: 'The estimated amount is held in escrow when you confirm a booking. It is released to the caretaker only after the service is completed and you mark the shift as done. CareMate deducts a 12% platform commission from the caretaker side — families never pay a hidden fee.',
   },
   {
     q: 'Do you provide emergency (SOS) support?',
     a: 'Every active booking has an SOS button. Pressing it raises a priority alert to our on-call operations desk, notifies your emergency contact and flags the incident to an admin who stays on the line until it is resolved.',
   },
   {
-    q: 'Can I request the same caregiver again?',
-    a: 'Yes — most families do. You can rebook from your past bookings in one tap, and repeat caregivers are shown first in your matching results.',
+    q: 'Can I request the same caretaker again?',
+    a: 'Yes — most families do. You can rebook from your past bookings in one tap, and repeat caretakers are shown first in your matching results.',
   },
 ]
 
@@ -185,7 +185,7 @@ export const TESTIMONIALS = [
     avatar: 'https://randomuser.me/api/portraits/men/75.jpg',
     rating: 4,
     quote:
-      'The hospital-care option saved us. We entered the ward number and a nurse-trained caregiver arrived within four hours of my mother being moved out of ICU.',
+      'The hospital-care option saved us. We entered the ward number and a nurse-trained caretaker arrived within four hours of my mother being moved out of ICU.',
   },
 ]
 
@@ -194,13 +194,13 @@ export const HOW_IT_WORKS = [
     step: '01',
     title: 'Tell us what care you need',
     description:
-      'Choose the service, patient details, home or hospital location, and the exact dates and hours.',
+      'Choose the service, patient details, home or hospital location, and the duration — a few hours, several days or a full week.',
   },
   {
     step: '02',
-    title: 'Match with verified caregivers',
+    title: 'Match with verified caretakers',
     description:
-      'We surface verified caregivers with the right qualification, distance, availability and rating for your requirement.',
+      'We surface verified caretakers with the right qualification, distance, availability and rating for your requirement.',
   },
   {
     step: '03',
@@ -212,7 +212,7 @@ export const HOW_IT_WORKS = [
     step: '04',
     title: 'Track, rate and rebook',
     description:
-      'Follow check-in/check-out updates, message your caregiver, download invoices and rebook in one tap.',
+      'Follow check-in/check-out updates, message your caretaker, download invoices and rebook in one tap.',
   },
 ]
 
@@ -227,7 +227,7 @@ export const WHY_CHOOSE = [
     icon: 'BadgeCheck',
     title: 'Only qualified professionals',
     description:
-      'GNM, B.Sc, ANM, MBBS and certified elder-care caregivers. Nursing students work under a supervised scope of practice.',
+      'GNM, B.Sc, ANM, MBBS and certified elder-care caretakers. Nursing students work under a supervised scope of practice.',
   },
   {
     icon: 'Wallet',
@@ -245,7 +245,7 @@ export const WHY_CHOOSE = [
     icon: 'MessageSquare',
     title: 'Direct, in-app messaging',
     description:
-      'Talk to your caregiver before, during and after the shift without sharing personal phone numbers.',
+      'Talk to your caretaker before, during and after the shift without sharing personal phone numbers.',
   },
   {
     icon: 'Receipt',

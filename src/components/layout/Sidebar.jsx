@@ -11,7 +11,8 @@ function resolveBadge(item, values) {
   return value ? { value, tone: item.tone } : null
 }
 
-export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer }) {
+export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer, logoSize = 'md' }) {
+  const largeLogo = logoSize === 'lg'
   return (
     <aside
       className={cn(
@@ -19,8 +20,14 @@ export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer 
         collapsed ? 'w-[76px]' : 'w-64',
       )}
     >
-      <div className={cn('flex h-16 items-center border-b border-line px-4', collapsed && 'justify-center px-0')}>
-        <Logo compact={collapsed} />
+      <div
+        className={cn(
+          'flex items-center border-b border-line px-4',
+          largeLogo ? 'h-24' : 'h-16',
+          collapsed && 'justify-center px-0',
+        )}
+      >
+        <Logo compact={collapsed} size={logoSize} markClass={largeLogo ? 'h-14 w-14' : undefined} />
       </div>
 
       <nav className="thin-scrollbar flex-1 space-y-5 overflow-y-auto px-3 py-5">
@@ -91,7 +98,8 @@ export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer 
   )
 }
 
-export function MobileSidebar({ open, onClose, nav, values = {}, header, footer }) {
+export function MobileSidebar({ open, onClose, nav, values = {}, header, footer, logoSize = 'md' }) {
+  const largeLogo = logoSize === 'lg'
   return (
     <>
       <div
@@ -109,8 +117,13 @@ export function MobileSidebar({ open, onClose, nav, values = {}, header, footer 
         )}
         aria-hidden={!open}
       >
-        <div className="flex h-16 items-center justify-between border-b border-line px-4">
-          {header ?? <Logo />}
+        <div
+          className={cn(
+            'flex items-center justify-between border-b border-line px-4',
+            largeLogo ? 'h-24' : 'h-16',
+          )}
+        >
+          {header ?? <Logo size={logoSize} />}
           <button
             type="button"
             onClick={onClose}

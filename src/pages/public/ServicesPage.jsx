@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ArrowRight, Search, Sparkles, X } from 'lucide-react'
 import { useDocumentTitle, useDebouncedValue } from '@/hooks/useUi'
 import { formatCurrency } from '@/utils/format'
+import { reveal } from '@/utils/motion'
 import { SERVICES } from '@/data/services'
 import { Button } from '@/components/common/Button'
 import { Container } from '@/components/common/Container'
@@ -26,16 +27,9 @@ const CATEGORIES = [
 const INCLUDED = [
   'Itemised estimate before you confirm — hourly rate, platform charges and 18% GST shown upfront.',
   'Escrow release only after you mark the shift complete; cancellations 6+ hours ahead are free.',
-  'CareMate absorbs the 12% platform commission on the caregiver side, so families never see a hidden fee.',
+  'CareMate absorbs the 12% platform commission on the caretaker side, so families never see a hidden fee.',
   'In-app messaging, shift check-in/out and a downloadable invoice for every booking.',
 ]
-
-const reveal = {
-  initial: { opacity: 0, y: 16 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, amount: 0.15 },
-  transition: { duration: 0.45, ease: 'easeOut' },
-}
 
 export function ServicesPage() {
   useDocumentTitle('Care Services')
@@ -78,7 +72,7 @@ export function ServicesPage() {
         icon={Sparkles}
         title="Care services for every"
         highlight="stage of recovery"
-        description="From hour-long medication reminders to 12-hour night vigil, each service has a defined scope, a transparent starting rate and caregivers qualified to deliver it."
+        description="From hour-long medication reminders to 12-hour night vigil, each service has a defined scope, a transparent starting rate and caretakers qualified to deliver it."
         items={[{ label: 'Services' }]}
         actions={
           <div className="w-full lg:w-80">
@@ -240,7 +234,7 @@ export function ServicesPage() {
           aria-hidden="true"
           className="pointer-events-none absolute -top-24 -right-16 h-80 w-80 rounded-full bg-[radial-gradient(closest-side,rgba(56,189,248,0.22),transparent)] blur-3xl"
         />
-        <Container className="relative flex flex-col items-start gap-6 py-12 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
+        <Container className="flex flex-col items-start gap-6 py-12 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
             <h2 className="font-display text-xl font-extrabold text-white sm:text-2xl">
               Not sure which service fits the patient?

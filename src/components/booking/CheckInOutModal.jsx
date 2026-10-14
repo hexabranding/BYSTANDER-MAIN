@@ -73,13 +73,26 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit} loading={submitting} icon={Check}>
+          <Button
+            type="submit"
+            form="checkinout-form"
+            disabled={!canSubmit}
+            loading={submitting}
+            icon={Check}
+          >
             {isCheckIn ? 'Verify & start service' : 'Verify & complete service'}
           </Button>
         </div>
       }
     >
-      <div className="space-y-5">
+      <form
+        id="checkinout-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          handleSubmit()
+        }}
+        className="space-y-5"
+      >
         <div className="flex items-center gap-2 rounded-xl border border-line bg-canvas px-4 py-3 text-sm text-muted">
           <Clock className="h-4 w-4 shrink-0 text-primary-600" />
           <span>
@@ -151,7 +164,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
             <span>Location on file: {booking.address}</span>
           </div>
         ) : null}
-      </div>
+      </form>
     </Modal>
   )
 }

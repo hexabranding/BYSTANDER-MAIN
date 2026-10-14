@@ -78,7 +78,7 @@ export function PaymentsPage() {
       'Transaction ID': t.id,
       Booking: t.bookingId,
       Service: t.service,
-      Caregiver: t.caregiverName,
+      'Caretaker': t.caregiverName,
       Method: t.method,
       Amount: t.amount,
       Type: t.type,
@@ -100,7 +100,7 @@ export function PaymentsPage() {
       header: 'Booking',
       render: (t) => <span className="text-primary-700">{t.bookingId || '—'}</span>,
     },
-    { key: 'caregiverName', header: 'Caregiver' },
+    { key: 'caregiverName', header: 'Caretaker' },
     { key: 'service', header: 'Service', sortable: false },
     { key: 'method', header: 'Method' },
     {
@@ -139,7 +139,7 @@ export function PaymentsPage() {
         <StatCard label="Total spent" value={formatCurrency(totalSpent)} icon={IndianRupee} tone="primary" hint="All settled + escrow" delay={0} />
         <StatCard label="Escrow held" value={formatCurrency(escrowHeld)} icon={Lock} tone="warning" hint="Released after service" delay={0.05} />
         <StatCard label="Refunded this year" value={formatCurrency(refunded)} icon={RefreshCcw} tone="success" hint="Back to original method" delay={0.1} />
-        <StatCard label="Next payout to caregivers" value="Awaiting settlement" icon={Wallet} tone="info" hint="Handled by CareMate ops" delay={0.15} />
+        <StatCard label="Next payout to caretakers" value="Awaiting settlement" icon={Wallet} tone="info" hint="Handled by CareMate ops" delay={0.15} />
       </div>
 
       <Card>
@@ -182,7 +182,7 @@ export function PaymentsPage() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search transaction, booking or caregiver…"
+          placeholder="Search transaction, booking or caretaker…"
           className="sm:max-w-sm sm:flex-1"
         />
         <Select

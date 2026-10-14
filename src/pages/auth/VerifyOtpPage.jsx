@@ -7,7 +7,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { useAuth } from '@/context/AuthContext'
 import { FormField, Input } from '@/components/forms/FormField'
 import { Button } from '@/components/common/Button'
-import { DEMO_PASSWORD, findDemoUser } from '@/data/demoUsers'
+import { findDemoUser } from '@/data/demoUsers'
 
 const OTP_LENGTH = 6
 const RESEND_SECONDS = 30
@@ -141,7 +141,18 @@ export function VerifyOtpPage() {
       return
     }
 
-    const result = login({ email, password: DEMO_PASSWORD, role: defaultRole || 'customer' })
+    // Only complete a sign-in when the address actually belongs to a demo account —
+    // otherwise we would silently log the visitor in as an unrelated seeded user.
+    const matched = findDemoUser(email)
+    if (!matched) {
+      setVerifying(false)
+      setError('No pending registration found for this address. Create an account first.')
+      setShakeKey((key) => key + 1)
+      toast.error('No account found for this email — register first, then verify.')
+      return
+    }
+
+    const result = login({ email, password: matched.password, role: matched.role })
     if (!result.ok) {
       setVerifying(false)
       setError(result.message)

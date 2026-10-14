@@ -5,7 +5,7 @@ import { Button } from './Button'
 export function EmptyState({ icon: Icon = Inbox, title = 'Nothing here yet', description, action, className }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-14 text-center', className)}>
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-mint-100 text-primary-700">
+      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-mint-100 to-mint-300 text-primary-700">
         <Icon className="h-6 w-6" />
       </span>
       <h3 className="mt-4 font-display text-base font-bold text-ink">{title}</h3>
@@ -18,7 +18,7 @@ export function EmptyState({ icon: Icon = Inbox, title = 'Nothing here yet', des
 export function ErrorState({ title = 'Something went wrong', description, onRetry, className }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-14 text-center', className)}>
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-danger-50 text-danger-600">
+      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-danger-50 to-danger-100 text-danger-600">
         <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
           <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

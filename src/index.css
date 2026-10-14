@@ -152,6 +152,22 @@
     background-size: 26px 26px;
   }
 
+  /* Dots that read on dark teal panels instead of disappearing into them */
+  .grid-pattern-dark {
+    background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.22) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  /* Fade the pattern out where the copy sits so text stays crisp */
+  .grid-fade {
+    -webkit-mask-image: radial-gradient(125% 95% at 78% 6%, #000 18%, transparent 72%);
+    mask-image: radial-gradient(125% 95% at 78% 6%, #000 18%, transparent 72%);
+  }
+
+  .panel-vignette {
+    background: radial-gradient(115% 90% at 50% 0%, rgba(4, 26, 25, 0) 42%, rgba(4, 26, 25, 0.55) 100%);
+  }
+
   .animate-shimmer {
     background: linear-gradient(
       90deg,
@@ -216,6 +232,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   .animate-float,
   .animate-float-slow {
     animation: none;

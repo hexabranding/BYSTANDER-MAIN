@@ -20,6 +20,7 @@ import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -132,9 +133,9 @@ export function JobDetailsPage() {
         />
 
         {job.status === 'Accepted' ? (
-          <div className="flex flex-col gap-3 rounded-card border border-success-500/30 bg-success-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-card border border-success-500/30 bg-gradient-to-br from-success-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-success-100 text-success-700">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-success-50 to-success-100 text-success-700">
                 <CheckCircle2 className="h-5 w-5" />
               </span>
               <div>
@@ -153,7 +154,7 @@ export function JobDetailsPage() {
         {job.status === 'Declined' ? (
           <div className="rounded-card border border-line bg-slate-50 p-5">
             <p className="font-display text-sm font-bold text-ink">You declined this job</p>
-            <p className="mt-1 text-sm text-muted">The shift has been released to other verified caregivers.</p>
+            <p className="mt-1 text-sm text-muted">The shift has been released to other verified caretakers.</p>
           </div>
         ) : null}
 
@@ -172,7 +173,7 @@ export function JobDetailsPage() {
                   </p>
                 </div>
               </div>
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-faint">Care requirements</p>
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{job.requirements}</p>
               </div>
@@ -188,7 +189,7 @@ export function JobDetailsPage() {
             <CardBody className="space-y-3">
               <Row icon={CalendarDays} label="Date" value={formatDate(job.date, { long: true })} />
               <Row icon={Clock} label="Shift" value={job.shift} />
-              <Row icon={Briefcase} label="Duration" value={`${job.hours} hours`} />
+              <Row icon={Briefcase} label="Duration" value={formatDuration(job.hours)} />
             </CardBody>
           </Card>
 
@@ -227,7 +228,7 @@ export function JobDetailsPage() {
         {job.status === 'Open' ? (
           <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-card border border-line bg-white/95 p-4 shadow-raised backdrop-blur sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted">
-              <span className="font-semibold text-ink">{formatCurrency(job.payment)}</span> for {job.hours} hrs ·{' '}
+              <span className="font-semibold text-ink">{formatCurrency(job.payment)}</span> for {formatDuration(job.hours, { short: true })} ·{' '}
               {formatDate(job.date)} · {job.shift}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -250,7 +251,7 @@ export function JobDetailsPage() {
           message={
             dialog === 'accept'
               ? `${job.service} on ${formatDate(job.date, { long: true })} at ${job.shift}. The shift is added to your schedule immediately.`
-              : 'This shift will be released to other verified caregivers. This cannot be undone.'
+              : 'This shift will be released to other verified caretakers. This cannot be undone.'
           }
           confirmLabel={dialog === 'accept' ? 'Accept job' : 'Decline job'}
         />
@@ -280,7 +281,7 @@ export function JobDetailsPage() {
       />
 
       {booking.status === 'Confirmed' ? (
-        <div className="flex flex-col gap-3 rounded-card border border-primary-200 bg-mint-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-card border border-primary-200 bg-gradient-to-br from-mint-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
               <CheckCircle2 className="h-5 w-5" />
@@ -299,7 +300,7 @@ export function JobDetailsPage() {
       ) : null}
 
       {booking.status === 'In Progress' ? (
-        <div className="flex flex-col gap-3 rounded-card border border-accent-200 bg-accent-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-card border border-accent-200 bg-gradient-to-br from-accent-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-100 text-accent-600">
               <PlayCircle className="h-5 w-5" />
@@ -375,7 +376,7 @@ export function JobDetailsPage() {
               </div>
             </div>
             {booking.notes ? (
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-faint">Care notes</p>
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{booking.notes}</p>
               </div>
@@ -387,7 +388,7 @@ export function JobDetailsPage() {
           <CardHeader title="Schedule & location" subtitle="Shift timing and address" icon={CalendarDays} />
           <CardBody className="space-y-3">
             <Row icon={CalendarDays} label="Date" value={formatDate(booking.date, { long: true })} />
-            <Row icon={Clock} label="Shift" value={`${booking.startTime} · ${booking.hours} hrs`} />
+            <Row icon={Clock} label="Shift" value={`${booking.startTime} · ${formatDuration(booking.hours, { short: true })}`} />
             <Row icon={MapPin} label="Address" value={booking.address} />
             <Row icon={Briefcase} label="Care type" value={booking.careType} />
           </CardBody>

@@ -20,7 +20,7 @@ export function CardHeader({ title, subtitle, action, icon: Icon, className }) {
     <div className={cn('flex items-start justify-between gap-4 border-b border-line px-5 py-4', className)}>
       <div className="flex items-start gap-3">
         {Icon ? (
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-mint-100 to-mint-300 text-primary-700">
             <Icon className="h-4.5 w-4.5" size={18} />
           </span>
         ) : null}

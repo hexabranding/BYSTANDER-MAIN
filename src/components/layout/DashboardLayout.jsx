@@ -28,19 +28,28 @@ export function DashboardLayout({ nav, variant = 'customer', sidebarFooter, topb
   const [mobileOpen, setMobileOpen] = useState(false)
   const values = useBadgeValues()
   const { pathname } = useLocation()
+  const logoSize = variant === 'admin' ? 'lg' : 'md'
 
   const lastSegment = pathname.split('/').filter(Boolean).pop() || 'dashboard'
   const title = lastSegment.replace(/-/g, ' ')
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      <Sidebar nav={nav} collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} values={values} footer={sidebarFooter} />
+      <Sidebar
+        nav={nav}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((v) => !v)}
+        values={values}
+        footer={sidebarFooter}
+        logoSize={logoSize}
+      />
       <MobileSidebar
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
         nav={nav}
         values={values}
         footer={sidebarFooter}
+        logoSize={logoSize}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

@@ -20,6 +20,7 @@ import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { CUSTOMER_SPEND } from '@/data/charts'
 import { formatCurrency, formatDate, formatTime, relativeTime } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
@@ -46,7 +47,7 @@ const toneDots = {
 
 const QUICK_LINKS = [
   { to: '/customer/invoices', label: 'Invoices', hint: 'Download GST invoices', icon: Receipt },
-  { to: '/customer/messages', label: 'Messages', hint: 'Chat with caregivers', icon: MessageSquare },
+  { to: '/customer/messages', label: 'Messages', hint: 'Chat with caretakers', icon: MessageSquare },
   { to: '/customer/complaints', label: 'Complaints', hint: 'Raise or track issues', icon: ShieldAlert },
   { to: '/customer/profile', label: 'Profile', hint: 'Personal details & preferences', icon: UserRound },
 ]
@@ -109,7 +110,7 @@ export function DashboardPage() {
     })
     updateBooking(b.id, { customerRating: { ...criteria, average, at: new Date().toISOString() } })
     toast.success('Thank you for your review!', {
-      description: `${caregiverFor(b)?.name || 'Your caregiver'} received your ${average}-star rating.`,
+      description: `${caregiverFor(b)?.name || 'Your caretaker'} received your ${average}-star rating.`,
     })
   }
 
@@ -121,10 +122,10 @@ export function DashboardPage() {
         action={
           <>
             <Button to="/customer/caregivers" variant="outline" icon={UserRound}>
-              Browse caregivers
+              Browse caretakers
             </Button>
             <Button to="/customer/book-caregiver" icon={CalendarClock}>
-              Book a caregiver
+              Book a caretaker
             </Button>
           </>
         }
@@ -178,17 +179,17 @@ export function DashboardPage() {
               />
               <CardBody className="space-y-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <Avatar src={activeCaregiver?.photo} name={activeCaregiver?.name || 'Caregiver'} size="lg" verified={activeCaregiver?.verified} />
+                  <Avatar src={activeCaregiver?.photo} name={activeCaregiver?.name || 'Caretaker'} size="lg" verified={activeCaregiver?.verified} />
                   <div className="min-w-0 flex-1">
                     <p className="font-display text-base font-bold text-ink">
-                      {activeCaregiver?.name || 'Caregiver being assigned'}
+                      {activeCaregiver?.name || 'Caretaker being assigned'}
                     </p>
                     <p className="mt-0.5 text-sm text-muted">
                       {activeCaregiver?.qualification} · {formatCurrency(active.hourlyRate)}/hr
                     </p>
                     <p className="mt-1 text-xs text-faint">
-                      Patient {active.patient?.name} · {active.startTime}–{' '}
-                      {active.hours} hrs on {formatDate(active.date, { long: true })}
+                      Patient {active.patient?.name} · {active.startTime} start ·{' '}
+                      {formatDuration(active.hours, { short: true })} on {formatDate(active.date, { long: true })}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
@@ -216,10 +217,10 @@ export function DashboardPage() {
               <EmptyState
                 icon={Stethoscope}
                 title="No active booking right now"
-                description="When you book a caregiver, the live status will appear here."
+                description="When you book a caretaker, the live status will appear here."
                 action={
                   <Button to="/customer/book-caregiver" icon={CalendarClock}>
-                    Book a caregiver
+                    Book a caretaker
                   </Button>
                 }
               />
@@ -256,7 +257,7 @@ export function DashboardPage() {
                             <Clock className="h-3 w-3" /> {formatDate(b.date)} · {b.startTime}
                           </span>
                           <span className="inline-flex items-center gap-1">
-                            <UserRound className="h-3 w-3" /> {cg?.name || 'Assigning caregiver'}
+                            <UserRound className="h-3 w-3" /> {cg?.name || 'Assigning caretaker'}
                           </span>
                         </p>
                       </div>
@@ -310,7 +311,7 @@ export function DashboardPage() {
                             <Clock className="h-3 w-3" /> {formatDate(b.date)}
                           </span>
                           <span className="inline-flex items-center gap-1">
-                            <UserRound className="h-3 w-3" /> {cg?.name || 'Caregiver'}
+                            <UserRound className="h-3 w-3" /> {cg?.name || 'Caretaker'}
                           </span>
                         </p>
                       </Link>

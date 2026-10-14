@@ -1,13 +1,39 @@
 import { BadgeCheck, Briefcase, Building2, Clock, Heart, MapPin } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 import { cn } from '@/utils/cn'
 import { formatCurrency } from '@/utils/format'
+import { useData } from '@/context/DataContext'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/common/Button'
 
 export function CaregiverCard({ caregiver, view = 'grid', onBook, actionLabel = 'View Profile', className }) {
+  const { shortlist, toggleShortlist } = useData()
+  const saved = (shortlist ?? []).includes(caregiver.id)
+
+  const onSave = () => {
+    toggleShortlist(caregiver.id)
+    toast.success(
+      saved ? `${caregiver.name} removed from your shortlist` : `${caregiver.name} added to your shortlist`,
+    )
+  }
+
+  const saveButton = (
+    <button
+      type="button"
+      onClick={onSave}
+      className={cn(
+        'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition',
+        saved ? 'bg-danger-50 text-danger-500' : 'text-faint hover:bg-danger-50 hover:text-danger-500',
+      )}
+      aria-label={saved ? `Remove ${caregiver.name} from shortlist` : `Save ${caregiver.name} to shortlist`}
+      title={saved ? 'Remove from shortlist' : 'Save to shortlist'}
+    >
+      <Heart className={cn('h-4 w-4', saved && 'fill-current')} />
+    </button>
+  )
   const {
     id,
     name,
@@ -36,15 +62,20 @@ export function CaregiverCard({ caregiver, view = 'grid', onBook, actionLabel = 
       >
         <Avatar src={photo} name={name} size="lg" verified={verified} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-display text-base font-bold text-ink">
-              <Link to={`/caregivers/${id}`} className="transition hover:text-primary-700">
-                {name}
-              </Link>
-            </h3>
-            {verified ? <StatusBadge status="Verified" size="sm" /> : <StatusBadge status="Pending" size="sm" />}
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-display text-base font-bold text-ink">
+                  <Link to={`/caregivers/${id}`} className="transition hover:text-primary-700">
+                    {name}
+                  </Link>
+                </h3>
+                {verified ? <StatusBadge status="Verified" size="sm" /> : <StatusBadge status="Pending" size="sm" />}
+              </div>
+              <p className="mt-0.5 text-sm font-medium text-primary-700">{qualification}</p>
+            </div>
+            {saveButton}
           </div>
-          <p className="mt-0.5 text-sm font-medium text-primary-700">{qualification}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5">
               <Briefcase className="h-3.5 w-3.5" /> {experienceYears} yrs experience
@@ -105,13 +136,7 @@ export function CaregiverCard({ caregiver, view = 'grid', onBook, actionLabel = 
               </h3>
               <p className="truncate text-sm font-medium text-primary-700">{qualification}</p>
             </div>
-            <button
-              type="button"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-faint transition hover:bg-danger-50 hover:text-danger-500"
-              aria-label={`Save ${name}`}
-            >
-              <Heart className="h-4 w-4" />
-            </button>
+            {saveButton}
           </div>
           <div className="mt-1.5">
             <RatingStars value={rating} count={reviewCount} showValue size={13} />

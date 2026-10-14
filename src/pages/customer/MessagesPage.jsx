@@ -96,15 +96,15 @@ export function MessagesPage() {
   if (!mine.length) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Messages" subtitle="Chat with your caregivers and the CareMate support desk." />
+        <PageHeader title="Messages" subtitle="Chat with your caretakers and the CareMate support desk." />
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={MessageSquare}
             title="No conversations yet"
-            description="Once a caregiver is assigned to your booking, your chats will appear here."
+            description="Once a caretaker is assigned to your booking, your chats will appear here."
             action={
               <Button to="/customer/book-caregiver" icon={MessageSquare}>
-                Book a caregiver
+                Book a caretaker
               </Button>
             }
           />
@@ -117,7 +117,7 @@ export function MessagesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Messages"
-        subtitle="Chat with your caregivers and the CareMate support desk."
+        subtitle="Chat with your caretakers and the CareMate support desk."
         meta={filtered.length ? <Chip>{`${filtered.length} conversations`}</Chip> : null}
       />
 
@@ -260,7 +260,7 @@ export function MessagesPage() {
             <EmptyState
               icon={MessageSquare}
               title="Select a conversation"
-              description="Pick a caregiver or support thread from the list to start reading."
+              description="Pick a caretaker or support thread from the list to start reading."
             />
           )}
         </div>

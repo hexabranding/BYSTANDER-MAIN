@@ -18,8 +18,8 @@ import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 
 const PREF_ITEMS = [
-  { key: 'bookings', label: 'Booking updates', hint: 'Confirmations, caregiver assignment and live status changes.' },
-  { key: 'messages', label: 'Message alerts', hint: 'New messages from your caregivers and the support desk.' },
+  { key: 'bookings', label: 'Booking updates', hint: 'Confirmations, caretaker assignment and live status changes.' },
+  { key: 'messages', label: 'Message alerts', hint: 'New messages from your caretakers and the support desk.' },
   { key: 'promotions', label: 'Promotions', hint: 'Offers, seasonal discounts and new service launches.' },
   { key: 'receipts', label: 'Email receipts', hint: 'Invoices and payment receipts delivered to your inbox.' },
 ]
@@ -72,7 +72,13 @@ export function ProfilePage() {
 
   const [signOutOpen, setSignOutOpen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
-  const [prefs, setPrefs] = useState({ bookings: true, messages: true, promotions: false, receipts: true })
+  const [prefs, setPrefs] = useState(() => ({
+    bookings: true,
+    messages: true,
+    promotions: false,
+    receipts: true,
+    ...user?.notificationPrefs,
+  }))
 
   const personal = useForm({
     mode: 'onTouched',
@@ -131,12 +137,26 @@ export function ProfilePage() {
     toast.success('Profile updated')
   }
 
-  const onPassword = () => {
-    toast.success('Password changed (demo)')
+  const onPassword = ({ current, next }) => {
+    // Demo accounts all share the seeded password; a custom one is only kept in
+    // this browser, so accept either rather than locking the user out.
+    const stored = user?.password
+    const ok = stored ? current === stored : current === 'caremate123'
+    if (!ok) {
+      toast.error('Current password is incorrect', {
+        description: 'Demo accounts use the password caremate123.',
+      })
+      return
+    }
+    updateProfile({ password: next })
+    toast.success('Password changed', { description: 'Use the new password next time you sign in.' })
     password.reset()
   }
 
-  const savePrefs = () => toast.success('Notification preferences saved')
+  const savePrefs = () => {
+    updateProfile({ notificationPrefs: prefs })
+    toast.success('Notification preferences saved')
+  }
 
   const scrollToDetails = (event) => {
     event.preventDefault()
@@ -284,7 +304,7 @@ export function ProfilePage() {
       <Card as="section" id="patient-information">
         <CardHeader
           title="Patient information"
-          subtitle="Details of the person receiving care — shared with the assigned caregiver."
+          subtitle="Details of the person receiving care — shared with the assigned caretaker."
           icon={ShieldCheck}
         />
         <CardBody>
@@ -332,7 +352,7 @@ export function ProfilePage() {
               label="Condition & care requirements"
               htmlFor="pt-condition"
               error={patient.formState.errors.condition?.message}
-              hint="Anything the caregiver should know before the first visit"
+              hint="Anything the caretaker should know before the first visit"
             >
               <Textarea
                 id="pt-condition"

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   BadgeCheck,
@@ -18,6 +19,7 @@ import { useDocumentTitle, useDebouncedValue } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { cn } from '@/utils/cn'
 import { CARE_TYPES, CITIES, QUALIFICATIONS } from '@/utils/constants'
+import { EASE, reveal } from '@/utils/motion'
 import { getServiceById } from '@/data/services'
 import { CAREGIVERS } from '@/data/caregivers'
 import { Button } from '@/components/common/Button'
@@ -400,8 +402,15 @@ export function CaregiversPage() {
                   view === 'grid' ? 'sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1',
                 )}
               >
-                {pageItems.map((cg) => (
-                  <CaregiverCard key={cg.id} caregiver={cg} view={view} />
+                {pageItems.map((cg, i) => (
+                  <motion.div
+                    key={cg.id}
+                    {...reveal}
+                    transition={{ duration: 0.6, ease: EASE, delay: (i % 3) * 0.08 }}
+                    className="h-full"
+                  >
+                    <CaregiverCard caregiver={cg} view={view} className="h-full" />
+                  </motion.div>
                 ))}
               </div>
             )}

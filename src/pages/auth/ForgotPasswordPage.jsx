@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -16,6 +16,7 @@ const formatTime = (total) => `${Math.floor(total / 60)}:${String(total % 60).pa
 export function ForgotPasswordPage() {
   useDocumentTitle('Forgot Password')
 
+  const navigate = useNavigate()
   const [sentTo, setSentTo] = useState('')
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS)
 
@@ -80,6 +81,14 @@ export function ForgotPasswordPage() {
 
               <div className="space-y-3 border-t border-line pt-4">
                 <Button
+                  iconRight={ArrowRight}
+                  size="lg"
+                  className="w-full"
+                  onClick={() => navigate('/reset-password', { state: { email: sentTo } })}
+                >
+                  Open reset link
+                </Button>
+                <Button
                   variant="outline"
                   icon={secondsLeft > 0 ? Timer : RefreshCw}
                   disabled={secondsLeft > 0}
@@ -89,12 +98,14 @@ export function ForgotPasswordPage() {
                 >
                   {secondsLeft > 0 ? `Resend in ${formatTime(secondsLeft)}` : 'Resend link'}
                 </Button>
-                <Button to="/login" size="lg" icon={ArrowLeft} className="w-full">
+                <Button to="/login" size="lg" variant="ghost" icon={ArrowLeft} className="w-full">
                   Back to login
                 </Button>
               </div>
 
-              <p className="text-xs text-muted">Email delivery is simulated in this frontend demo.</p>
+              <p className="text-xs text-muted">
+                Email delivery is simulated in this frontend demo — use the button above in place of the email.
+              </p>
             </CardBody>
           </Card>
         </motion.div>

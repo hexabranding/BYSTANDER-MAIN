@@ -114,7 +114,7 @@ function DetailPanel({
                 {relativeTime(record.submittedOn)})
               </p>
             </div>
-            <div className="shrink-0 rounded-xl border border-line px-4 py-3 text-center sm:w-40">
+            <div className="shrink-0 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-center sm:w-40">
               <p className="font-display text-2xl font-extrabold tabular-nums text-ink">{record.overallScore}%</p>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">Overall score</p>
               <ProgressBar value={record.overallScore} tone={scoreTone} className="mt-2" />
@@ -374,7 +374,7 @@ export function VerificationsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Caregiver verifications"
+        title="Caretaker verifications"
         subtitle="Review submitted documents, approve or reject applications and keep an auditable trail of every decision."
         meta={
           <>
@@ -386,7 +386,7 @@ export function VerificationsPage() {
         }
         action={
           <Button to="/admin/caregivers" variant="outline">
-            Caregiver directory
+            Caretaker directory
           </Button>
         }
       />

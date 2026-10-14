@@ -138,9 +138,9 @@ export function FraudAlertsPage() {
       const ref = f.subject.replace(/^Booking\s+/, '')
       records.push({ label: 'Booking reference', value: ref, to: '/admin/bookings' })
     }
-    if (f.subjectType === 'Caregiver') {
+    if (f.subjectType === 'Caretaker') {
       const caregiver = caregivers.find((c) => c.name === f.subject)
-      records.push({ label: 'Caregiver profile', value: caregiver ? caregiver.id : f.subject, to: '/admin/caregivers' })
+      records.push({ label: 'Caretaker profile', value: caregiver ? caregiver.id : f.subject, to: '/admin/caregivers' })
       if (caregiver) records.push({ label: 'City', value: caregiver.city || '—' })
     }
     if (f.subjectType === 'Customer') {
@@ -319,7 +319,7 @@ export function FraudAlertsPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Linked records</p>
               <ul className="mt-2 divide-y divide-line overflow-hidden rounded-card border border-line">
                 {linkedRecords(selected).map((r) => (
-                  <li key={r.label} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <li key={r.label} className="flex items-center justify-between gap-4 px-4 py-3 transition hover:bg-mint-50/60">
                     <span className="text-xs font-semibold uppercase tracking-wider text-faint">{r.label}</span>
                     {r.to ? (
                       <Button size="xs" variant="link" to={r.to}>

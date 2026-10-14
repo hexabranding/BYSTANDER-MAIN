@@ -15,7 +15,9 @@ export function Tabs({ tabs, active, onChange, className, size = 'md' }) {
             className={cn(
               'inline-flex shrink-0 items-center gap-1.5 rounded-lg font-semibold whitespace-nowrap transition',
               size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-3.5 py-2 text-sm',
-              isActive ? 'bg-white text-primary-800 shadow-card' : 'text-muted hover:text-ink',
+              isActive
+                ? 'bg-white text-primary-800 shadow-card ring-1 ring-primary-100'
+                : 'text-muted hover:bg-white/60 hover:text-ink',
             )}
           >
             {label}
@@ -58,11 +60,11 @@ export function Chip({ children, selected, onClick, className }) {
 export function ProgressBar({ value = 0, max = 100, tone = 'primary', className, showLabel = false }) {
   const pct = Math.min(100, Math.max(0, (value / max) * 100))
   const tones = {
-    primary: 'bg-primary-700',
-    accent: 'bg-accent-400',
-    success: 'bg-success-500',
-    warning: 'bg-warning-400',
-    danger: 'bg-danger-500',
+    primary: 'bg-gradient-to-r from-primary-500 to-primary-700',
+    accent: 'bg-gradient-to-r from-accent-400 to-accent-600',
+    success: 'bg-gradient-to-r from-success-500 to-success-700',
+    warning: 'bg-gradient-to-r from-warning-400 to-warning-700',
+    danger: 'bg-gradient-to-r from-danger-500 to-danger-700',
   }
   return (
     <div className={cn('flex items-center gap-3', className)}>

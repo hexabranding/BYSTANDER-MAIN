@@ -25,10 +25,10 @@ const RANGES = [
 
 const REPORT_TYPES = [
   'Monthly booking & revenue report',
-  'Caregiver verification audit',
+  'Caretaker verification audit',
   'Complaint resolution SLA report',
   'SOS incident audit trail',
-  'Caregiver payout reconciliation',
+  'Caretaker payout reconciliation',
   'Service distribution by city',
 ]
 

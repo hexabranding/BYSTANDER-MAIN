@@ -12,6 +12,7 @@ import { CaregiversPage } from '@/pages/public/CaregiversPage'
 import { CaregiverDetailsPage } from '@/pages/public/CaregiverDetailsPage'
 import { AboutPage } from '@/pages/public/AboutPage'
 import { ContactPage } from '@/pages/public/ContactPage'
+import { LegalPage } from '@/pages/public/LegalPage'
 import { NotFoundPage } from '@/pages/public/NotFoundPage'
 
 import { LoginPage } from '@/pages/auth/LoginPage'
@@ -19,6 +20,7 @@ import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { RegisterCustomerPage } from '@/pages/auth/RegisterCustomerPage'
 import { RegisterCaregiverPage } from '@/pages/auth/RegisterCaregiverPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 import { VerifyOtpPage } from '@/pages/auth/VerifyOtpPage'
 
 import { DashboardPage as CustomerDashboard } from '@/pages/customer/DashboardPage'
@@ -30,6 +32,7 @@ import { PaymentsPage as CustomerPayments } from '@/pages/customer/PaymentsPage'
 import { InvoicesPage as CustomerInvoices } from '@/pages/customer/InvoicesPage'
 import { MessagesPage as CustomerMessages } from '@/pages/customer/MessagesPage'
 import { ComplaintsPage as CustomerComplaints } from '@/pages/customer/ComplaintsPage'
+import { ReviewsPage as CustomerReviewsPage } from '@/pages/customer/ReviewsPage'
 import { ProfilePage as CustomerProfile } from '@/pages/customer/ProfilePage'
 
 import { DashboardPage as CaregiverDashboard } from '@/pages/caregiver/DashboardPage'
@@ -72,6 +75,7 @@ export function AppRoutes() {
         <Route path="/caregivers/:id" element={<CaregiverDetailsPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/legal/:doc" element={<LegalPage />} />
         <Route path="/404" element={<NotFoundPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
@@ -82,6 +86,7 @@ export function AppRoutes() {
         <Route path="/register/customer" element={<RegisterCustomerPage />} />
         <Route path="/register/caregiver" element={<RegisterCaregiverPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-otp" element={<VerifyOtpPage />} />
       </Route>
 
@@ -103,6 +108,7 @@ export function AppRoutes() {
         <Route path="invoices" element={<CustomerInvoices />} />
         <Route path="messages" element={<CustomerMessages />} />
         <Route path="complaints" element={<CustomerComplaints />} />
+        <Route path="reviews" element={<CustomerReviewsPage />} />
         <Route path="profile" element={<CustomerProfile />} />
       </Route>
 

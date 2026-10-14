@@ -8,6 +8,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { bookingsForCaregiver, getCustomerById } from '@/data/bookings'
 import { cn } from '@/utils/cn'
 import { formatDate } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -154,7 +155,7 @@ export function SchedulePage() {
                 {dayBookings.map((b) => (
                   <div key={b.id} className="rounded-xl border border-line bg-white p-3 shadow-card">
                     <p className="text-[11px] font-bold tabular-nums text-primary-700">
-                      {b.startTime} · {b.hours} hrs
+                      {b.startTime} · {formatDuration(b.hours, { short: true })}
                     </p>
                     <p className="mt-0.5 truncate text-xs font-semibold text-ink">{b.service}</p>
                     <p className="truncate text-[11px] text-muted">{getCustomerById(b.customerId)?.name || 'Customer'}</p>
@@ -219,7 +220,7 @@ export function SchedulePage() {
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {b.startTime} · {b.hours} hrs
+                          {b.startTime} · {formatDuration(b.hours, { short: true })}
                         </span>
                       </p>
                     </div>
@@ -249,7 +250,7 @@ export function SchedulePage() {
           <CardBody>
             <ul className="space-y-2.5">
               {(caregiver?.weekAvailability || []).map((w) => (
-                <li key={w.day} className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-2.5">
+                <li key={w.day} className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-2.5 transition hover:border-primary-200 hover:bg-mint-50/50">
                   <span className="text-sm font-semibold text-ink">{w.day}</span>
                   <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', BLOCK_STYLES[w.status])}>
                     {w.status}

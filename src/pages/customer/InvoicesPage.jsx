@@ -6,6 +6,7 @@ import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { downloadText, formatCurrency, formatDate } from '@/utils/format'
+import { durationBasis, formatDuration } from '@/utils/duration'
 import { GST_RATE, PLATFORM_FEE } from '@/utils/constants'
 import { getCustomerById } from '@/data/bookings'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -70,15 +71,15 @@ function buildInvoiceText(b, caregiverName, customer) {
     pad('Reference', b.ref || '—'),
     pad('Service', b.service),
     pad('Care type', b.careType || '—'),
-    pad('Caregiver', caregiverName),
+    pad('Caretaker', caregiverName),
     pad('Patient', `${patient.name || '—'} (${patient.age || '—'} yrs, ${patient.relation || '—'})`),
     pad('Service date', formatDate(b.date, { long: true })),
-    pad('Duration', `${b.startTime} · ${b.hours} hrs`),
+    pad('Duration', `${b.startTime} · ${formatDuration(b.hours, { short: true })}`),
     pad('Address', b.address),
     '',
     'LINE ITEMS',
     '-'.repeat(56),
-    pad(`Care charges (${b.hours} hrs x ${formatCurrency(b.hourlyRate)})`, formatCurrency(subtotal)),
+    pad(`Care charges (${durationBasis(b.hours)} x ${formatCurrency(b.hourlyRate)})`, formatCurrency(subtotal)),
     pad('Platform handling fee', formatCurrency(platformFee)),
     pad('GST @ 18%', formatCurrency(tax)),
     '-'.repeat(56),
@@ -86,7 +87,7 @@ function buildInvoiceText(b, caregiverName, customer) {
     '',
     'TERMS',
     '-'.repeat(56),
-    'Payment is held in escrow and released to the caregiver after the service is',
+    'Payment is held in escrow and released to the caretaker after the service is',
     'marked complete. Cancellations made 6 hours before the visit are refunded to the',
     'original payment method within 3-5 working days. GST is charged at 18% on',
     'platform services as applicable under Indian law.',
@@ -102,16 +103,16 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
   const details = [
     { label: 'Service', value: booking.service },
     { label: 'Care type', value: booking.careType || '—' },
-    { label: 'Caregiver', value: caregiverName },
+    { label: 'Caretaker', value: caregiverName },
     { label: 'Booking ID', value: booking.id },
     { label: 'Service date', value: formatDate(booking.date, { long: true }) },
-    { label: 'Duration', value: `${booking.startTime} · ${booking.hours} hrs` },
+    { label: 'Duration', value: `${booking.startTime} · ${formatDuration(booking.hours, { short: true })}` },
     { label: 'Patient', value: `${patient.name || '—'} · ${patient.age || '—'} yrs · ${patient.relation || '—'}` },
     { label: 'Reference', value: booking.ref || '—' },
   ]
 
   const lineItems = [
-    { label: 'Care charges', meta: `${booking.hours} hrs × ${formatCurrency(booking.hourlyRate)}/hr`, amount: subtotal },
+    { label: 'Care charges', meta: `${durationBasis(booking.hours)} × ${formatCurrency(booking.hourlyRate)}/hr`, amount: subtotal },
     { label: 'Platform handling fee', meta: 'Booking, support and escrow handling', amount: platformFee },
     { label: 'GST @ 18%', meta: 'Applicable on platform services', amount: tax },
   ]
@@ -342,7 +343,7 @@ export function InvoicesPage() {
             description="Once a booking is created, its invoice will appear here ready to view, print or download."
             action={
               <Button to="/customer/book-caregiver" icon={Receipt}>
-                Book a caregiver
+                Book a caretaker
               </Button>
             }
           />

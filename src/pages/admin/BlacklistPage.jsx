@@ -38,7 +38,7 @@ export function BlacklistPage() {
   const stats = useMemo(
     () => ({
       total: blacklist.length,
-      caregivers: blacklist.filter((b) => b.type === 'Caregiver').length,
+      caregivers: blacklist.filter((b) => b.type === 'Caretaker').length,
       customers: blacklist.filter((b) => b.type === 'Customer').length,
       permanent: blacklist.filter((b) => String(b.reviewAfter).toLowerCase() === 'permanent').length,
     }),
@@ -49,7 +49,7 @@ export function BlacklistPage() {
     const q = debouncedSearch.trim().toLowerCase()
     return blacklist.filter((b) => {
       const matchesType =
-        type === 'All' || (type === 'Caregivers' && b.type === 'Caregiver') || (type === 'Customers' && b.type === 'Customer')
+        type === 'All' || (type === 'Caregivers' && b.type === 'Caretaker') || (type === 'Customers' && b.type === 'Customer')
       const matchesSearch =
         !q || [b.id, b.name, b.type, b.reason, b.addedBy].join(' ').toLowerCase().includes(q)
       return matchesType && matchesSearch
@@ -69,7 +69,7 @@ export function BlacklistPage() {
     formState: { errors },
   } = useForm({
     mode: 'onTouched',
-    defaultValues: { name: '', type: 'Caregiver', reason: '', reviewAfter: '' },
+    defaultValues: { name: '', type: 'Caretaker', reason: '', reviewAfter: '' },
   })
 
   const closeAdd = () => {
@@ -114,7 +114,7 @@ export function BlacklistPage() {
       header: 'Type',
       render: (b) => (
         <span className="inline-flex items-center gap-1.5 text-sm text-ink-soft">
-          {b.type === 'Caregiver' ? <Briefcase className="h-3.5 w-3.5 text-primary-700" /> : <Users className="h-3.5 w-3.5 text-accent-500" />}
+          {b.type === 'Caretaker' ? <Briefcase className="h-3.5 w-3.5 text-primary-700" /> : <Users className="h-3.5 w-3.5 text-accent-500" />}
           {b.type}
         </span>
       ),
@@ -211,7 +211,7 @@ export function BlacklistPage() {
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard label="Total entries" value={stats.total} icon={Ban} tone="primary" hint="All time" delay={0} />
-        <StatCard label="Caregivers" value={stats.caregivers} icon={Briefcase} tone="accent" hint="Banned from taking jobs" delay={0.05} />
+        <StatCard label="Caretakers" value={stats.caregivers} icon={Briefcase} tone="accent" hint="Banned from taking jobs" delay={0.05} />
         <StatCard label="Customers" value={stats.customers} icon={Users} tone="info" hint="Banned from booking" delay={0.1} />
         <StatCard label="Permanent bans" value={stats.permanent} icon={Lock} tone="danger" hint="No automatic review date" delay={0.15} />
       </div>
@@ -226,11 +226,11 @@ export function BlacklistPage() {
         <Tabs
           tabs={TYPE_TABS.map((t) => ({
             id: t,
-            label: t,
+            label: t === 'Caregivers' ? 'Caretakers' : t,
             count:
               t === 'All'
                 ? blacklist.length
-                : blacklist.filter((b) => b.type === (t === 'Caregivers' ? 'Caregiver' : 'Customer')).length,
+                : blacklist.filter((b) => b.type === (t === 'Caregivers' ? 'Caretaker' : 'Customer')).length,
           }))}
           active={type}
           onChange={setType}
@@ -302,7 +302,7 @@ export function BlacklistPage() {
               </span>
             </div>
 
-            <div className="rounded-card border border-danger-100 bg-danger-50 p-4">
+            <div className="rounded-card border border-danger-100 bg-gradient-to-br from-danger-50 to-white p-4">
               <p className="text-[10px] font-bold uppercase tracking-wider text-danger-600">Reason for the ban</p>
               <p className="mt-2 text-sm leading-relaxed text-ink-soft">{selected.reason}</p>
             </div>
@@ -320,7 +320,7 @@ export function BlacklistPage() {
                     : formatDate(selected.reviewAfter, { long: true })
                 }
               />
-              <Detail label="Enforced scope" value={selected.type === 'Caregiver' ? 'Job matching + payouts' : 'Bookings + sign-in'} />
+              <Detail label="Enforced scope" value={selected.type === 'Caretaker' ? 'Job matching + payouts' : 'Bookings + sign-in'} />
             </dl>
           </div>
         ) : null}
@@ -334,7 +334,7 @@ export function BlacklistPage() {
         title="Remove from blacklist?"
         message={
           selected
-            ? `${selected.name} will be able to ${selected.type === 'Caregiver' ? 'accept jobs again' : 'book services again'} immediately. The removal is written to the demo audit trail.`
+            ? `${selected.name} will be able to ${selected.type === 'Caretaker' ? 'accept jobs again' : 'book services again'} immediately. The removal is written to the demo audit trail.`
             : ''
         }
         confirmLabel="Remove entry"
@@ -395,7 +395,7 @@ function AddModal({ open, onClose, onSubmit, register, errors }) {
 
           <FormField label="Account type" htmlFor="bl-type" required error={errors.type?.message}>
             <Select id="bl-type" error={errors.type?.message} {...register('type')}>
-              <option value="Caregiver">Caregiver</option>
+              <option value="Caretaker">Caretaker</option>
               <option value="Customer">Customer</option>
             </Select>
           </FormField>

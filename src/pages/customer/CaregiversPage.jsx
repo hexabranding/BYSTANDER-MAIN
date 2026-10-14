@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, LayoutGrid, List, SearchX, SlidersHorizontal, UserRound } from 'lucide-react'
-import { toast } from 'sonner'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
@@ -42,9 +41,9 @@ const SORT_OPTIONS = [
 ]
 
 export function CaregiversPage() {
-  useDocumentTitle('Caregivers')
+  useDocumentTitle('Caretakers')
   const navigate = useNavigate()
-  const { caregivers, shortlist, toggleShortlist: toggleShortlistStore } = useData()
+  const { caregivers, shortlist } = useData()
 
   const [search, setSearch] = useState('')
   const [service, setService] = useState('All services')
@@ -54,13 +53,6 @@ export function CaregiversPage() {
   const [view, setView] = useState('grid')
   const [shortlistOnly, setShortlistOnly] = useState(false)
   const shortlisted = useMemo(() => new Set(shortlist), [shortlist])
-
-  const toggleShortlist = (caregiver) => {
-    const wasSaved = shortlisted.has(caregiver.id)
-    toggleShortlistStore(caregiver.id)
-    if (wasSaved) toast(`${caregiver.name} removed from shortlist`)
-    else toast.success('Added to shortlist', { description: `${caregiver.name} saved for later.` })
-  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -109,31 +101,14 @@ export function CaregiversPage() {
     setShortlistOnly(false)
   }
 
-  const HeartButton = ({ caregiver }) => {
-    const saved = shortlisted.has(caregiver.id)
-    return (
-      <button
-        type="button"
-        onClick={() => toggleShortlist(caregiver)}
-        aria-label={saved ? `Remove ${caregiver.name} from shortlist` : `Add ${caregiver.name} to shortlist`}
-        className={cn(
-          'absolute -right-2 -top-2 z-10 grid h-9 w-9 place-items-center rounded-full border bg-white shadow-card transition hover:scale-105',
-          saved ? 'border-danger-200 text-danger-500' : 'border-line-strong text-faint hover:text-danger-500',
-        )}
-      >
-        <Heart className={cn('h-4 w-4', saved && 'fill-danger-500')} />
-      </button>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Caregivers"
-        subtitle="Browse verified caregivers, shortlist your favourites and book in minutes."
+        title="Caretakers"
+        subtitle="Browse verified caretakers, shortlist your favourites and book in minutes."
         action={
           <Button to="/customer/book-caregiver" icon={UserRound}>
-            Book a caregiver
+            Book a caretaker
           </Button>
         }
         meta={
@@ -189,7 +164,7 @@ export function CaregiversPage() {
               </option>
             ))}
           </Select>
-          <Select aria-label="Sort caregivers" value={sort} onChange={(e) => setSort(e.target.value)} className="h-11 sm:w-52">
+          <Select aria-label="Sort caretakers" value={sort} onChange={(e) => setSort(e.target.value)} className="h-11 sm:w-52">
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -232,7 +207,7 @@ export function CaregiversPage() {
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}
-            title="No caregivers match"
+            title="No caretakers match"
             description="Try broadening your search or clearing the filters."
             action={
               <Button variant="outline" onClick={resetFilters}>
@@ -246,29 +221,25 @@ export function CaregiversPage() {
           {view === 'grid' ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {pageItems.map((cg) => (
-                <div key={cg.id} className="relative">
-                  <HeartButton caregiver={cg} />
-                  <CaregiverCard
-                    caregiver={cg}
-                    view="grid"
-                    onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
-                    actionLabel="View profile"
-                  />
-                </div>
+                <CaregiverCard
+                  key={cg.id}
+                  caregiver={cg}
+                  view="grid"
+                  onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
+                  actionLabel="View profile"
+                />
               ))}
             </div>
           ) : (
             <div className="space-y-4">
               {pageItems.map((cg) => (
-                <div key={cg.id} className="relative">
-                  <HeartButton caregiver={cg} />
-                  <CaregiverCard
-                    caregiver={cg}
-                    view="list"
-                    onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
-                    actionLabel="View profile"
-                  />
-                </div>
+                <CaregiverCard
+                  key={cg.id}
+                  caregiver={cg}
+                  view="list"
+                  onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
+                  actionLabel="View profile"
+                />
               ))}
             </div>
           )}

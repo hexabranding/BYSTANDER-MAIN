@@ -9,10 +9,10 @@ const OPTIONS = [
     id: 'customer',
     icon: HeartHandshake,
     eyebrow: 'For families',
-    title: 'Book a caregiver',
-    description: 'Find verified caregivers and nurses for your loved one at home.',
+    title: 'Book a caretaker',
+    description: 'Find verified caretakers and nurses for your loved one at home.',
     bullets: [
-      'Browse verified caregivers near you',
+      'Browse verified caretakers near you',
       'Escrow-protected payments',
       'Live booking tracking and SOS support',
     ],
@@ -22,8 +22,8 @@ const OPTIONS = [
   {
     id: 'caregiver',
     icon: Stethoscope,
-    eyebrow: 'For caregivers & nurses',
-    title: 'Join as a caregiver',
+    eyebrow: 'For caretakers & nurses',
+    title: 'Join as a caretaker',
     description: 'Earn flexible income with shifts that match your skills and city.',
     bullets: [
       'Get matched with nearby jobs',
@@ -31,7 +31,7 @@ const OPTIONS = [
       'Documents verified by our team',
     ],
     to: '/register/caregiver',
-    cta: 'Apply as caregiver',
+    cta: 'Apply as caretaker',
   },
   {
     id: 'admin',
@@ -40,7 +40,7 @@ const OPTIONS = [
     title: 'Explore the admin console',
     description: 'Tour CareMate operations with a seeded admin demo account.',
     bullets: [
-      'Review caregiver verifications',
+      'Review caretaker verifications',
       'Monitor bookings, payouts and commissions',
       'Handle complaints and SOS alerts',
     ],
@@ -50,9 +50,9 @@ const OPTIONS = [
 ]
 
 const WHY_POINTS = [
-  'Every caregiver submits government ID, qualification and police-clearance documents.',
+  'Every caretaker submits government ID, qualification and police-clearance documents.',
   'A human reviews each file before a profile goes live — never auto-approved.',
-  'Families only see caregivers whose verification status is Approved.',
+  'Families only see caretakers whose verification status is Approved.',
 ]
 
 export function RegisterPage() {

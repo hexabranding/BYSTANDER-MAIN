@@ -35,7 +35,7 @@ const NOTIFICATIONS = [
   { key: 'sos', label: 'SOS alerts', hint: 'Every emergency trigger, instantly, to the ops desk.' },
   { key: 'complaint', label: 'Complaint escalations', hint: 'Complaints that move past their SLA or change stage.' },
   { key: 'digest', label: 'Daily digest', hint: 'One summary email each morning at 08:00 IST.' },
-  { key: 'payout', label: 'Payout failures', hint: 'Failed or returned caregiver payout transfers.' },
+  { key: 'payout', label: 'Payout failures', hint: 'Failed or returned caretaker payout transfers.' },
 ]
 
 const INITIAL_TEAM = [
@@ -257,7 +257,7 @@ export function SettingsPage() {
                   htmlFor="set-commission"
                   required
                   error={fees.formState.errors.commission?.message}
-                  hint="Deducted from caregiver earnings at payout time."
+                  hint="Deducted from caretaker earnings at payout time."
                 >
                   <Input
                     id="set-commission"
@@ -376,7 +376,7 @@ export function SettingsPage() {
         <Card>
           <CardHeader
             title="Verification policy"
-            subtitle="Documents and checks every caregiver must clear before going live"
+            subtitle="Documents and checks every caretaker must clear before going live"
             icon={ShieldCheck}
           />
           <CardBody className="space-y-5">
@@ -453,7 +453,7 @@ export function SettingsPage() {
           />
           <CardBody className="divide-y divide-line p-0">
             {team.map((member) => (
-              <div key={member.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
+              <div key={member.id} className="flex flex-wrap items-center gap-4 px-5 py-4 transition hover:bg-mint-50/60">
                 <Avatar name={member.name} size="md" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-display text-sm font-bold text-ink">{member.name}</p>
@@ -487,7 +487,7 @@ export function SettingsPage() {
             className="border-danger-100"
           />
           <CardBody className="space-y-4">
-            <div className="rounded-xl border border-danger-100 bg-danger-50 p-4">
+            <div className="rounded-xl border border-danger-100 bg-gradient-to-br from-danger-50 to-white p-4">
               <p className="text-sm font-bold text-danger-700">What is stored in your browser</p>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
                 CareMate saves demo state in <code className="rounded bg-white px-1.5 py-0.5 text-[11px]">localStorage</code> under

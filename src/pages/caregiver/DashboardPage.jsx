@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { motion } from 'framer-motion'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   AlertTriangle,
@@ -18,13 +19,15 @@ import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { WEEKLY_EARNINGS } from '@/data/charts'
 import { formatCurrency, formatDate, relativeTime } from '@/utils/format'
+import { formatDuration } from '@/utils/duration'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { cn } from '@/utils/cn'
+import { EASE } from '@/utils/motion'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatCard } from '@/components/common/StatCard'
+import { SectionLabel } from '@/components/common/SectionLabel'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { PageHeader } from '@/components/common/PageHeader'
 import { RatingStars } from '@/components/common/RatingStars'
 import { ProgressBar } from '@/components/common/Tabs'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
@@ -46,7 +49,7 @@ const toneDots = {
 }
 
 export function DashboardPage() {
-  useDocumentTitle('Caregiver Dashboard')
+  useDocumentTitle('Caretaker Dashboard')
 
   const { user } = useAuth()
   const { caregivers, jobs, bookings, notifications, earnings, acceptJob, confirmBooking, cancelBooking } = useData()
@@ -91,9 +94,18 @@ export function DashboardPage() {
 
   const recommended = openJobs.slice(0, 3)
 
-  const firstName = (caregiver?.name || user?.name || 'Caregiver').split(' ')[0]
+  const firstName = (caregiver?.name || user?.name || 'Caretaker').split(' ')[0]
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
+  // Headline numbers for the hero strip — kept out of the KPI cards below.
+  const liveShifts = myBookings.filter((b) => b.status !== 'Cancelled')
+  const bookedHours = liveShifts.reduce((sum, b) => sum + (b.hours || 0), 0)
+  const cancelledShifts = myBookings.length - liveShifts.length
+  const decidedShifts = completedJobs.length + cancelledShifts
+  const completionRate = decidedShifts ? Math.round((completedJobs.length / decidedShifts) * 100) : null
+  const clearedPayouts = myEarnings.filter((e) => e.status === 'Settled').reduce((sum, e) => sum + e.net, 0)
+  const nextShift = upcoming[0]
 
   const handleAccept = () => {
     if (!acceptTarget) return
@@ -110,7 +122,7 @@ export function DashboardPage() {
         description: `${requestTarget.booking.service} on ${formatDate(requestTarget.booking.date, { long: true })} is confirmed.`,
       })
     } else {
-      cancelBooking(requestTarget.booking.id, 'Declined by caregiver')
+      cancelBooking(requestTarget.booking.id, 'Declined by caretaker')
       toast.info('Booking request declined', { description: 'The customer has been notified.' })
     }
     setRequestTarget(null)
@@ -118,28 +130,109 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`${greeting}, ${firstName}`}
-        subtitle="Your shifts, earnings and verification status — all in one place."
-        meta={
-          <>
-            <StatusBadge status={caregiver?.verificationStatus || 'Pending'} />
-            <span className="text-xs text-muted">
-              {caregiver?.qualification} · {caregiver?.experienceYears} yrs experience
+      {/* ---------------- hero band ---------------- */}
+      <motion.section
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: EASE }}
+        className="relative overflow-hidden rounded-panel bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 shadow-raised"
+      >
+        <div aria-hidden="true" className="grid-pattern pointer-events-none absolute inset-0 opacity-[0.14]" />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[radial-gradient(closest-side,rgba(56,189,248,0.25),transparent)] blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-32 -left-20 h-64 w-64 rounded-full bg-[radial-gradient(closest-side,rgba(163,229,218,0.22),transparent)] blur-3xl"
+        />
+
+        <div className="relative flex flex-col gap-5 p-5 sm:p-7 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-accent-300 backdrop-blur-sm">
+              <Star className="h-3.5 w-3.5" />
+              Caretaker overview
             </span>
-          </>
-        }
-        action={
-          <Button variant={verified ? 'outline' : 'primary'} to="/caregiver/documents" icon={verified ? ShieldCheck : AlertTriangle}>
-            {verified ? 'View documents' : 'Complete verification'}
-          </Button>
-        }
-      />
+            <h1 className="mt-3 font-display text-2xl font-extrabold text-white sm:text-3xl">
+              {greeting}, {firstName}
+            </h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-white/60">
+              Your shifts, earnings and verification status — all in one place.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2.5">
+              <StatusBadge status={caregiver?.verificationStatus || 'Pending'} />
+              <span className="text-xs text-white/55">
+                {caregiver?.qualification} · {caregiver?.experienceYears} yrs experience
+              </span>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-3">
+            <Button
+              variant="accent"
+              to="/caregiver/documents"
+              icon={verified ? ShieldCheck : AlertTriangle}
+            >
+              {verified ? 'View documents' : 'Complete verification'}
+            </Button>
+            <Button variant="secondary" to="/caregiver/jobs" icon={Briefcase}>
+              Browse jobs
+            </Button>
+          </div>
+        </div>
+
+        <div className="relative grid grid-cols-2 border-t border-white/10 sm:grid-cols-4">
+          {[
+            {
+              label: 'Booked hours',
+              value: `${bookedHours} hrs`,
+              note: `Scheduled across ${liveShifts.length} shifts`,
+            },
+            {
+              label: 'Completion rate',
+              value: completionRate === null ? '—' : `${completionRate}%`,
+              note: `${completedJobs.length} completed · ${cancelledShifts} cancelled`,
+            },
+            {
+              label: 'Payouts cleared',
+              value: formatCurrency(clearedPayouts),
+              note: 'Settled to your bank account',
+            },
+            {
+              label: 'Next shift',
+              value: nextShift ? formatDate(nextShift.date) : '—',
+              note: nextShift
+                ? [nextShift.startTime, formatDuration(nextShift.hours, { short: true }), nextShift.city || nextShift.address]
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'No shift booked yet',
+            },
+          ].map((metric, i) => (
+            <div
+              key={metric.label}
+              className={cn(
+                'border-white/10 px-5 py-4 sm:px-6 sm:border-t-0',
+                i >= 2 && 'border-t',
+                i % 2 === 1 && 'border-l',
+                i >= 1 && 'sm:border-l',
+              )}
+            >
+              <p className="text-[11px] font-bold uppercase leading-tight tracking-[0.14em] text-white/45">
+                {metric.label}
+              </p>
+              <p className="mt-1.5 font-display text-xl font-extrabold tabular-nums text-white sm:text-2xl">
+                {metric.value}
+              </p>
+              <p className="mt-1 text-xs leading-snug text-white/50">{metric.note}</p>
+            </div>
+          ))}
+        </div>
+      </motion.section>
 
       {verified ? (
-        <div className="flex flex-col gap-3 rounded-card border border-success-500/30 bg-success-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex flex-col gap-3 rounded-card border border-success-500/30 bg-gradient-to-br from-success-50 to-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-success-100 text-success-700">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-success-50 to-success-100 text-success-700">
               <ShieldCheck className="h-5 w-5" />
             </span>
             <div>
@@ -154,9 +247,9 @@ export function DashboardPage() {
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 rounded-card border border-warning-400/40 bg-warning-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex flex-col gap-3 rounded-card border border-warning-400/40 bg-gradient-to-br from-warning-50 to-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-warning-100 text-warning-700">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-warning-50 to-warning-100 text-warning-700">
               <AlertTriangle className="h-5 w-5" />
             </span>
             <div>
@@ -173,12 +266,16 @@ export function DashboardPage() {
         </div>
       )}
 
+      <SectionLabel>At a glance</SectionLabel>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Open jobs" value={openJobs.length} icon={ClipboardList} tone="primary" hint="Waiting for your response" delay={0} />
         <StatCard label="Accepted jobs" value={acceptedJobs.length} icon={Briefcase} tone="accent" hint="On your schedule" delay={0.05} />
         <StatCard label="Upcoming shifts" value={upcoming.length} icon={CalendarCheck} tone="info" hint="Confirmed & in progress" delay={0.1} />
         <StatCard label="Completed jobs" value={completedJobs.length || caregiver?.completedJobs} icon={CheckCircle2} tone="success" hint="Lifetime on CareMate" delay={0.15} />
       </div>
+
+      <SectionLabel>Performance</SectionLabel>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -194,12 +291,12 @@ export function DashboardPage() {
           />
           <CardBody className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-faint">Total earned</p>
                 <p className="mt-1.5 font-display text-2xl font-extrabold tabular-nums text-ink">{formatCurrency(totalEarned)}</p>
                 <p className="mt-1 text-xs text-muted">Net of 12% platform commission</p>
               </div>
-              <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="rounded-xl border border-primary-100 bg-gradient-to-br from-mint-50 to-white p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-faint">Pending payout</p>
                 <p className="mt-1.5 font-display text-2xl font-extrabold tabular-nums text-primary-700">
                   {formatCurrency(pendingPayout)}
@@ -210,6 +307,12 @@ export function DashboardPage() {
             <div dir="ltr">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={WEEKLY_EARNINGS} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="cgWeeklyEarnings" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2DD4BF" />
+                      <stop offset="100%" stopColor="#0F766E" />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" vertical={false} />
                   <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
                   <YAxis
@@ -220,7 +323,7 @@ export function DashboardPage() {
                     tickFormatter={(v) => `₹${(v / 1000).toFixed(1)}k`}
                   />
                   <Tooltip cursor={{ fill: 'rgba(15,118,110,0.06)' }} contentStyle={tooltipStyle} formatter={(v) => formatCurrency(v)} />
-                  <Bar dataKey="earnings" fill="#0F766E" radius={[6, 6, 0, 0]} maxBarSize={38} />
+                  <Bar dataKey="earnings" fill="url(#cgWeeklyEarnings)" radius={[6, 6, 0, 0]} maxBarSize={38} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -266,6 +369,8 @@ export function DashboardPage() {
         </Card>
       </div>
 
+      <SectionLabel>Shifts &amp; updates</SectionLabel>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader
@@ -293,7 +398,7 @@ export function DashboardPage() {
                       </div>
                       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                         <span>
-                          {formatDate(b.date)} · {b.startTime} · {b.hours} hrs
+                          {formatDate(b.date)} · {b.startTime} · {formatDuration(b.hours, { short: true })}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
@@ -356,16 +461,23 @@ export function DashboardPage() {
 
       {bookingRequests.length ? (
         <section>
-          <div className="mb-3">
-            <h2 className="font-display text-base font-bold text-ink">Booking requests</h2>
-            <p className="text-sm text-muted">Customers waiting for your response — accept to lock the shift in.</p>
-          </div>
+          <SectionLabel
+            className="mb-3"
+            hint="Customers waiting for your response — accept to lock the shift in."
+            action={
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-50 px-2.5 py-1 text-[11px] font-bold text-danger-600">
+                {bookingRequests.length} waiting
+              </span>
+            }
+          >
+            Booking requests
+          </SectionLabel>
           <Card>
             <CardBody className="divide-y divide-line p-0">
               {bookingRequests.map((b) => {
                 const customerName = b.patient?.name
                 return (
-                  <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                  <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition hover:bg-mint-50/60">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-bold text-ink">{b.service}</p>
@@ -374,7 +486,7 @@ export function DashboardPage() {
                       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                         <span className="inline-flex items-center gap-1">
                           <CalendarCheck className="h-3 w-3" />
-                          {formatDate(b.date, { long: true })} · {b.startTime} · {b.hours} hrs
+                          {formatDate(b.date, { long: true })} · {b.startTime} · {formatDuration(b.hours, { short: true })}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
@@ -410,15 +522,17 @@ export function DashboardPage() {
       ) : null}
 
       <section>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-display text-base font-bold text-ink">Recommended for you</h2>
-            <p className="text-sm text-muted">Open shifts matched to your qualification and area preferences.</p>
-          </div>
-          <Button variant="link" size="sm" to="/caregiver/jobs">
-            View all jobs
-          </Button>
-        </div>
+        <SectionLabel
+          className="mb-3"
+          hint="Open shifts matched to your qualification and area preferences."
+          action={
+            <Button variant="link" size="sm" to="/caregiver/jobs">
+              View all jobs
+            </Button>
+          }
+        >
+          Recommended for you
+        </SectionLabel>
         {recommended.length ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {recommended.map((job) => (
@@ -488,10 +602,10 @@ export function DashboardPage() {
         title={requestTarget?.action === 'accept' ? 'Accept this booking?' : 'Decline this booking?'}
         message={
           requestTarget
-            ? `${requestTarget.booking.service} on ${formatDate(requestTarget.booking.date, { long: true })} at ${requestTarget.booking.startTime} for ${requestTarget.booking.hours} hrs. ${
+            ? `${requestTarget.booking.service} on ${formatDate(requestTarget.booking.date, { long: true })} at ${requestTarget.booking.startTime} for ${formatDuration(requestTarget.booking.hours, { short: true })}. ${
                 requestTarget.action === 'accept'
                   ? 'The shift is confirmed and payment is held in escrow.'
-                  : 'The customer will be notified and matched with another caregiver.'
+                  : 'The customer will be notified and matched with another caretaker.'
               }`
             : ''
         }

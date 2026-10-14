@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   BadgeCheck,
@@ -22,11 +23,14 @@ import {
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatCurrency, formatDate, initials } from '@/utils/format'
+import { durationBasis } from '@/utils/duration'
+import { reveal } from '@/utils/motion'
 import { getCaregiverById } from '@/data/caregivers'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
+import { Reveal } from '@/components/common/Reveal'
 import { Avatar } from '@/components/common/Avatar'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { RatingStars } from '@/components/common/RatingStars'
@@ -56,7 +60,7 @@ export function CaregiverDetailsPage() {
   const navigate = useNavigate()
   const caregiver = getCaregiverById(id)
 
-  useDocumentTitle(caregiver ? caregiver.name : 'Caregiver')
+  useDocumentTitle(caregiver ? caregiver.name : 'Caretaker')
 
   const { isLoggedIn, user } = useAuth()
   const { reviews, addReview } = useData()
@@ -72,9 +76,9 @@ export function CaregiverDetailsPage() {
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={ShieldCheck}
-            title="Caregiver not found"
-            description="This profile may have been removed or the link is incorrect. Browse all verified caregivers to find the right match."
-            action={<Button to="/caregivers">Browse caregivers</Button>}
+            title="Caretaker not found"
+            description="This profile may have been removed or the link is incorrect. Browse all verified caretakers to find the right match."
+            action={<Button to="/caregivers">Browse caretakers</Button>}
           />
         </div>
       </div>
@@ -125,7 +129,7 @@ export function CaregiverDetailsPage() {
       toast.error('Booking is available from a customer account. Please switch accounts to continue.')
       return
     }
-    toast.error('Please sign in as a customer to book this caregiver.')
+    toast.error('Please sign in as a customer to book this caretaker.')
     navigate('/login')
   }
 
@@ -159,11 +163,11 @@ export function CaregiverDetailsPage() {
   return (
     <div className="bg-canvas">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <Breadcrumbs items={[{ label: 'Caregivers', to: '/caregivers' }, { label: name }]} />
+        <Breadcrumbs items={[{ label: 'Caretakers', to: '/caregivers' }, { label: name }]} />
 
         <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_21rem] lg:items-start">
           {/* ---------------- left column ---------------- */}
-          <div className="space-y-5">
+          <motion.div {...reveal} className="space-y-5">
             <Card>
               <CardBody className="p-5 sm:p-6">
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
@@ -338,7 +342,7 @@ export function CaregiverDetailsPage() {
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <p className="font-display text-3xl font-extrabold text-ink">{formatCurrency(hourlyRate)}</p>
-                    <p className="mt-1 text-sm text-muted">per hour · billed in 1-hour increments</p>
+                    <p className="mt-1 text-sm text-muted">per hour · book by the hour, day or week</p>
                     <p className="mt-2 text-xs text-faint">
                       Platform charges {formatCurrency(49)} + 18% GST are added at checkout.
                     </p>
@@ -348,16 +352,16 @@ export function CaregiverDetailsPage() {
                       Ask a question
                     </Button>
                     <Button onClick={handleBook} icon={PenLine}>
-                      Book Caregiver
+                      Book Caretaker
                     </Button>
                   </div>
                 </div>
               </CardBody>
             </Card>
-          </div>
+          </motion.div>
 
           {/* ---------------- right column ---------------- */}
-          <aside className="space-y-4 lg:sticky lg:top-20">
+          <Reveal as="aside" from="none" delay={0.12} className="space-y-4 lg:sticky lg:top-20">
             <Card>
               <CardHeader title="Booking summary" subtitle="Estimate for a single day shift" icon={Clock} />
               <CardBody className="space-y-4">
@@ -378,7 +382,7 @@ export function CaregiverDetailsPage() {
                 <PriceBreakdown
                   items={[
                     {
-                      label: `${formatCurrency(hourlyRate)} × ${ESTIMATED_HOURS} hours`,
+                      label: `${formatCurrency(hourlyRate)} × ${durationBasis(ESTIMATED_HOURS)}`,
                       meta: 'Estimated day shift',
                       amount: subtotal,
                     },
@@ -391,7 +395,7 @@ export function CaregiverDetailsPage() {
                 />
 
                 <Button onClick={handleBook} size="lg" className="w-full">
-                  Book Caregiver
+                  Book Caretaker
                 </Button>
 
                 <p className="flex items-start gap-2 text-xs leading-relaxed text-muted">
@@ -415,11 +419,11 @@ export function CaregiverDetailsPage() {
                 Create free account
               </Button>
             </div>
-          </aside>
+          </Reveal>
         </div>
 
         {/* ---------------- reviews ---------------- */}
-        <section className="mt-8 rounded-card border border-line bg-white shadow-card">
+        <motion.section {...reveal} className="mt-8 rounded-card border border-line bg-white shadow-card">
           <div className="flex flex-col gap-4 border-b border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <div className="text-center">
@@ -489,10 +493,10 @@ export function CaregiverDetailsPage() {
               ))}
             </ul>
           )}
-        </section>
+        </motion.section>
 
         {/* ---------------- how verification works ---------------- */}
-        <section className="mt-6 grid gap-4 sm:grid-cols-3">
+        <motion.section {...reveal} className="mt-6 grid gap-4 sm:grid-cols-3">
           {[
             {
               icon: Briefcase,
@@ -518,7 +522,7 @@ export function CaregiverDetailsPage() {
               <p className="mt-1 text-xs leading-relaxed text-muted">{item.body}</p>
             </div>
           ))}
-        </section>
+        </motion.section>
       </div>
 
       {/* ---------------- review modal ---------------- */}

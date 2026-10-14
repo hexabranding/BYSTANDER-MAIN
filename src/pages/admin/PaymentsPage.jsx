@@ -142,7 +142,7 @@ export function PaymentsPage() {
     },
     { key: 'bookingId', header: 'Booking', render: (t) => <span className="text-primary-700">{t.bookingId}</span> },
     { key: 'customerName', header: 'Customer' },
-    { key: 'caregiverName', header: 'Caregiver' },
+    { key: 'caregiverName', header: 'Caretaker' },
     { key: 'service', header: 'Service' },
     { key: 'method', header: 'Method', sortable: false },
     {
@@ -306,7 +306,7 @@ export function PaymentsPage() {
                 ))}
               </Select>
             </FormField>
-            <div className="rounded-xl border border-line bg-slate-50/70 p-4 text-xs leading-relaxed text-muted">
+            <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 text-xs leading-relaxed text-muted">
               <p className="font-semibold text-ink">Ledger snapshot</p>
               <p className="mt-1.5">
                 {inRange.length} transactions in range · {formatCurrency(stats.gross)} gross ·{' '}
@@ -325,7 +325,7 @@ export function PaymentsPage() {
           <SearchBar
             value={search}
             onChange={setSearch}
-            placeholder="Search by transaction ID, booking or caregiver…"
+            placeholder="Search by transaction ID, booking or caretaker…"
             className="sm:max-w-sm sm:flex-1"
           />
           <Tabs
@@ -410,7 +410,7 @@ export function PaymentsPage() {
               <DetailRow label="Booking" value={selected.bookingId} />
               <DetailRow label="Service" value={selected.service} />
               <DetailRow label="Customer" value={selected.customerName} />
-              <DetailRow label="Caregiver" value={selected.caregiverName} />
+              <DetailRow label="Caretaker" value={selected.caregiverName} />
               <DetailRow label="Transaction type" value={selected.type} />
               <DetailRow label="Reference" value={selected.id} />
             </dl>

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Area,
   AreaChart,
@@ -32,12 +33,14 @@ import {
 } from 'lucide-react'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
+import { cn } from '@/utils/cn'
+import { EASE } from '@/utils/motion'
 import { CUSTOMERS, getCustomerById } from '@/data/bookings'
 import { PAYOUTS } from '@/data/finance'
 import { BOOKING_ACTIVITY, CITY_DISTRIBUTION, REVENUE_SPLIT, SERVICE_DISTRIBUTION } from '@/data/charts'
 import { formatCompactCurrency, formatCurrency, formatDate, formatNumber, relativeTime } from '@/utils/format'
-import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
+import { SectionLabel } from '@/components/common/SectionLabel'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -93,8 +96,11 @@ export function DashboardPage() {
       active: active.length,
       completed: completed.length,
       cancelled: cancelled.length,
+      liveCount: live.length,
       gross,
       revenue,
+      avgValue: Math.round(gross / Math.max(1, live.length)),
+      completionRate: Math.round((completed.length / Math.max(1, completed.length + cancelled.length)) * 100),
     }
   }, [bookings, caregivers, verifications])
 
@@ -119,7 +125,7 @@ export function DashboardPage() {
         })),
         ...caregivers.map((c) => ({
           id: c.id,
-          kind: 'Caregiver',
+          kind: 'Caretaker',
           name: c.name,
           avatar: c.photo,
           meta: c.qualification,
@@ -151,20 +157,90 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Admin dashboard"
-        subtitle="CareMate at a glance — demand, supply, verification queue, revenue and live incidents."
-        action={
-          <>
-            <Button to="/admin/verifications" variant="outline" icon={FileCheck2}>
+      {/* ---------------- hero band ---------------- */}
+      <motion.section
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: EASE }}
+        className="relative overflow-hidden rounded-panel bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 shadow-raised"
+      >
+        <div aria-hidden="true" className="grid-pattern pointer-events-none absolute inset-0 opacity-[0.14]" />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[radial-gradient(closest-side,rgba(56,189,248,0.25),transparent)] blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-32 -left-20 h-64 w-64 rounded-full bg-[radial-gradient(closest-side,rgba(163,229,218,0.22),transparent)] blur-3xl"
+        />
+
+        <div className="relative flex flex-col gap-5 p-5 sm:p-7 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-accent-300 backdrop-blur-sm">
+              <Activity className="h-3.5 w-3.5" />
+              Operations overview
+            </span>
+            <h1 className="mt-3 font-display text-2xl font-extrabold text-white sm:text-3xl">Admin dashboard</h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-white/60">
+              CareMate at a glance — demand, supply, verification queue, revenue and live incidents.
+            </p>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-3">
+            <Button to="/admin/verifications" variant="accent" icon={FileCheck2}>
               Review verifications
             </Button>
-            <Button to="/admin/bookings" icon={ClipboardList}>
+            <Button to="/admin/bookings" variant="secondary" icon={ClipboardList}>
               All bookings
             </Button>
-          </>
-        }
-      />
+          </div>
+        </div>
+
+        <div className="relative grid grid-cols-2 border-t border-white/10 sm:grid-cols-4">
+          {[
+            {
+              label: 'Average booking value',
+              value: formatCurrency(stats.avgValue),
+              note: `across ${formatNumber(stats.liveCount)} non-cancelled bookings`,
+            },
+            {
+              label: 'Completion rate',
+              value: `${stats.completionRate}%`,
+              note: `${formatNumber(stats.completed)} completed · ${formatNumber(stats.cancelled)} cancelled`,
+            },
+            {
+              label: 'Payouts due',
+              value: formatCurrency(payoutSummary.due),
+              note: 'Pending and processing',
+            },
+            {
+              label: 'Open SOS incidents',
+              value: activeSos.length,
+              note: activeSos.length ? 'On-call desk is engaged' : 'No live escalations',
+            },
+          ].map((metric, i) => (
+            <div
+              key={metric.label}
+              className={cn(
+                'border-white/10 px-5 py-4 sm:px-6 sm:border-t-0',
+                i >= 2 && 'border-t',
+                i % 2 === 1 && 'border-l',
+                i >= 1 && 'sm:border-l',
+              )}
+            >
+              <p className="text-[11px] font-bold uppercase leading-tight tracking-[0.14em] text-white/45">
+                {metric.label}
+              </p>
+              <p className="mt-1.5 font-display text-xl font-extrabold tabular-nums text-white sm:text-2xl">
+                {metric.value}
+              </p>
+              <p className="mt-1 text-xs leading-snug text-white/50">{metric.note}</p>
+            </div>
+          ))}
+        </div>
+      </motion.section>
+
+      <SectionLabel>Key metrics</SectionLabel>
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
@@ -177,7 +253,7 @@ export function DashboardPage() {
           delay={0}
         />
         <StatCard
-          label="Total caregivers"
+          label="Total caretakers"
           value={formatNumber(stats.caregivers)}
           icon={Stethoscope}
           tone="accent"
@@ -202,9 +278,6 @@ export function DashboardPage() {
           hint="Pending, confirmed or live"
           delay={0.15}
         />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           label="Completed bookings"
           value={stats.completed}
@@ -242,6 +315,8 @@ export function DashboardPage() {
         />
       </div>
 
+      <SectionLabel>Analytics</SectionLabel>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader
@@ -254,6 +329,20 @@ export function DashboardPage() {
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={BOOKING_ACTIVITY} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="adminBarRequested" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2DD4BF" />
+                      <stop offset="100%" stopColor="#0F766E" />
+                    </linearGradient>
+                    <linearGradient id="adminBarCompleted" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#7DD3FC" />
+                      <stop offset="100%" stopColor="#0284C7" />
+                    </linearGradient>
+                    <linearGradient id="adminBarCancelled" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#CBD5E1" />
+                      <stop offset="100%" stopColor="#94A3B8" />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" vertical={false} />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
                   <YAxis tickLine={false} axisLine={false} width={44} tick={{ fontSize: 11, fill: '#94A3B8' }} />
@@ -262,9 +351,9 @@ export function DashboardPage() {
                     contentStyle={tooltipStyle}
                     formatter={(value, name) => [formatNumber(value), name]}
                   />
-                  <Bar dataKey="bookings" name="Requested" fill="#0F766E" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="completed" name="Completed" fill="#38BDF8" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="cancelled" name="Cancelled" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="bookings" name="Requested" fill="url(#adminBarRequested)" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="completed" name="Completed" fill="url(#adminBarCompleted)" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="cancelled" name="Cancelled" fill="url(#adminBarCancelled)" radius={[4, 4, 0, 0]} maxBarSize={20} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -359,6 +448,12 @@ export function DashboardPage() {
             <div dir="ltr" className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={CITY_DISTRIBUTION} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="adminCityBar" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#0F766E" />
+                      <stop offset="100%" stopColor="#38BDF8" />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" horizontal={false} />
                   <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
                   <YAxis
@@ -374,13 +469,15 @@ export function DashboardPage() {
                     contentStyle={tooltipStyle}
                     formatter={(value) => [formatNumber(value), 'Bookings']}
                   />
-                  <Bar dataKey="bookings" fill="#0F766E" radius={[0, 6, 6, 0]} barSize={14} />
+                  <Bar dataKey="bookings" fill="url(#adminCityBar)" radius={[0, 6, 6, 0]} barSize={14} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </CardBody>
         </Card>
       </div>
+
+      <SectionLabel>Operations</SectionLabel>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card>
@@ -399,7 +496,7 @@ export function DashboardPage() {
                 <Link
                   key={b.id}
                   to="/admin/bookings"
-                  className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-mint-50/60"
+                  className="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-mint-50/60"
                 >
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
                     <CalendarClock className="h-4.5 w-4.5" size={18} />
@@ -416,7 +513,7 @@ export function DashboardPage() {
                     <StatusBadge status={b.status} size="sm" />
                     <p className="mt-1 text-[11px] text-faint">{relativeTime(b.createdAt)}</p>
                   </div>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-faint" />
+                  <ArrowRight className="h-4 w-4 shrink-0 text-faint transition duration-300 group-hover:translate-x-0.5 group-hover:text-primary-600" />
                 </Link>
               ))
             ) : (
@@ -428,7 +525,7 @@ export function DashboardPage() {
         <Card>
           <CardHeader
             title="Recent registrations"
-            subtitle="Newest customers and caregivers"
+            subtitle="Newest customers and caretakers"
             icon={UserPlus}
             action={
               <Button to="/admin/customers" variant="link" size="sm" iconRight={ArrowRight}>
@@ -549,7 +646,7 @@ export function DashboardPage() {
 
           <Card>
             <CardHeader
-              title="Caregiver payouts"
+              title="Caretaker payouts"
               subtitle="Current settlement cycle"
               icon={HandCoins}
               action={
@@ -559,12 +656,12 @@ export function DashboardPage() {
               }
             />
             <CardBody className="space-y-3">
-              <div className="rounded-xl border border-line px-4 py-3">
+              <div className="rounded-xl border border-primary-100 bg-gradient-to-br from-mint-50 to-white px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-faint">Total payouts due</p>
                 <p className="mt-1 font-display text-2xl font-extrabold tabular-nums text-ink">
                   {formatCurrency(payoutSummary.due)}
                 </p>
-                <p className="mt-0.5 text-xs text-muted">Pending and processing across all caregivers</p>
+                <p className="mt-0.5 text-xs text-muted">Pending and processing across all caretakers</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-line px-3.5 py-3">

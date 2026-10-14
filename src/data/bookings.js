@@ -172,7 +172,7 @@ const build = (o) => {
     timeline: o.timeline || [
       { label: 'Booking requested', status: 'completed', at: o.createdAt },
       {
-        label: 'Caregiver assigned',
+        label: 'Caretaker assigned',
         status: ['Pending'].includes(o.status) ? 'upcoming' : 'completed',
         at: o.status === 'Pending' ? null : o.date,
       },

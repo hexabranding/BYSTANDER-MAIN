@@ -385,3 +385,69 @@ export const validateCaregiverAvailability = (req, res, next) => {
 
   next();
 };
+
+/**
+ * Validate query parameters for public caregiver directory search.
+ */
+export const validateGetCaregivers = (req, res, next) => {
+  const { page, limit, city, service, qualification, minRating, maxRate } = req.query;
+  const errors = [];
+
+  if (page !== undefined) {
+    const p = parseInt(page, 10);
+    if (isNaN(p) || p < 1) {
+      errors.push('page must be a positive integer greater than or equal to 1');
+    }
+  }
+
+  if (limit !== undefined) {
+    const l = parseInt(limit, 10);
+    if (isNaN(l) || l < 1) {
+      errors.push('limit must be a positive integer');
+    }
+  }
+
+  if (qualification !== undefined && qualification.trim()) {
+    const qual = qualification.trim();
+    if (qual.length > 50) {
+      errors.push('qualification cannot exceed 50 characters');
+    }
+  }
+
+  if (city !== undefined && city.trim()) {
+    if (city.trim().length > 100) {
+      errors.push('city filter cannot exceed 100 characters');
+    }
+  }
+
+  if (service !== undefined && service.trim()) {
+    if (service.trim().length > 100) {
+      errors.push('service filter cannot exceed 100 characters');
+    }
+  }
+
+  if (minRating !== undefined) {
+    const r = Number(minRating);
+    if (isNaN(r) || r < 0 || r > 5) {
+      errors.push('minRating must be a number between 0 and 5');
+    }
+  }
+
+  if (maxRate !== undefined) {
+    const rate = Number(maxRate);
+    if (isNaN(rate) || rate < 0) {
+      errors.push('maxRate must be a positive number');
+    }
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: errors.join(', '),
+      errors,
+    });
+  }
+
+  next();
+};

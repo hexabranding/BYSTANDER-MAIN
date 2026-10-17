@@ -207,3 +207,30 @@ export const validateCancelBooking = (req, res, next) => {
   req.cancellationReason = reason ? reason.trim() : 'Cancelled by participant';
   next();
 };
+
+/**
+ * Validate booking rejection payload.
+ */
+export const validateRejectBooking = (req, res, next) => {
+  const { reason } = req.body || {};
+
+  if (reason !== undefined) {
+    if (typeof reason !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'ValidationError',
+        message: 'Rejection reason must be a string',
+      });
+    }
+    if (reason.length > 500) {
+      return res.status(400).json({
+        success: false,
+        error: 'ValidationError',
+        message: 'Rejection reason cannot exceed 500 characters',
+      });
+    }
+  }
+
+  req.rejectionReason = reason ? reason.trim() : 'Declined by caregiver';
+  next();
+};

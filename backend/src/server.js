@@ -16,7 +16,9 @@ import bookingRoutes from './routes/bookingRoutes.js';
 import sosRoutes from './routes/sosRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import customerRoutes from './routes/customerRoutes.js';
 import testPaymentRoutes from './routes/testPaymentRoutes.js';
+import { assertValidJwtSecret } from './utils/auth.js';
 import { assertValidOtpSecret } from './utils/otpUtils.js';
 
 // Resolve directory name for ES modules
@@ -30,12 +32,29 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
-// 1. Request Parsing & Cookie Middleware
+// 1. Reverse-Proxy Configuration: Only trust proxy hops when explicitly configured or in production
+const trustProxyConfig = process.env.TRUST_PROXY;
+if (trustProxyConfig !== undefined) {
+  if (trustProxyConfig === 'true') {
+    app.set('trust proxy', true);
+  } else if (trustProxyConfig === 'false') {
+    app.set('trust proxy', false);
+  } else if (!isNaN(Number(trustProxyConfig))) {
+    app.set('trust proxy', Number(trustProxyConfig));
+  } else {
+    app.set('trust proxy', trustProxyConfig);
+  }
+} else if (process.env.NODE_ENV === 'production') {
+  // Safe production default: trust single immediate reverse proxy (e.g., Nginx, AWS ALB, Cloudflare)
+  app.set('trust proxy', 1);
+}
+
+// 2. Request Parsing & Cookie Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// 2. CORS Configuration for Local Vite Frontend
+// 3. CORS Configuration for Local Vite Frontend
 app.use(
   cors({
     origin: CLIENT_URL,
@@ -43,7 +62,7 @@ app.use(
   }),
 );
 
-// 3. Health Check Endpoint
+// 4. Health Check Endpoint
 app.get('/api/health', (req, res) => {
   const dbStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
   const dbStatus = dbStates[mongoose.connection.readyState] || 'unknown';
@@ -57,10 +76,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 4. Application Routes
+// 5. Application Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/admin/services', adminServiceRoutes);
+app.use('/api/customer', customerRoutes);
 app.use('/api/caregiver', caregiverSelfRoutes);
 app.use('/api/caregivers', caregiverPublicRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -73,16 +93,17 @@ if (process.env.NODE_ENV !== 'production') {
   app.use('/api/test/payments', testPaymentRoutes);
 }
 
-// 5. JSON 404 Handler for Unknown Routes
+// 6. JSON 404 Handler for Unknown Routes
 app.use(notFoundHandler);
 
-// 5. Centralized Error-Handling Middleware
+// 7. Centralized Error-Handling Middleware
 app.use(errorHandler);
 
-// 6. Server Initialization: Connects to MongoDB before listening for requests
+// 8. Server Initialization: Connects to MongoDB before listening for requests
 export const startServer = async () => {
   try {
     // 1. Fail application startup if required production secrets are missing or invalid
+    assertValidJwtSecret();
     assertValidOtpSecret();
 
     // 2. Connect to MongoDB Atlas

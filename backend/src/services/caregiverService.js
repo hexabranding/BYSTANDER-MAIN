@@ -238,3 +238,135 @@ export const getPublicCaregiverProfileById = async (caregiverId) => {
     createdAt: profile.createdAt,
   };
 };
+
+/**
+ * Retrieve public showcase directory of eligible, verified caregivers with filtering and bounded pagination.
+ *
+ * Strict privacy rule:
+ * - Must be verificationStatus === 'verified'
+ * - User account must be status === 'active' (not pending, suspended, or blocked)
+ * - Excludes private fields: phone, email, nursingRegNo, documents, exact GPS coordinates, emergency contacts
+ */
+export const getPublicCaregivers = async (query = {}) => {
+  const page = Math.max(1, parseInt(query.page, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(query.limit, 10) || 12));
+  const skip = (page - 1) * limit;
+
+  // 1. Find all active user IDs with role 'caregiver'
+  const activeCaregiverUsers = await User.find({
+    role: 'caregiver',
+    status: 'active',
+  }).select('_id');
+
+  const activeUserIds = activeCaregiverUsers.map((u) => u._id);
+
+  // 2. Build CaregiverProfile query
+  const filter = {
+    verificationStatus: 'verified',
+    user: { $in: activeUserIds },
+  };
+
+  // Filter: City (case-insensitive substring or match)
+  if (query.city && typeof query.city === 'string' && query.city.trim()) {
+    const sanitizedCity = query.city.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.city = { $regex: new RegExp(sanitizedCity, 'i') };
+  }
+
+  // Filter: Qualification
+  if (query.qualification && typeof query.qualification === 'string' && query.qualification.trim()) {
+    filter.qualification = query.qualification.trim();
+  }
+
+  // Filter: Availability Status
+  if (query.availabilityStatus && typeof query.availabilityStatus === 'string' && query.availabilityStatus.trim()) {
+    filter.availabilityStatus = query.availabilityStatus.trim();
+  }
+
+  // Filter: Max Rate
+  if (query.maxRate !== undefined && !isNaN(Number(query.maxRate))) {
+    filter.hourlyRate = { $lte: Number(query.maxRate) };
+  }
+
+  // Filter: Min Rating
+  if (query.minRating !== undefined && !isNaN(Number(query.minRating))) {
+    filter['rating.average'] = { $gte: Number(query.minRating) };
+  }
+
+  // Filter: Service (by Service ObjectId, slug, or service name)
+  if (query.service && typeof query.service === 'string' && query.service.trim()) {
+    const serviceTerm = query.service.trim();
+    if (mongoose.Types.ObjectId.isValid(serviceTerm)) {
+      filter.$or = [
+        { servicesOffered: new mongoose.Types.ObjectId(serviceTerm) },
+        { services: serviceTerm },
+      ];
+    } else {
+      // Look up service in Service catalog by slug or name
+      const foundCatalogService = await Service.findOne({
+        $or: [
+          { slug: serviceTerm.toLowerCase() },
+          { name: { $regex: new RegExp(`^${serviceTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+        ],
+      }).select('_id name');
+
+      if (foundCatalogService) {
+        filter.$or = [
+          { servicesOffered: foundCatalogService._id },
+          { services: foundCatalogService.name },
+          { services: { $regex: new RegExp(serviceTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
+        ];
+      } else {
+        filter.services = { $regex: new RegExp(serviceTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+      }
+    }
+  }
+
+  // 3. Query profiles and count
+  const [profiles, total] = await Promise.all([
+    CaregiverProfile.find(filter)
+      .sort({ 'rating.average': -1, completedJobs: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('user', 'fullName status avatar')
+      .populate('servicesOffered', 'name slug category baseHourlyRate minimumDurationHours isActive'),
+    CaregiverProfile.countDocuments(filter),
+  ]);
+
+  // 4. Sanitize public representation (never expose email, phone, nursingRegNo, documents)
+  const sanitizedList = profiles
+    .filter((p) => p.user && p.user.status === 'active')
+    .map((p) => ({
+      _id: p._id,
+      fullName: p.user.fullName,
+      avatar: p.avatar || p.user.avatar || '',
+      qualification: p.qualification,
+      experienceYears: p.experienceYears,
+      bio: p.bio,
+      languages: p.languages,
+      city: p.city,
+      area: p.area,
+      maxDistanceKm: p.maxDistanceKm,
+      hourlyRate: p.hourlyRate,
+      servicesOffered: p.servicesOffered || [],
+      services: p.services || [],
+      careSettings: p.careSettings,
+      availabilityStatus: p.availabilityStatus,
+      timezone: p.timezone,
+      weeklySchedule: p.weeklySchedule,
+      rating: p.rating,
+      trustScore: p.trustScore,
+      completedJobs: p.completedJobs,
+      badges: p.badges,
+      createdAt: p.createdAt,
+    }));
+
+  return {
+    caregivers: sanitizedList,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+  };
+};

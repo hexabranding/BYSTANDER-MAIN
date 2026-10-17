@@ -73,6 +73,28 @@ export const acceptBooking = async (req, res, next) => {
 };
 
 /**
+ * PATCH /api/bookings/:id/reject
+ * Assigned caregiver or admin rejects/declines a pending booking request.
+ */
+export const rejectBooking = async (req, res, next) => {
+  try {
+    const booking = await bookingService.rejectBooking(
+      req.user,
+      req.params.id,
+      req.rejectionReason,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Booking request rejected successfully',
+      data: booking,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PATCH /api/bookings/:id/cancel
  * Authorized participant or admin cancels a booking engagement.
  */

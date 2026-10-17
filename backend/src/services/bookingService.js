@@ -4,6 +4,7 @@ import {
   getLocalTimeInTimezone,
   calculateTotalHours,
 } from '../utils/bookingDateUtils.js';
+import { safeDispatchNotification } from './notificationService.js';
 
 /**
  * Check if the current MongoDB connection supports multi-document ACID transactions.
@@ -226,18 +227,18 @@ export const createBooking = async (customerId, bookingData) => {
       { session },
     );
 
-    // Active conflict check: pending and confirmed bookings block reservations
+    // Active conflict check: pending, confirmed, and in_progress bookings block reservations
     // (cancelled, rejected, completed do NOT block)
     const conflict = await Booking.findOne({
       caregiver: caregiver._id,
-      status: { $in: ['pending', 'confirmed'] },
+      status: { $in: ['pending', 'confirmed', 'in_progress'] },
       startDateTime: { $lt: endDateTime },
       endDateTime: { $gt: startDateTime },
     }).session(session);
 
     if (conflict) {
       const conflictErr = new Error(
-        'Caregiver already has a confirmed or pending booking during this scheduled interval',
+        'Caregiver already has a confirmed or pending booking (or shift in-progress) during this scheduled interval',
       );
       conflictErr.statusCode = 409;
       conflictErr.name = 'ConflictError';
@@ -435,18 +436,18 @@ export const acceptBooking = async (user, bookingId) => {
       { session },
     );
 
-    // 6. Recheck for overlapping confirmed bookings inside transaction
+    // 6. Recheck for overlapping active (confirmed or in_progress) bookings inside transaction
     const conflict = await Booking.findOne({
       _id: { $ne: booking._id },
       caregiver: booking.caregiver,
-      status: 'confirmed',
+      status: { $in: ['confirmed', 'in_progress'] },
       startDateTime: { $lt: booking.endDateTime },
       endDateTime: { $gt: booking.startDateTime },
     }).session(session);
 
     if (conflict) {
       const conflictErr = new Error(
-        'Cannot accept booking: another confirmed engagement conflicts with this time interval',
+        'Cannot accept booking: another confirmed or in-progress engagement conflicts with this time interval',
       );
       conflictErr.statusCode = 409;
       conflictErr.name = 'ConflictError';
@@ -624,6 +625,106 @@ export const cancelBooking = async (user, bookingId, cancellationReason) => {
   }
 
   return updatedBooking.populate([
+    { path: 'customer', select: 'fullName email phone' },
+    { path: 'service', select: 'name slug category baseHourlyRate' },
+  ]);
+};
+
+/**
+ * Reject / decline a pending booking request.
+ * Authorized for the assigned caregiver or platform admin.
+ */
+export const rejectBooking = async (user, bookingId, rejectionReason = '') => {
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    const err = new Error('Booking not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const booking = await Booking.findById(bookingId);
+  if (!booking) {
+    const err = new Error('Booking not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  // Authorization: Assigned caregiver or admin only
+  const isCaregiver = booking.caregiverUser.toString() === user._id.toString();
+  const isAdmin = user.role === 'admin';
+
+  if (!isCaregiver && !isAdmin) {
+    const err = new Error('You are not authorized to reject this booking request');
+    err.statusCode = 403;
+    err.name = 'ForbiddenError';
+    throw err;
+  }
+
+  // Lifecycle check: only pending bookings can be rejected
+  if (booking.status === 'rejected') {
+    const err = new Error('Booking request is already rejected');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  if (booking.status !== 'pending') {
+    const err = new Error(
+      `Cannot reject booking with status '${booking.status}'. Only pending booking requests can be rejected.`,
+    );
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  // Atomic conditional update to prevent race conditions
+  const now = new Date();
+  const updated = await Booking.findOneAndUpdate(
+    { _id: booking._id, status: 'pending' },
+    {
+      $set: {
+        status: 'rejected',
+        rejectedAt: now,
+        cancellationReason: rejectionReason || 'Declined by caregiver',
+      },
+    },
+    { returnDocument: 'after' },
+  );
+
+  if (!updated) {
+    const recheck = await Booking.findById(bookingId);
+    if (!recheck) {
+      const err = new Error('Booking not found');
+      err.statusCode = 404;
+      err.name = 'NotFoundError';
+      throw err;
+    }
+    if (recheck.status === 'rejected') {
+      const err = new Error('Booking request is already rejected');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+    const err = new Error(
+      `Cannot reject booking: booking status changed to '${recheck.status}' concurrently.`,
+    );
+    err.statusCode = 409;
+    err.name = 'ConflictError';
+    throw err;
+  }
+
+  // Safely dispatch in-app notification to the customer
+  safeDispatchNotification({
+    recipient: booking.customer,
+    type: 'booking_cancelled',
+    title: 'Booking Request Declined',
+    message: `The caregiver was unable to accept your booking for ${booking.serviceName}.`,
+    metadata: { bookingId: String(booking._id), status: 'rejected' },
+    idempotencyKey: `booking:rejected:${booking._id}`,
+  });
+
+  return updated.populate([
     { path: 'customer', select: 'fullName email phone' },
     { path: 'service', select: 'name slug category baseHourlyRate' },
   ]);

@@ -2,7 +2,49 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 const BCRYPT_SALT_ROUNDS = 12;
-const DEFAULT_JWT_SECRET = 'bystander-dev-jwt-secret-do-not-use-in-production-389472398472';
+export const MIN_JWT_SECRET_LENGTH = 32;
+export const DEV_TEST_JWT_SECRET = 'bystander-dev-jwt-secret-do-not-use-in-production-389472398472';
+
+/**
+ * Validates and retrieves the secret for signing and verifying JWT tokens.
+ * In production (NODE_ENV=production):
+ *   - Strictly forbids fallback defaults.
+ *   - Requires JWT_ACCESS_SECRET with minimum length of 32 characters.
+ *   - Throws fatal error on startup or execution if invalid or missing.
+ * In development and test environments:
+ *   - Prefers JWT_ACCESS_SECRET if configured (>= 32 chars).
+ *   - Falls back to DEV_TEST_JWT_SECRET only when NODE_ENV !== 'production' to preserve test behavior.
+ *
+ * @returns {string} Validated JWT secret string
+ */
+export const getJwtSecret = () => {
+  const secret = process.env.JWT_ACCESS_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction) {
+    if (!secret || typeof secret !== 'string' || secret.trim().length < MIN_JWT_SECRET_LENGTH) {
+      throw new Error(
+        `FATAL: A secure JWT_ACCESS_SECRET with a minimum length of ${MIN_JWT_SECRET_LENGTH} characters is required in production environments.`,
+      );
+    }
+    return secret.trim();
+  }
+
+  // Non-production (development / test)
+  if (secret && typeof secret === 'string' && secret.trim().length >= MIN_JWT_SECRET_LENGTH) {
+    return secret.trim();
+  }
+
+  return DEV_TEST_JWT_SECRET;
+};
+
+/**
+ * Asserts JWT access secret configuration is valid for application startup.
+ * Called during server initialization to fail fast if production configuration is missing.
+ */
+export const assertValidJwtSecret = () => {
+  getJwtSecret();
+};
 
 /**
  * Hash plaintext password using bcryptjs.
@@ -33,7 +75,7 @@ export const comparePassword = async (password, hash) => {
  * @returns {string} Signed JWT.
  */
 export const generateToken = (payload) => {
-  const secret = process.env.JWT_ACCESS_SECRET || DEFAULT_JWT_SECRET;
+  const secret = getJwtSecret();
   const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
 
   return jwt.sign(payload, secret, {
@@ -48,7 +90,7 @@ export const generateToken = (payload) => {
  * @returns {object} Decoded token payload.
  */
 export const verifyToken = (token) => {
-  const secret = process.env.JWT_ACCESS_SECRET || DEFAULT_JWT_SECRET;
+  const secret = getJwtSecret();
   return jwt.verify(token, secret, {
     issuer: 'bystander-api',
   });

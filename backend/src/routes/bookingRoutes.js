@@ -4,6 +4,7 @@ import { authenticate, authorizeRoles } from '../middleware/auth.js';
 import {
   validateCreateBooking,
   validateCancelBooking,
+  validateRejectBooking,
 } from '../middleware/validateBooking.js';
 import { validateVerifyOtp } from '../middleware/validateOtp.js';
 
@@ -24,7 +25,15 @@ router.get('/:id', bookingController.getBookingById);
 // 4. Caregiver-only acceptance
 router.patch('/:id/accept', authorizeRoles('caregiver'), bookingController.acceptBooking);
 
-// 5. Participant/Admin cancellation
+// 5. Caregiver rejection of pending request
+router.patch(
+  '/:id/reject',
+  authorizeRoles('caregiver', 'admin'),
+  validateRejectBooking,
+  bookingController.rejectBooking,
+);
+
+// 6. Participant/Admin cancellation
 router.patch('/:id/cancel', validateCancelBooking, bookingController.cancelBooking);
 
 // 6. Shift Check-In: Customer requests OTP (Customer/Admin only)

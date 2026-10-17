@@ -823,7 +823,7 @@ test('Step 7 - 11: Cancelled, rejected, and completed bookings do not block new 
     });
 
     assert.ok(created._id);
-    assert.deepEqual(queriedStatusFilter, { $in: ['pending', 'confirmed'] });
+    assert.deepEqual(queriedStatusFilter, { $in: ['pending', 'confirmed', 'in_progress'] });
   } finally {
     delete mongoose.connection.client;
     mongoose.startSession = originalStartSession;

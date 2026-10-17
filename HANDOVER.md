@@ -120,71 +120,85 @@ Platform Gross Margin = Platform Fee + Caregiver Commission (12%)
 
 ## 5. Directory Structure & Key Files
 
+The repository is structured as a clean monorepo with dedicated `frontend/` and `backend/` packages:
+
 ```
 BYSTANDER-MAIN/
-├── index.html                  # HTML entry point (SEO metadata, Google Fonts)
-├── package.json                # Project dependencies and npm scripts
-├── vite.config.js              # Vite config (Tailwind v4 plugin, '@' path alias)
+├── package.json                # Root workspace orchestrator (scripts for frontend & backend)
 ├── HANDOVER.md                 # This handover document
-├── public/
-│   ├── bystander-logo.png      # Brand mark & logo asset
-│   ├── favicon.png             # Browser favicon
-│   └── favicon.svg             # Vector favicon
-└── src/
-    ├── main.jsx                # React root mount
-    ├── App.jsx                 # App shell, Router, Auth/Data providers, Toaster
-    ├── index.css               # Tailwind CSS v4 design tokens and utilities
-    │
-    ├── context/
-    │   ├── AuthContext.jsx     # User session, login, role persistence
-    │   └── DataContext.jsx     # Central reactive store (CRUD for bookings, SOS, etc.)
-    │
-    ├── data/                   # Rich seeded mock database
-    │   ├── demoUsers.js        # Seed credentials for Customer, Caregiver, Admin
-    │   ├── services.js         # 9 core care services & descriptions
-    │   ├── caregivers.js       # Directory of 16+ vetted caregiver profiles
-    │   ├── bookings.js         # Sample customer bookings & histories
-    │   ├── operations.js       # Available jobs, complaints, SOS alerts, fraud, blacklist
-    │   ├── finance.js          # Escrow transactions, payouts, earnings ledger
-    │   ├── verifications.js    # Document verification records & audit logs
-    │   ├── messages.js         # Masked chat conversations
-    │   ├── charts.js           # Time-series datasets for analytics
-    │   └── content.js          # FAQs, testimonials, workflow guides
-    │
-    ├── routes/
-    │   ├── index.jsx           # AppRoutes mapping 44+ routes
-    │   ├── nav.js              # Navigation items for Customer, Caregiver, Admin
-    │   └── ScrollHelpers.jsx   # Scroll-to-top and hash-link navigation handlers
-    │
-    ├── layouts/
-    │   ├── PublicLayout.jsx    # Public site layout with header & footer
-    │   └── AuthLayout.jsx      # Clean split-screen authentication wrapper
-    │
-    ├── components/
-    │   ├── common/             # Button, Modal, Card, DataTable, StatusBadge, SosButton...
-    │   ├── layout/             # PublicNavbar, PublicFooter, DashboardLayout, Sidebar...
-    │   ├── booking/            # BookingCard, CheckInOutModal, RatingModal
-    │   ├── caregiver/          # CaregiverCard with badges and rating summaries
-    │   └── forms/              # FormField, Input, Select, FileUpload
-    │
-    ├── hooks/
-    │   ├── useLocalStorage.js  # React hook synchronizing state with window.localStorage
-    │   ├── usePagination.js    # Table pagination state helper
-    │   └── useUi.js            # Page titles, outside clicks, viewport helpers
-    │
-    ├── utils/
-    │   ├── constants.js        # Status styles, cities, qualifications, commission rates
-    │   ├── format.js           # Currency (INR), date, phone, reference ID formatters
-    │   ├── duration.js         # Time math and shift calculators
-    │   ├── motion.js           # Framer motion variants (fade, slide, reveal)
-    │   └── cn.js               # Class variance utility (clsx + twMerge alternative)
-    │
-    └── pages/
-        ├── public/             # HomePage, AboutPage, ServicesPage, CaregiversPage...
-        ├── auth/               # LoginPage, RegisterCustomer, RegisterCaregiver, OTP...
-        ├── customer/           # 11 customer screens (Book, Bookings, Messages, SOS...)
-        ├── caregiver/          # 10 caregiver screens (Jobs, Schedule, Earnings, Docs...)
-        └── admin/              # 18 operational screens (Verifications, SOS, Payouts...)
+├── README.md                   # Repository overview
+│
+├── frontend/                   # Frontend SPA package (bystander-frontend)
+│   ├── index.html              # HTML entry point (SEO metadata, Google Fonts)
+│   ├── package.json            # Frontend dependencies and Vite scripts
+│   ├── package-lock.json       # Frontend locked dependency tree
+│   ├── vite.config.js          # Vite config (Tailwind v4 plugin, '@' path alias)
+│   ├── .oxlintrc.json          # Oxlint configuration
+│   ├── public/
+│   │   ├── bystander-logo.png  # Brand mark & logo asset
+│   │   ├── favicon.png         # Browser favicon
+│   │   └── favicon.svg         # Vector favicon
+│   └── src/
+│       ├── main.jsx            # React root mount
+│       ├── App.jsx             # App shell, Router, Auth/Data providers, Toaster
+│       ├── index.css           # Tailwind CSS v4 design tokens and utilities
+│       │
+│       ├── context/
+│       │   ├── AuthContext.jsx # User session, login, role persistence
+│       │   └── DataContext.jsx # Central reactive store (CRUD for bookings, SOS, etc.)
+│       │
+│       ├── data/               # Rich seeded mock database
+│       │   ├── demoUsers.js    # Seed credentials for Customer, Caregiver, Admin
+│       │   ├── services.js     # 9 core care services & descriptions
+│       │   ├── caregivers.js   # Directory of 16+ vetted caregiver profiles
+│       │   ├── bookings.js     # Sample customer bookings & histories
+│       │   ├── operations.js   # Available jobs, complaints, SOS alerts, fraud, blacklist
+│       │   ├── finance.js      # Escrow transactions, payouts, earnings ledger
+│       │   ├── verifications.js# Document verification records & audit logs
+│       │   ├── messages.js     # Masked chat conversations
+│       │   ├── charts.js       # Time-series datasets for analytics
+│       │   └── content.js      # FAQs, testimonials, workflow guides
+│       │
+│       ├── routes/
+│       │   ├── index.jsx       # AppRoutes mapping 44+ routes
+│       │   ├── nav.js          # Navigation items for Customer, Caregiver, Admin
+│       │   └── ScrollHelpers.jsx # Scroll-to-top and hash-link navigation handlers
+│       │
+│       ├── layouts/
+│       │   ├── PublicLayout.jsx# Public site layout with header & footer
+│       │   └── AuthLayout.jsx  # Clean split-screen authentication wrapper
+│       │
+│       ├── components/
+│       │   ├── common/         # Button, Modal, Card, DataTable, StatusBadge, SosButton...
+│       │   ├── layout/         # PublicNavbar, PublicFooter, DashboardLayout, Sidebar...
+│       │   ├── booking/        # BookingCard, CheckInOutModal, RatingModal
+│       │   ├── caregiver/      # CaregiverCard with badges and rating summaries
+│       │   └── forms/          # FormField, Input, Select, FileUpload
+│       │
+│       ├── hooks/
+│       │   ├── useLocalStorage.js # React hook synchronizing state with window.localStorage
+│       │   ├── usePagination.js   # Table pagination state helper
+│       │   └── useUi.js           # Page titles, outside clicks, viewport helpers
+│       │
+│       ├── utils/
+│       │   ├── constants.js    # Status styles, cities, qualifications, commission rates
+│       │   ├── format.js       # Currency (INR), date, phone, reference ID formatters
+│       │   ├── duration.js     # Time math and shift calculators
+│       │   ├── motion.js       # Framer motion variants (fade, slide, reveal)
+│       │   └── cn.js           # Class variance utility (clsx + twMerge alternative)
+│       │
+│       └── pages/
+│           ├── public/         # HomePage, AboutPage, ServicesPage, CaregiversPage...
+│           ├── auth/           # LoginPage, RegisterCustomer, RegisterCaregiver, OTP...
+│           ├── customer/       # 11 customer screens (Book, Bookings, Messages, SOS...)
+│           ├── caregiver/      # 10 caregiver screens (Jobs, Schedule, Earnings, Docs...)
+│           └── admin/          # 18 operational screens (Verifications, SOS, Payouts...)
+│
+└── backend/                    # Backend API package (bystander-backend)
+    ├── package.json            # Express, Mongoose, crypto, test runners
+    ├── .env.example            # Environment variable template
+    ├── src/                    # Controllers, models, routes, services, middleware
+    └── tests/                  # 8 test suites (96 tests passing)
 ```
 
 ---
@@ -276,4 +290,57 @@ To convert this front-end application into an enterprise-grade production platfo
 
 ---
 
-*Handover document generated for BYSTANDER-MAIN engineering transition.*
+## 10. Backend Implementation Status (Implemented & Tested Workflows)
+
+The `backend/` directory contains an enterprise Express + MongoDB backend with 96 passing automated tests across 8 suites (`auth.test.js`, `services.test.js`, `caregiver.test.js`, `booking.test.js`, `otp.test.js`, `sos.test.js`, `message.test.js`, `notification.test.js`).
+
+### Completed Backend Modules
+- **Authentication & RBAC (Steps 1–4):** JWT auth, bcrypt hashing, cookie management, role authorization (`customer`, `caregiver`, `admin`).
+- **Services Catalog (Step 5):** Admin service CRUD, pricing bounds, active catalog queries.
+- **Caregiver Profile & Availability (Step 6):** Profile management, 7-day schedule, IANA timezone conversion, date exceptions.
+- **Booking Engine & Scheduling (Step 7):** Double-booking prevention, UTC interval conversion, atomic cancellation, replica set concurrency integration test.
+- **Shift Check-in / Check-out OTP (Step 9):** Customer OTP generation, timing-safe HMAC SHA-256 verification, 5-attempt atomic lockouts, life-cycle transitions.
+- **SOS Incident Reporting & Triage (Step 10A):**
+  - **Model:** `SosIncident` (`incidentNumber` format `SOS-YYYYMMDD-XXXXX`, booking reference, customer and caregiver participants, priority, status, optional location, emergency contact dispatch audit, append-only timeline, resolution).
+  - **API Endpoints:**
+    - `POST /api/sos` — Raise an SOS incident for an authorized booking (`confirmed`, `in_progress`, `completed`). Protected by `sosLimiter` (5 requests / 10 mins) and participant authorization. Rejects cancelled/rejected bookings.
+    - `GET /api/sos` — List incidents scoped to caller's bookings (customers and caregivers) or operational queue (admin).
+    - `GET /api/sos/:id` — Retrieve incident details and full immutable timeline (participant or admin).
+    - `PATCH /api/sos/:id/assign` — Admin triage assignment, automatically transitioning `Open` to `Under Investigation`.
+    - `POST /api/sos/:id/timeline` — Append an operational note or status event with authenticated actor attribution.
+    - `PATCH /api/sos/:id/resolve` — Admin resolution or false-alarm closure with mandatory audit notes.
+  - **Safety & Integrity Guarantees:**
+    - Zero fabricated coordinates: If browser GPS is denied or omitted, `location.isAvailable` is `false` with `null` coordinates.
+    - Zero fake dispatch claims: External dispatch is explicitly recorded with `status: 'not_configured'`, preventing false claims of ambulance/SMS delivery.
+    - Duplicate key collision handling: Retries CSPRNG generation up to 3 times on MongoDB E11000 conflict.
+- **Booking-Scoped Messaging (Step 10B):**
+  - **Model:** `Message` (`booking`, `sender`, `senderRole`, `recipient`, `recipientRole`, `content`, `read`, `readAt`, `isFlagged`, `flaggedReasons`, `flaggedAt`).
+  - **Compound Indexes:** `{ booking: 1, createdAt: 1 }`, `{ booking: 1, createdAt: -1 }`, `{ recipient: 1, read: 1, createdAt: -1 }`, `{ booking: 1, recipient: 1, read: 1 }`.
+  - **API Endpoints:**
+    - `POST /api/messages` (and `/api/messages/booking/:bookingId`) — Send message for an active booking engagement. Protected by `messageLimiter` (60 requests / 1 min). Sender and recipient are strictly derived server-side from `req.user._id` and the booking record (client-supplied sender/recipient fields are ignored). Permitted in `pending`, `confirmed`, and `in_progress` states; blocked in `cancelled`, `rejected`, and `completed`.
+    - `GET /api/messages/booking/:bookingId` (and `/api/messages/:bookingId`) — Retrieve paginated chronological message history with bounded pagination (default 20, max 50). Historical conversation remains accessible after booking completion, cancellation, or rejection for participants and admins.
+    - `PATCH /api/messages/booking/:bookingId/read` (and `/api/messages/:bookingId/read`) — Atomic update marking incoming messages as read, strictly scoped to `recipient: user._id`. Senders cannot mark their own messages as read.
+    - `GET /api/messages/unread` — Retrieve unread-message counts for the authenticated user (overall total and grouped by booking).
+  - **Content & Privacy Guarantees:**
+    - Strict message content bounds: 1 to 2000 characters. Stored as plain text data.
+    - Off-platform review detection: Automatic pattern detection for phone numbers and UPI IDs flags messages for administrative review (`isFlagged: true`) without hard-blocking critical communication between customer and bedside caregiver.
+    - Strict authorization: Strangers and unrelated users receive HTTP 403 `ForbiddenError` on all operations.
+- **Notification Infrastructure (Step 10C):**
+  - **Model:** `Notification` (`recipient`, `type`, `title`, `message`, `metadata`, `read`, `readAt`, `idempotencyKey`).
+  - **Compound & Unique Indexes:** `{ recipient: 1, createdAt: -1 }`, `{ recipient: 1, read: 1, createdAt: -1 }`, and unique partial `{ recipient: 1, idempotencyKey: 1 }`.
+  - **Retention & Audit Policy:** Automatic 90-day TTL indexes are intentionally excluded to prevent accidental loss of medical, safety, or legal records pending formal policy review.
+  - **API Endpoints:**
+    - `GET /api/notifications` — List current user's notifications with bounded pagination (default 20, max 50) and optional `unreadOnly` filter.
+    - `GET /api/notifications/unread` — Retrieve total count of unread notifications for authenticated caller.
+    - `PATCH /api/notifications/:id/read` — Mark single notification as read, enforcing strict recipient authorization (403 for unauthorized users).
+    - `PATCH /api/notifications/read-all` (and `/api/notifications/read`) — Bulk mark unread notifications as read via atomic `updateMany` scoped to recipient.
+  - **Idempotency & Fail-Safe Architecture:**
+    - `createNotification` deduplicates via `idempotencyKey` and gracefully catches MongoDB E11000 duplicate races.
+    - `safeDispatchNotification` wraps notification creation in fail-safe error handling so internal notification failures cannot fail, roll back, or disrupt primary booking, SOS, or messaging business logic.
+    - Event integrations: messaging dispatch (`type: 'message_received'`) and SOS alert dispatch (`type: 'sos_raised'`) safely create in-app notifications with deterministic idempotency keys (`msg:${message._id}:${recipient}`, `sos:${incident._id}:${recipient}`).
+  - **External Provider Stubs:** Structured provider interfaces (`externalProviders.sms`, `externalProviders.email`, `externalProviders.push`) return `{ delivered: false, status: 'not_configured' }`, eliminating false delivery claims.
+
+---
+
+*Handover document updated for BYSTANDER-MAIN Step 10C engineering transition.*
+

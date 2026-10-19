@@ -37,7 +37,7 @@ const rupeeTick = (v) => `₹${(v / 1000).toFixed(0)}k`
 export function PayoutsPage() {
   useDocumentTitle('Payouts')
 
-  const { payouts, updatePayout } = useData()
+  const { payouts } = useData()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
@@ -49,6 +49,7 @@ export function PayoutsPage() {
   const [liveStats, setLiveStats] = useState(null)
   const [isFallback, setIsFallback] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSettling, setIsSettling] = useState(false)
 
   const stats = useMemo(() => {
     const count = (s) => payouts.filter((p) => p.status === s).length
@@ -71,34 +72,30 @@ export function PayoutsPage() {
     })
   }, [payouts, debouncedSearch, status])
 
-  useEffect(() => {
-    let mounted = true
+  const fetchPayouts = async () => {
     setIsLoading(true)
-    adminService
-      .getAdminPayouts({
+    try {
+      const res = await adminService.getAdminPayouts({
         status: status === 'All' ? 'all' : status,
         search: debouncedSearch,
       })
-      .then((res) => {
-        if (!mounted) return
-        if (res?.payouts && res.payouts.length > 0) {
-          setLivePayouts(res.payouts)
-          if (res.stats) setLiveStats(res.stats)
-          setIsFallback(false)
-        } else {
-          setIsFallback(true)
-        }
-      })
-      .catch(() => {
-        if (mounted) setIsFallback(true)
-      })
-      .finally(() => {
-        if (mounted) setIsLoading(false)
-      })
-
-    return () => {
-      mounted = false
+      if (res?.payouts && res.payouts.length > 0) {
+        setLivePayouts(res.payouts)
+        if (res.stats) setLiveStats(res.stats)
+        setIsFallback(false)
+      } else {
+        setIsFallback(true)
+      }
+    } catch {
+      setIsFallback(true)
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
+    fetchPayouts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, debouncedSearch])
 
   const displayedPayouts = livePayouts && !isFallback ? livePayouts : filtered
@@ -114,22 +111,27 @@ export function PayoutsPage() {
   }, [debouncedSearch, status, displayedPayouts.length])
 
   const handleApprove = async () => {
-    if (!approving) return
+    if (!approving || isSettling) return
+    const targetId = approving.dbId || approving._id || approving.id
+    setIsSettling(true)
     try {
-      if (approving.dbId || approving._id || approving.id) {
-        await adminService.updateAdminPayoutStatus(approving.dbId || approving._id || approving.id, {
-          status: 'settled',
-          notes: 'Payout settled and confirmed by operations desk',
-        })
-      }
+      await adminService.updateAdminPayoutStatus(targetId, {
+        status: 'settled',
+        notes: 'Payout settled and confirmed by operations desk',
+      })
+      toast.success(`Payout ${approving.id} settled (simulated)`, {
+        description: `${formatCurrency(approving.net)} recorded as settled for ${approving.caregiverName} · ${approving.method}.`,
+      })
+      setApprovingId(null)
+      await fetchPayouts()
     } catch (err) {
-      console.warn('[Admin Payout API Warning]', err.message)
+      toast.error('Failed to settle payout', {
+        description: err?.message || 'An unexpected error occurred while updating the payout status.',
+      })
+      setApprovingId(null)
+    } finally {
+      setIsSettling(false)
     }
-    updatePayout(approving.id, 'Settled')
-    toast.success(`Payout ${approving.id} settled`, {
-      description: `${formatCurrency(approving.net)} released to ${approving.caregiverName} · ${approving.method}.`,
-    })
-    setApprovingId(null)
   }
 
   const handleDownload = (payout) => {
@@ -438,13 +440,16 @@ export function PayoutsPage() {
 
       <ConfirmationDialog
         open={Boolean(approving)}
-        onClose={() => setApprovingId(null)}
+        onClose={() => {
+          if (!isSettling) setApprovingId(null)
+        }}
         onConfirm={handleApprove}
+        loading={isSettling}
         tone="success"
         title="Approve this payout?"
         message={
           approving
-            ? `${formatCurrency(approving.net)} will be released to ${approving.caregiverName} (${approving.method}) for ${approving.period}. This action settles the payout in the demo ledger.`
+            ? `${formatCurrency(approving.net)} will be marked as settled for ${approving.caregiverName} (${approving.method}) for ${approving.period}. This simulated action records settlement in the operations ledger.`
             : ''
         }
         confirmLabel="Approve payout"

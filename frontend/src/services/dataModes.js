@@ -56,6 +56,9 @@ export const FORBIDDEN_FALLBACK_RESOURCES = new Set([
   'sos:assign',
   'sos:resolve',
   'payments:simulate',
+  'payouts:request',
+  'payouts:update_status',
+  'commissions:reconcile',
 ]);
 
 /**

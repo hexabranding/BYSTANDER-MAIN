@@ -45,13 +45,14 @@ export function EarningsPage() {
   useDocumentTitle('Earnings')
 
   const { user } = useAuth()
-  const { payouts, updatePayout, createPayout, bookings, earnings } = useData()
+  const { bookings, earnings } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
 
   const [tab, setTab] = useState('all')
   const [query, setQuery] = useState('')
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false)
+  const [isSubmittingPayout, setIsSubmittingPayout] = useState(false)
   const [liveEarnings, setLiveEarnings] = useState(null)
   const [liveStats, setLiveStats] = useState(null)
   const [isFallback, setIsFallback] = useState(false)
@@ -135,18 +136,24 @@ export function EarningsPage() {
   }
 
   const handlePayout = async () => {
-    setPayoutDialogOpen(false)
+    if (isSubmittingPayout) return
+    setIsSubmittingPayout(true)
     try {
       await financeService.requestCaregiverPayout({
         disbursalMethod: 'Bank Transfer',
       })
-      toast.success('Payout request submitted — settles in 2 working days (demo)')
+      toast.success('Payout request submitted (simulated)', {
+        description: 'Your payout request has been queued for administrative processing.',
+      })
+      setPayoutDialogOpen(false)
       await loadEarnings()
-    } catch {
-      const mine = payouts.find((p) => p.caregiverId === myId && p.status === 'Pending')
-      if (mine) updatePayout(mine.id, 'Processing')
-      else createPayout({ caregiverId: myId, amount: effectiveStats.pendingPayout, bank: 'HDFC •••• 4412', status: 'Processing' })
-      toast.success('Payout request submitted — settles in 2 working days (demo)')
+    } catch (err) {
+      toast.error('Payout request failed', {
+        description: err?.message || 'Unable to submit payout request. Please try again later.',
+      })
+      setPayoutDialogOpen(false)
+    } finally {
+      setIsSubmittingPayout(false)
     }
   }
 
@@ -330,11 +337,14 @@ export function EarningsPage() {
 
       <ConfirmationDialog
         open={payoutDialogOpen}
-        onClose={() => setPayoutDialogOpen(false)}
+        onClose={() => {
+          if (!isSubmittingPayout) setPayoutDialogOpen(false)
+        }}
         onConfirm={handlePayout}
+        loading={isSubmittingPayout}
         tone="success"
         title="Request this payout?"
-        message={`${formatCurrency(effectiveStats.pendingPayout)} will be transferred to HDFC •••• 4412. Payouts settle in 2 working days and cannot be recalled once initiated.`}
+        message={`${formatCurrency(effectiveStats.pendingPayout)} will be queued for disbursal to your registered bank account. Financial transactions remain simulated in this environment.`}
         confirmLabel="Request payout"
       />
     </div>

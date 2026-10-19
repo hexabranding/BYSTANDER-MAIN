@@ -245,6 +245,11 @@ const caregiverProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Dedicated version counter mutated in transactions to serialize concurrent payout requests across processes
+    payoutLockVersion: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

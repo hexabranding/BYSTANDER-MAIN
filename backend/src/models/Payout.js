@@ -25,8 +25,13 @@ const payoutSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'Caregiver user reference is required'],
-      index: true,
     },
+    transactions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Transaction',
+      },
+    ],
     period: {
       type: String,
       required: true,
@@ -107,6 +112,16 @@ const payoutSchema = new mongoose.Schema(
 
 payoutSchema.index({ caregiverUser: 1, createdAt: -1 });
 payoutSchema.index({ status: 1, createdAt: -1 });
+
+// Partial unique index preventing multiple concurrent/active payouts for the same caregiver
+payoutSchema.index(
+  { caregiverUser: 1 },
+  {
+    unique: true,
+    name: 'unique_active_payout_per_caregiver',
+    partialFilterExpression: { status: { $in: ['pending', 'processing'] } },
+  },
+);
 
 export const Payout = mongoose.model('Payout', payoutSchema);
 export default Payout;

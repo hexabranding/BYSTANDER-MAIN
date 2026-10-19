@@ -30,6 +30,9 @@ describe('Step 12B - Centralized Data Modes & Fallback Governance', () => {
     assert.strictEqual(isFallbackPermitted('messages:send'), false);
     assert.strictEqual(isFallbackPermitted('sos:create'), false);
     assert.strictEqual(isFallbackPermitted('payments:simulate'), false);
+    assert.strictEqual(isFallbackPermitted('payouts:request'), false);
+    assert.strictEqual(isFallbackPermitted('payouts:update_status'), false);
+    assert.strictEqual(isFallbackPermitted('commissions:reconcile'), false);
   });
 
   it('2. Static mode returns static data directly with source: static', async () => {

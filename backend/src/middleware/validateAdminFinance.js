@@ -207,6 +207,15 @@ export const validateUpdatePayoutStatus = (req, res, next) => {
     req.body.notes = notes.trim().slice(0, 500);
   }
 
+  if (norm === 'failed') {
+    if (!req.body.notes || req.body.notes.length < 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'A meaningful audit note of at least 5 characters is required when marking a payout as failed',
+      });
+    }
+  }
+
   next();
 };
 

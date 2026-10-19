@@ -48,6 +48,7 @@ export function CommissionsPage() {
   const [liveCommissions, setLiveCommissions] = useState(null)
   const [liveStats, setLiveStats] = useState(null)
   const [isFallback, setIsFallback] = useState(false)
+  const [isReconciling, setIsReconciling] = useState(false)
   const debouncedSearch = useDebouncedValue(search)
 
   const stats = useMemo(() => {
@@ -107,18 +108,23 @@ export function CommissionsPage() {
   }, [debouncedSearch, status, displayedCommissions.length])
 
   const handleReconcile = async () => {
-    setReconcileOpen(false)
+    if (isReconciling) return
+    setIsReconciling(true)
     try {
       const result = await adminService.reconcileCommissions()
       const count = result?.reconciledCount ?? displayedStats.accruedCount
-      toast.success('Commission ledger reconciled', {
+      toast.success('Commission ledger reconciled (simulated)', {
         description: `${count} accrued entr${count === 1 ? 'y' : 'ies'} queued for the next settlement cycle.`,
       })
+      setReconcileOpen(false)
       await fetchCommissions()
-    } catch {
-      toast.success('Commission ledger reconciled (demo)', {
-        description: `${displayedStats.accruedCount} accrued entr${displayedStats.accruedCount === 1 ? 'y' : 'ies'} queued for the next settlement cycle.`,
+    } catch (err) {
+      toast.error('Commission reconciliation failed', {
+        description: err?.message || 'Unable to reconcile accrued commissions with the server.',
       })
+      setReconcileOpen(false)
+    } finally {
+      setIsReconciling(false)
     }
   }
 
@@ -383,13 +389,16 @@ export function CommissionsPage() {
 
       <ConfirmationDialog
         open={reconcileOpen}
-        onClose={() => setReconcileOpen(false)}
+        onClose={() => {
+          if (!isReconciling) setReconcileOpen(false)
+        }}
         onConfirm={handleReconcile}
+        loading={isReconciling}
         tone="primary"
         title="Reconcile commission ledger?"
         message={`${stats.accruedCount} accrued entr${stats.accruedCount === 1 ? 'y' : 'ies'} totalling ${formatCurrency(
           stats.accrued,
-        )} will be matched against the next payout batch. Reconciliation is recorded in the demo audit trail.`}
+        )} will be matched against the next payout batch. Reconciliation is recorded in the simulated audit trail.`}
         confirmLabel="Reconcile"
       />
     </div>

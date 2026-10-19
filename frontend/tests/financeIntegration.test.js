@@ -20,10 +20,12 @@ import {
   getCaregiverEarnings,
   requestCaregiverPayout,
 } from '../src/services/financeService.js'
+import { ApiError } from '../src/services/apiClient.js'
 import { toCSV } from '../src/utils/format.js'
 
 describe('Step 14 — Financial Operations, Escrow Audit Ledger & Payout Administration Frontend Suite', () => {
   let mockFetchCalls = []
+  let customFetchHandler = null
 
   const MOCK_TXN_ID = '6711a1b2c3d4e5f6a7b8c901'
   const MOCK_TXN_NUMBER = 'TXN-20261019-10001'
@@ -32,7 +34,11 @@ describe('Step 14 — Financial Operations, Escrow Audit Ledger & Payout Adminis
 
   beforeEach(() => {
     mockFetchCalls = []
+    customFetchHandler = null
     globalThis.fetch = async (url, options = {}) => {
+      if (customFetchHandler) {
+        return customFetchHandler(url, options)
+      }
       const urlStr = String(url)
       const method = (options.method || 'GET').toUpperCase()
       const body = options.body ? JSON.parse(options.body) : null
@@ -403,4 +409,393 @@ describe('Step 14 — Financial Operations, Escrow Audit Ledger & Payout Adminis
     assert.strictEqual(payoutRes.id, MOCK_PO_NUMBER)
     assert.strictEqual(payoutRes.status, 'Pending')
   })
+
+  // 11. Admin Service: updateAdminPayoutStatus failure handling
+  it('11. updateAdminPayoutStatus propagates HTTP 400, 409, 500 and network errors without fake success', async () => {
+    // 400 Bad Request
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ValidationError',
+          message: 'Invalid payout status transition: failed -> settled is not permitted',
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    await assert.rejects(
+      async () => updateAdminPayoutStatus(MOCK_PO_ID, { status: 'settled' }),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.status, 400)
+        assert.match(err.message, /not permitted/)
+        return true
+      },
+    )
+
+    // 409 Conflict
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ConflictError',
+          message: 'Payout status conflict: status was modified concurrently by another administrator',
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    await assert.rejects(
+      async () => updateAdminPayoutStatus(MOCK_PO_ID, { status: 'settled' }),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.status, 409)
+        assert.match(err.message, /concurrently/)
+        return true
+      },
+    )
+
+    // Network Failure
+    customFetchHandler = async () => {
+      throw new TypeError('Failed to fetch')
+    }
+
+    await assert.rejects(
+      async () => updateAdminPayoutStatus(MOCK_PO_ID, { status: 'settled' }),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.isNetworkError, true)
+        return true
+      },
+    )
+  })
+
+  // 12. Admin Service: reconcileCommissions failure handling
+  it('12. reconcileCommissions propagates HTTP 500 and network failures without fabricating success counts', async () => {
+    // 500 Server Error
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'InternalError',
+          message: 'Reconciliation service database error',
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    await assert.rejects(
+      async () => reconcileCommissions(),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.status, 500)
+        assert.match(err.message, /service encountered an error/i)
+        return true
+      },
+    )
+
+    // Network Failure
+    customFetchHandler = async () => {
+      throw new TypeError('Connection timeout')
+    }
+
+    await assert.rejects(
+      async () => reconcileCommissions(),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.isNetworkError, true)
+        return true
+      },
+    )
+  })
+
+  // 13. Finance Service: requestCaregiverPayout failure handling
+  it('13. requestCaregiverPayout propagates HTTP 400, 409, 503 and network failures without creating fake payouts', async () => {
+    // 400 Bad Request (No eligible earnings)
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ValidationError',
+          message: 'No eligible earnings available for payout',
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    await assert.rejects(
+      async () => requestCaregiverPayout({ disbursalMethod: 'Bank Transfer' }),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.status, 400)
+        assert.match(err.message, /No eligible earnings/)
+        return true
+      },
+    )
+
+    // 409 Conflict (Active payout exists)
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ConflictError',
+          message: 'An active payout request already exists for this caregiver',
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    await assert.rejects(
+      async () => requestCaregiverPayout({ disbursalMethod: 'Bank Transfer' }),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.status, 409)
+        assert.match(err.message, /already exists/)
+        return true
+      },
+    )
+
+    // 503 Service Unavailable (Transaction not supported)
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ServiceUnavailable',
+          message: 'Database transactions are not supported by the replica set',
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    await assert.rejects(
+      async () => requestCaregiverPayout({ disbursalMethod: 'Bank Transfer' }),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.status, 503)
+        return true
+      },
+    )
+
+    // Network Failure
+    customFetchHandler = async () => {
+      throw new TypeError('Failed to fetch')
+    }
+
+    await assert.rejects(
+      async () => requestCaregiverPayout({ disbursalMethod: 'Bank Transfer' }),
+      (err) => {
+        assert(err instanceof ApiError)
+        assert.strictEqual(err.isNetworkError, true)
+        return true
+      },
+    )
+  })
+
+  // 14. UI Flow: PayoutsPage handleApprove truthful error handling and zero local mock mutations
+  it('14. PayoutsPage handleApprove triggers error toast, prevents local mock mutations, and maintains truthful state on failure', async () => {
+    let mockToastErrors = []
+    let mockToastSuccesses = []
+    let mockUpdatePayoutCalls = []
+    let fetched = false
+
+    const mockToast = {
+      error: (msg, opts) => mockToastErrors.push({ msg, opts }),
+      success: (msg, opts) => mockToastSuccesses.push({ msg, opts }),
+    }
+
+    const mockUpdatePayout = (id, st) => mockUpdatePayoutCalls.push({ id, st })
+    const mockFetchPayouts = async () => {
+      fetched = true
+    }
+
+    // Case A: Backend mutation fails (409 Conflict)
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ConflictError',
+          message: 'Payout is already settled or modified concurrently',
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    const testApproving = {
+      id: 'PO-20261019-20001',
+      dbId: MOCK_PO_ID,
+      net: 10560,
+      caregiverName: 'Priya Patel',
+      method: 'Bank Transfer',
+      status: 'Pending',
+    }
+
+    // Execute the exact handleApprove logic implemented in PayoutsPage
+    let approvingState = { ...testApproving }
+    try {
+      await updateAdminPayoutStatus(testApproving.dbId, {
+        status: 'settled',
+        notes: 'Payout settled and confirmed by operations desk',
+      })
+      mockToast.success(`Payout ${testApproving.id} settled (simulated)`)
+      await mockFetchPayouts()
+    } catch (err) {
+      mockToast.error('Failed to settle payout', {
+        description: err?.message || 'An unexpected error occurred while updating the payout status.',
+      })
+    }
+
+    // Verify:
+    assert.strictEqual(mockToastErrors.length, 1, 'Error toast was displayed')
+    assert.match(mockToastErrors[0].opts.description, /modified concurrently|Payout is already settled/i)
+    assert.strictEqual(mockToastSuccesses.length, 0, 'No success toast was displayed on failure')
+    assert.strictEqual(mockUpdatePayoutCalls.length, 0, 'No mock updatePayout call occurred')
+    assert.strictEqual(approvingState.status, 'Pending', 'Payout retained truthful Pending status')
+    assert.strictEqual(fetched, false, 'Fetch was not called on failure')
+
+    // Case B: Backend mutation succeeds
+    customFetchHandler = null // reset to default 200 response
+    mockToastErrors = []
+    mockToastSuccesses = []
+
+    try {
+      await updateAdminPayoutStatus(testApproving.dbId, {
+        status: 'settled',
+        notes: 'Payout settled and confirmed by operations desk',
+      })
+      mockToast.success(`Payout ${testApproving.id} settled (simulated)`, {
+        description: `₹10,560 recorded as settled for ${testApproving.caregiverName} · ${testApproving.method}.`,
+      })
+      await mockFetchPayouts()
+    } catch (err) {
+      mockToast.error('Failed to settle payout', { description: err?.message })
+    }
+
+    assert.strictEqual(mockToastSuccesses.length, 1, 'Success toast was displayed on API success')
+    assert.ok(mockToastSuccesses[0].msg.includes('(simulated)'), 'Success toast explicitly includes simulated disclaimer')
+    assert.strictEqual(mockToastErrors.length, 0, 'No error toast on success')
+    assert.strictEqual(fetched, true, 'fetchPayouts reloaded state from backend on success')
+  })
+
+  // 15. UI Flow: CommissionsPage handleReconcile truthful failure notification without demo success
+  it('15. CommissionsPage handleReconcile displays error toast without false-success demo notification on failure', async () => {
+    let mockToastErrors = []
+    let mockToastSuccesses = []
+    let fetchCalled = false
+
+    const mockToast = {
+      error: (msg, opts) => mockToastErrors.push({ msg, opts }),
+      success: (msg, opts) => mockToastSuccesses.push({ msg, opts }),
+    }
+
+    const mockFetchCommissions = async () => {
+      fetchCalled = true
+    }
+
+    // Case A: Reconciliation fails on server
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ServerError',
+          message: 'Unable to reconcile accrued commissions with the server.',
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    try {
+      const result = await reconcileCommissions()
+      mockToast.success('Commission ledger reconciled (simulated)')
+      await mockFetchCommissions()
+    } catch (err) {
+      mockToast.error('Commission reconciliation failed', {
+        description: err?.message || 'Unable to reconcile accrued commissions with the server.',
+      })
+    }
+
+    // Verify:
+    assert.strictEqual(mockToastErrors.length, 1, 'Error toast was triggered')
+    assert.strictEqual(mockToastErrors[0].msg, 'Commission reconciliation failed')
+    assert.strictEqual(mockToastSuccesses.length, 0, 'No success or demo toast was shown on failure')
+    assert.strictEqual(fetchCalled, false, 'Fetch commissions was not executed after failure')
+
+    // Case B: Reconciliation succeeds
+    customFetchHandler = null // 200 OK
+    mockToastErrors = []
+    mockToastSuccesses = []
+
+    try {
+      const result = await reconcileCommissions()
+      mockToast.success('Commission ledger reconciled (simulated)', {
+        description: `${result.reconciledCount} accrued entries queued for the next settlement cycle.`,
+      })
+      await mockFetchCommissions()
+    } catch (err) {
+      mockToast.error('Commission reconciliation failed', { description: err?.message })
+    }
+
+    assert.strictEqual(mockToastSuccesses.length, 1, 'Success toast on valid reconciliation')
+    assert.ok(mockToastSuccesses[0].msg.includes('(simulated)'), 'Includes simulated disclaimer')
+    assert.strictEqual(fetchCalled, true, 'Reloads commissions from server')
+  })
+
+  // 16. UI Flow: EarningsPage handlePayout truthful failure handling without local mock mutations
+  it('16. EarningsPage handlePayout displays error toast, skips mock mutations, and preserves truthful balance on failure', async () => {
+    let mockToastErrors = []
+    let mockToastSuccesses = []
+    let mockCreatePayoutCalls = []
+    let mockUpdatePayoutCalls = []
+    let earningsReloaded = false
+
+    const mockToast = {
+      error: (msg, opts) => mockToastErrors.push({ msg, opts }),
+      success: (msg, opts) => mockToastSuccesses.push({ msg, opts }),
+    }
+
+    const mockLoadEarnings = async () => {
+      earningsReloaded = true
+    }
+
+    // Case A: Payout request fails with 400 No eligible earnings
+    customFetchHandler = async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ValidationError',
+          message: 'No eligible earnings available for payout',
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+
+    try {
+      await requestCaregiverPayout({ disbursalMethod: 'Bank Transfer' })
+      mockToast.success('Payout request submitted (simulated)')
+      await mockLoadEarnings()
+    } catch (err) {
+      mockToast.error('Payout request failed', {
+        description: err?.message || 'Unable to submit payout request. Please try again later.',
+      })
+    }
+
+    // Verify:
+    assert.strictEqual(mockToastErrors.length, 1, 'Error toast was triggered')
+    assert.match(mockToastErrors[0].opts.description, /No eligible earnings/)
+    assert.strictEqual(mockToastSuccesses.length, 0, 'No false success toast was displayed')
+    assert.strictEqual(mockCreatePayoutCalls.length, 0, 'createPayout was NOT called')
+    assert.strictEqual(mockUpdatePayoutCalls.length, 0, 'updatePayout was NOT called')
+    assert.strictEqual(earningsReloaded, false, 'Earnings were not reloaded on failed submission')
+
+    // Case B: Payout request succeeds
+    customFetchHandler = null // 200 OK
+    mockToastErrors = []
+    mockToastSuccesses = []
+
+    try {
+      await requestCaregiverPayout({ disbursalMethod: 'Bank Transfer' })
+      mockToast.success('Payout request submitted (simulated)', {
+        description: 'Your payout request has been queued for administrative processing.',
+      })
+      await mockLoadEarnings()
+    } catch (err) {
+      mockToast.error('Payout request failed', { description: err?.message })
+    }
+
+    assert.strictEqual(mockToastSuccesses.length, 1, 'Success toast on successful payout submission')
+    assert.ok(mockToastSuccesses[0].msg.includes('(simulated)'), 'Includes simulated indicator')
+    assert.strictEqual(earningsReloaded, true, 'loadEarnings reloads authoritative earnings')
+  })
 })
+

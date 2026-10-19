@@ -10,6 +10,7 @@ import {
 } from '../src/services/caregiversService.js'
 import apiClient, { ApiError } from '../src/services/apiClient.js'
 import { DATA_MODES } from '../src/services/dataModes.js'
+import { CARE_TYPES } from '../src/utils/constants.js'
 
 describe('Step 12C - Services & Caregiver Directory Integration', () => {
   let originalFetch
@@ -294,5 +295,59 @@ describe('Step 12C - Services & Caregiver Directory Integration', () => {
     assert.strictEqual(res.source, 'api')
     assert.strictEqual(res.data.caregivers.length, 0)
     assert.strictEqual(res.data.pagination.total, 0)
+  })
+
+  it('9. Regression: Computes service filter counts from live API caregiver list without throwing ReferenceError', async () => {
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        success: true,
+        data: [
+          {
+            _id: '6711a1b2c3d4e5f6a7b8c901',
+            fullName: 'Ravi Kumar',
+            services: ['Patient Monitoring', 'Post-Surgery Care'],
+            status: 'active',
+          },
+          {
+            _id: '6711a1b2c3d4e5f6a7b8c902',
+            fullName: 'Sunita Rao',
+            services: ['Patient Monitoring', 'Feeding & Hygiene Support'],
+            status: 'active',
+          },
+          {
+            _id: '6711a1b2c3d4e5f6a7b8c903',
+            fullName: 'Amit Patel',
+            services: null,
+            status: 'active',
+          },
+        ],
+        pagination: { page: 1, limit: 12, total: 3, totalPages: 1 },
+      }),
+    })
+
+    const res = await fetchPublicCaregivers({}, { mode: DATA_MODES.API_ONLY })
+    const caregiverList = res.data?.caregivers || []
+
+    const counts = CARE_TYPES.reduce((acc, svc) => {
+      acc[svc] = caregiverList.filter((cg) => (cg.services || []).includes(svc)).length
+      return acc
+    }, {})
+
+    assert.strictEqual(counts['Patient Monitoring'], 2)
+    assert.strictEqual(counts['Post-Surgery Care'], 1)
+    assert.strictEqual(counts['Feeding & Hygiene Support'], 1)
+    assert.strictEqual(counts['Companionship'], 0)
+    assert.strictEqual(typeof counts['Bedridden Patient Care'], 'number')
+  })
+
+  it('10. Regression: Service filter counts evaluate safely to 0 when caregiver list is empty', () => {
+    const emptyList = []
+    for (const svc of CARE_TYPES) {
+      const count = emptyList.filter((cg) => (cg.services || []).includes(svc)).length
+      assert.strictEqual(count, 0)
+    }
   })
 })

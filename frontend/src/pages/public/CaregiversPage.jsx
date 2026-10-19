@@ -269,7 +269,7 @@ export function CaregiversPage() {
                         label={svc}
                         checked={selectedServices.includes(svc)}
                         onChange={() => toggleService(svc)}
-                        count={CAREGIVERS.filter((cg) => cg.services.includes(svc)).length}
+                        count={caregiverList.filter((cg) => (cg.services || []).includes(svc)).length}
                       />
                     ))}
                   </div>

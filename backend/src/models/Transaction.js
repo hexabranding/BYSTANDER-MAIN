@@ -112,6 +112,16 @@ const transactionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    payout: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Payout',
+      default: null,
+      index: true,
+    },
+    payoutAllocatedAt: {
+      type: Date,
+      default: null,
+    },
     isSimulated: {
       type: Boolean,
       default: true,
@@ -131,6 +141,7 @@ const transactionSchema = new mongoose.Schema(
 transactionSchema.index({ customer: 1, createdAt: -1 });
 transactionSchema.index({ caregiverUser: 1, createdAt: -1 });
 transactionSchema.index({ status: 1, createdAt: -1 });
+transactionSchema.index({ caregiverUser: 1, status: 1, payout: 1 });
 
 export const Transaction = mongoose.model('Transaction', transactionSchema);
 export default Transaction;

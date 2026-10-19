@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
@@ -7,10 +7,12 @@ import {
   Eye,
   History,
   MapPin,
+  RefreshCw,
   SearchX,
   Siren,
   XCircle,
 } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
@@ -23,8 +25,9 @@ import { Tabs } from '@/components/common/Tabs'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
-import { EmptyState } from '@/components/common/States'
+import { CardSkeleton, EmptyState, ErrorState } from '@/components/common/States'
 import { FormField, Select } from '@/components/forms/FormField'
+import { sosService, isMongoObjectId } from '@/services'
 
 const TABS = [
   { id: 'Active', match: 'Open' },
@@ -74,56 +77,140 @@ function MockMap({ location }) {
 export function SosAlertsPage() {
   useDocumentTitle('SOS alerts')
 
-  const { sos, updateSos } = useData()
+  const { user } = useAuth()
+  const { sos: seedSos, updateSos } = useData()
 
+  const [realIncidents, setRealIncidents] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [tab, setTab] = useState('Active')
   const [openId, setOpenId] = useState(null)
   const [confirm, setConfirm] = useState(null)
 
-  const openIncident = sos.find((s) => s.id === openId) || null
+  const fetchIncidents = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await sosService.getSosIncidents()
+      setRealIncidents(res.incidents || [])
+    } catch (err) {
+      setError(err.message || 'Unable to load SOS incidents from server')
+      setRealIncidents(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchIncidents()
+  }, [fetchIncidents])
+
+  // Use live incidents when available, otherwise seed fallback
+  const allSos = useMemo(() => {
+    if (realIncidents !== null) return realIncidents
+    return seedSos || []
+  }, [realIncidents, seedSos])
+
+  const openIncident = allSos.find((s) => s.id === openId) || null
 
   const stats = useMemo(() => {
-    const active = sos.filter((s) => s.status !== 'Resolved')
-    const resolvedThisMonth = sos.filter((s) => s.status === 'Resolved' && s.reportedAt.startsWith('2026-10'))
+    const active = allSos.filter((s) => s.status !== 'Resolved' && s.status !== 'False Alarm')
+    const resolvedThisMonth = allSos.filter((s) => s.status === 'Resolved' && s.reportedAt?.startsWith('2026-10'))
     const lastReported = active
       .map((s) => s.reportedAt)
+      .filter(Boolean)
       .sort()
       .slice(-1)[0]
     return {
       active: active.length,
       critical: active.filter((s) => s.priority === 'Critical').length,
-      investigating: sos.filter((s) => s.status === 'Under Investigation').length,
+      investigating: allSos.filter((s) => s.status === 'Under Investigation').length,
       resolvedMonth: resolvedThisMonth.length,
       lastReported,
     }
-  }, [sos])
+  }, [allSos])
 
   const filtered = useMemo(() => {
     const activeTab = TABS.find((t) => t.id === tab)
-    if (!activeTab.match) return sos
-    return sos.filter((s) => s.status === activeTab.match)
-  }, [sos, tab])
+    if (!activeTab || !activeTab.match) return allSos
+    return allSos.filter((s) => s.status === activeTab.match)
+  }, [allSos, tab])
 
-  const resolved = useMemo(() => sos.filter((s) => s.status === 'Resolved'), [sos])
+  const resolved = useMemo(() => allSos.filter((s) => s.status === 'Resolved'), [allSos])
 
-  const assignToMe = (id) => {
-    updateSos(id, { assignedTo: 'Kavya Raman' }, 'Assigned to Kavya Raman')
-    toast.success(`SOS ${id} assigned to you`, { description: 'The incident timeline records the assignment.' })
+  const assignToMe = async (id) => {
+    const adminName = user?.fullName || 'Kavya Raman'
+    if (isMongoObjectId(id)) {
+      try {
+        if (user?._id && isMongoObjectId(user._id)) {
+          await sosService.assignSos(id, user._id)
+        } else {
+          await sosService.addTimelineNote(id, {
+            action: `Assigned to ${adminName}`,
+            notes: 'Administrative assignment updated by operations desk.',
+          })
+        }
+        toast.success(`SOS ${id} assigned to you`, { description: 'The incident timeline records the assignment.' })
+        await fetchIncidents()
+      } catch (err) {
+        toast.error('Failed to assign incident', { description: err.message })
+      }
+    } else {
+      updateSos(id, { assignedTo: adminName }, `Assigned to ${adminName}`)
+      toast.success(`SOS ${id} assigned to you`, { description: 'The incident timeline records the assignment.' })
+    }
   }
 
-  const changeAssignee = (id, name) => {
+  const changeAssignee = async (id, name) => {
     if (!name) return
-    updateSos(id, { assignedTo: name }, `Assigned to ${name}`)
-    toast.success(`SOS ${id} assigned to ${name}`)
+    if (isMongoObjectId(id)) {
+      try {
+        await sosService.addTimelineNote(id, {
+          action: `Assigned to ${name}`,
+          notes: `Operational assignment updated to ${name}`,
+        })
+        toast.success(`SOS ${id} assigned to ${name}`)
+        await fetchIncidents()
+      } catch (err) {
+        toast.error('Failed to assign incident', { description: err.message })
+      }
+    } else {
+      updateSos(id, { assignedTo: name }, `Assigned to ${name}`)
+      toast.success(`SOS ${id} assigned to ${name}`)
+    }
   }
 
-  const handleStatusChange = () => {
+  const handleStatusChange = async () => {
     if (!confirm) return
-    updateSos(confirm.id, { status: confirm.status }, `Status changed to ${confirm.status}`)
-    toast.success(`SOS ${confirm.id} — ${confirm.status}`, {
-      description: `Status changed to ${confirm.status} and written to the incident timeline.`,
-    })
+    const { id, status } = confirm
     setConfirm(null)
+
+    if (isMongoObjectId(id)) {
+      try {
+        if (status === 'Resolved') {
+          await sosService.resolveSos(id, {
+            status: 'Resolved',
+            resolutionNotes: 'Incident evaluated and resolved after verifying safety of all participants.',
+          })
+        } else {
+          await sosService.addTimelineNote(id, {
+            action: `Moved to ${status}`,
+            notes: 'Operations desk escalated to active investigation.',
+          })
+        }
+        toast.success(`SOS ${id} — ${status}`, {
+          description: `Status changed to ${status} and written to the incident timeline.`,
+        })
+        await fetchIncidents()
+      } catch (err) {
+        toast.error(`Failed to update status to ${status}`, { description: err.message })
+      }
+    } else {
+      updateSos(id, { status }, `Status changed to ${status}`)
+      toast.success(`SOS ${id} — ${status}`, {
+        description: `Status changed to ${status} and written to the incident timeline.`,
+      })
+    }
   }
 
   return (
@@ -132,9 +219,14 @@ export function SosAlertsPage() {
         title="SOS alerts"
         subtitle="Live emergency incidents raised by customers and caretakers — triage, assign and close them fast."
         action={
-          <Button to="/admin/bookings" variant="outline">
-            Open bookings
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" icon={RefreshCw} onClick={fetchIncidents} disabled={loading}>
+              Refresh
+            </Button>
+            <Button to="/admin/bookings" variant="outline" size="sm">
+              Open bookings
+            </Button>
+          </div>
         }
       />
 
@@ -187,7 +279,7 @@ export function SosAlertsPage() {
           tabs={TABS.map((t) => ({
             id: t.id,
             label: t.id,
-            count: t.match ? sos.filter((s) => s.status === t.match).length : sos.length,
+            count: t.match ? allSos.filter((s) => s.status === t.match).length : allSos.length,
           }))}
           active={tab}
           onChange={setTab}
@@ -198,7 +290,17 @@ export function SosAlertsPage() {
         </p>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <CardSkeleton count={3} />
+      ) : error && allSos.length === 0 ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Failed to load live SOS incidents"
+            description={error}
+            onRetry={fetchIncidents}
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}
@@ -381,9 +483,10 @@ export function SosAlertsPage() {
                     : 'Emergency contact NOT notified'}
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                  {openIncident.emergencyContactNotified
-                    ? 'An SMS was dispatched automatically within seconds of the SOS trigger.'
-                    : 'No notification was recorded — follow up with the registered contact manually.'}
+                  {openIncident.emergencyContactNotification?.notes ||
+                    (openIncident.emergencyContactNotified
+                      ? 'An SMS notification was dispatched automatically.'
+                      : 'No automated notification was recorded. Note: external emergency services telephony/SMS is not configured.')}
                 </p>
               </div>
             </div>

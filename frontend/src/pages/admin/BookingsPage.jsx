@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Ban,
@@ -11,6 +11,7 @@ import {
   Flag,
   IndianRupee,
   MapPin,
+  RefreshCw,
   SearchX,
   Timer,
   UserRound,
@@ -35,9 +36,10 @@ import { Modal } from '@/components/common/Modal'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePrice'
 import { Select, Textarea } from '@/components/forms/FormField'
+import { bookingService, isMongoObjectId } from '@/services'
 
 const STATUS_TABS = ['All', ...BOOKING_STATUSES]
 
@@ -50,7 +52,11 @@ const DATE_RANGES = [
 export function BookingsPage() {
   useDocumentTitle('Bookings')
 
-  const { bookings, caregivers, advanceBooking, cancelBooking } = useData()
+  const { bookings: seedBookings, caregivers, advanceBooking, cancelBooking } = useData()
+
+  const [realBookings, setRealBookings] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
@@ -63,22 +69,45 @@ export function BookingsPage() {
 
   const debouncedSearch = useDebouncedValue(search)
 
+  const fetchBookings = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await bookingService.getBookings()
+      setRealBookings(res.bookings || [])
+    } catch (err) {
+      setError(err.message || 'Unable to load bookings from server')
+      setRealBookings(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchBookings()
+  }, [fetchBookings])
+
+  const allBookings = useMemo(() => {
+    if (realBookings !== null) return realBookings
+    return seedBookings || []
+  }, [realBookings, seedBookings])
+
   const stats = useMemo(() => {
-    const active = bookings.filter((b) => ['Pending', 'Confirmed', 'In Progress'].includes(b.status)).length
-    const completed = bookings.filter((b) => b.status === 'Completed').length
-    const cancelled = bookings.filter((b) => b.status === 'Cancelled').length
-    return { total: bookings.length, active, completed, cancelled }
-  }, [bookings])
+    const active = allBookings.filter((b) => ['Pending', 'Confirmed', 'In Progress'].includes(b.status)).length
+    const completed = allBookings.filter((b) => b.status === 'Completed').length
+    const cancelled = allBookings.filter((b) => b.status === 'Cancelled').length
+    return { total: allBookings.length, active, completed, cancelled }
+  }, [allBookings])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
     const cutoff = range === 'all' ? null : new Date(Date.now() - Number(range) * 86400000).toISOString().slice(0, 10)
-    return bookings
+    return allBookings
       .filter((b) => {
-        const customerName = getCustomerById(b.customerId)?.name || ''
-        const caregiverName = caregivers.find((c) => c.id === b.caregiverId)?.name || ''
+        const customerName = b.customerName || (b.customer?.fullName) || getCustomerById(b.customerId)?.name || ''
+        const caregiverName = b.caregiverName || (b.caregiver?.user?.fullName) || caregivers.find((c) => c.id === b.caregiverId)?.name || ''
         const matchesStatus = status === 'All' || b.status === status
-        const matchesRange = !cutoff || b.date >= cutoff
+        const matchesRange = !cutoff || (b.date && b.date >= cutoff)
         const matchesSearch =
           !q ||
           `${b.id} ${b.ref} ${b.service} ${customerName} ${caregiverName}`.toLowerCase().includes(q)
@@ -86,10 +115,10 @@ export function BookingsPage() {
       })
       .map((b) => ({
         ...b,
-        customerName: getCustomerById(b.customerId)?.name || 'Customer',
-        caregiverName: caregivers.find((c) => c.id === b.caregiverId)?.name || 'Assigning…',
+        customerName: b.customerName || (b.customer?.fullName) || getCustomerById(b.customerId)?.name || 'Customer',
+        caregiverName: b.caregiverName || (b.caregiver?.user?.fullName) || caregivers.find((c) => c.id === b.caregiverId)?.name || 'Assigning…',
       }))
-  }, [bookings, caregivers, debouncedSearch, status, range])
+  }, [allBookings, caregivers, debouncedSearch, status, range])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
 
@@ -98,10 +127,11 @@ export function BookingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, status, range])
 
-  const selected = viewingId ? bookings.find((b) => b.id === viewingId) : null
-  const selectedCaregiver = selected ? caregivers.find((c) => c.id === selected.caregiverId) : null
+  const selected = viewingId ? allBookings.find((b) => b.id === viewingId) : null
+  const selectedCaregiver = selected ? (selected.caregiver || caregivers.find((c) => c.id === selected.caregiverId)) : null
 
-  const canAct = selected && !['Completed', 'Cancelled'].includes(selected.status)
+  const canCancel = selected && ['Pending', 'Confirmed', 'pending', 'confirmed'].includes(selected.status)
+  const canAct = selected && !['Completed', 'Cancelled', 'completed', 'cancelled'].includes(selected.status)
 
   const handleExport = () => {
     const rows = filtered.map((b) => ({
@@ -139,18 +169,37 @@ export function BookingsPage() {
     setDialog({ kind: 'cancel', reason: value })
   }
 
-  const runDialog = () => {
+  const runDialog = async () => {
     const action = dialog
     setDialog(null)
     if (!action || !selected) return
+
     if (action.kind === 'complete') {
-      advanceBooking(selected.id, 'complete')
-      toast.success(`Booking ${selected.id} marked complete`, {
-        description: 'Escrow releases to the caretaker within 24 hours.',
-      })
+      if (isMongoObjectId(selected.id)) {
+        toast.error('Force completion not permitted', {
+          description: 'Shifts must be verified via customer and caretaker OTP exchange to safeguard escrow payouts.',
+        })
+      } else {
+        advanceBooking(selected.id, 'complete')
+        toast.success(`Booking ${selected.id} marked complete`, {
+          description: 'Escrow releases to the caretaker within 24 hours.',
+        })
+      }
     } else {
-      cancelBooking(selected.id, action.reason)
-      toast.error(`Booking ${selected.id} cancelled`, { description: action.reason })
+      if (isMongoObjectId(selected.id)) {
+        try {
+          await bookingService.cancelBooking(selected.id, action.reason)
+          toast.success(`Booking ${selected.id} cancelled`, { description: action.reason })
+          await fetchBookings()
+        } catch (err) {
+          toast.error('Cancellation failed', {
+            description: err.message || 'Unable to cancel this booking engagement.',
+          })
+        }
+      } else {
+        cancelBooking(selected.id, action.reason)
+        toast.error(`Booking ${selected.id} cancelled`, { description: action.reason })
+      }
     }
   }
 
@@ -246,9 +295,14 @@ export function BookingsPage() {
         title="Bookings"
         subtitle="Every care booking on CareMate — schedule, payment state and admin overrides."
         action={
-          <Button variant="outline" icon={Download} onClick={handleExport}>
-            Export CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" icon={RefreshCw} onClick={fetchBookings} disabled={loading}>
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" icon={Download} onClick={handleExport}>
+              Export CSV
+            </Button>
+          </div>
         }
       />
 
@@ -270,7 +324,7 @@ export function BookingsPage() {
           tabs={STATUS_TABS.map((s) => ({
             id: s,
             label: s,
-            count: s === 'All' ? bookings.length : bookings.filter((b) => b.status === s).length,
+            count: s === 'All' ? allBookings.length : allBookings.filter((b) => b.status === s).length,
           }))}
           active={status}
           onChange={setStatus}
@@ -287,7 +341,17 @@ export function BookingsPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <TableSkeleton count={8} />
+      ) : error && allBookings.length === 0 ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Failed to load platform bookings"
+            description={error}
+            onRetry={fetchBookings}
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}
@@ -339,7 +403,13 @@ export function BookingsPage() {
                 Flag for review
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Button variant="danger" icon={Ban} onClick={openCancel} disabled={!canAct}>
+                <Button
+                  variant="danger"
+                  icon={Ban}
+                  onClick={openCancel}
+                  disabled={!canCancel}
+                  title={selected?.status === 'In Progress' ? 'In-progress shifts cannot be cancelled via self-service API' : undefined}
+                >
                   Cancel booking
                 </Button>
                 <Button icon={CheckCircle2} onClick={() => setDialog({ kind: 'complete' })} disabled={!canAct}>

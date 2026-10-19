@@ -1,6 +1,42 @@
 import mongoose from 'mongoose';
 
 /**
+ * Subdocument schema for administrative account status transition audit log.
+ */
+const userStatusAuditSchema = new mongoose.Schema(
+  {
+    previousStatus: {
+      type: String,
+      required: true,
+      enum: ['active', 'pending_verification', 'suspended', 'blocked'],
+    },
+    newStatus: {
+      type: String,
+      required: true,
+      enum: ['active', 'pending_verification', 'suspended', 'blocked'],
+    },
+    reason: {
+      type: String,
+      required: [true, 'A reason for status change is mandatory'],
+      trim: true,
+      minlength: [3, 'Reason must be at least 3 characters'],
+      maxlength: [1000, 'Reason cannot exceed 1000 characters'],
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now,
+      required: true,
+    },
+  },
+  { _id: true }
+);
+
+/**
  * User Schema — Core authentication & identity entity.
  * Supports roles: customer, caregiver, admin.
  * Password hash is hidden by default from queries and JSON serialization.
@@ -49,6 +85,20 @@ const userSchema = new mongoose.Schema(
       },
       default: 'active',
       required: true,
+    },
+    statusReason: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Status reason cannot exceed 1000 characters'],
+      default: null,
+    },
+    statusUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+    statusAuditTrail: {
+      type: [userStatusAuditSchema],
+      default: [],
     },
     isEmailVerified: {
       type: Boolean,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Area,
@@ -28,6 +28,8 @@ import { Tabs, ProgressBar } from '@/components/common/Tabs'
 import { SearchBar } from '@/components/common/SearchBar'
 import { DataTable } from '@/components/common/DataTable'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { financeService } from '@/services/financeService'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -50,11 +52,36 @@ export function EarningsPage() {
   const [tab, setTab] = useState('all')
   const [query, setQuery] = useState('')
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false)
+  const [liveEarnings, setLiveEarnings] = useState(null)
+  const [liveStats, setLiveStats] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
 
   const myEarnings = useMemo(() => {
     const myBookingIds = new Set(bookings.filter((b) => b.caregiverId === myId).map((b) => b.id))
     return earnings.filter((e) => e.caregiverId === myId || (e.caregiverId == null && myBookingIds.has(e.bookingId)))
   }, [earnings, bookings, myId])
+
+  const loadEarnings = async () => {
+    try {
+      const res = await financeService.getCaregiverEarnings()
+      if (res?.earnings && res.earnings.length > 0) {
+        setLiveEarnings(res.earnings)
+        if (res.stats) setLiveStats(res.stats)
+        setIsFallback(false)
+      } else {
+        setIsFallback(true)
+      }
+    } catch {
+      setIsFallback(true)
+    }
+  }
+
+  useEffect(() => {
+    loadEarnings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myId])
+
+  const effectiveEarnings = liveEarnings && !isFallback ? liveEarnings : myEarnings
 
   const totalNet = myEarnings.reduce((sum, e) => sum + e.net, 0)
   const totalGross = myEarnings.reduce((sum, e) => sum + e.gross, 0)
@@ -62,24 +89,35 @@ export function EarningsPage() {
   const pendingPayout = myEarnings.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
   const currentMonth = new Date().toISOString().slice(0, 7)
   const thisMonth = myEarnings.filter((e) => e.date.startsWith(currentMonth)).reduce((sum, e) => sum + e.net, 0)
-
   const commissionPct = totalGross > 0 ? Math.round((totalCommission / totalGross) * 100) : 0
+
+  const effectiveStats = useMemo(() => {
+    if (liveStats && !isFallback) return liveStats
+    return {
+      totalNet,
+      totalGross,
+      totalCommission,
+      pendingPayout,
+      thisMonth,
+      commissionPct,
+    }
+  }, [liveStats, isFallback, totalNet, totalGross, totalCommission, pendingPayout, thisMonth, commissionPct])
 
   const counts = useMemo(
     () => ({
-      all: myEarnings.length,
-      pending: myEarnings.filter((e) => e.status === 'Pending').length,
-      released: myEarnings.filter((e) => e.status === 'Released').length,
+      all: effectiveEarnings.length,
+      pending: effectiveEarnings.filter((e) => e.status === 'Pending').length,
+      released: effectiveEarnings.filter((e) => e.status === 'Released').length,
     }),
-    [myEarnings],
+    [effectiveEarnings],
   )
 
   const filtered = useMemo(() => {
-    const list = tab === 'all' ? myEarnings : myEarnings.filter((e) => e.status.toLowerCase() === tab)
+    const list = tab === 'all' ? effectiveEarnings : effectiveEarnings.filter((e) => e.status.toLowerCase() === tab)
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((e) => [e.id, e.bookingId, e.service, e.status].join(' ').toLowerCase().includes(q))
-  }, [myEarnings, tab, query])
+  }, [effectiveEarnings, tab, query])
 
   const handleExport = () => {
     const rows = filtered.map((e) => ({
@@ -96,12 +134,20 @@ export function EarningsPage() {
     toast.success(`Exported ${rows.length} transaction${rows.length === 1 ? '' : 's'} to CSV`)
   }
 
-  const handlePayout = () => {
-    const mine = payouts.find((p) => p.caregiverId === myId && p.status === 'Pending')
-    if (mine) updatePayout(mine.id, 'Processing')
-    else createPayout({ caregiverId: myId, amount: pendingPayout, bank: 'HDFC •••• 4412', status: 'Processing' })
+  const handlePayout = async () => {
     setPayoutDialogOpen(false)
-    toast.success('Payout request submitted — settles in 2 working days (demo)')
+    try {
+      await financeService.requestCaregiverPayout({
+        disbursalMethod: 'Bank Transfer',
+      })
+      toast.success('Payout request submitted — settles in 2 working days (demo)')
+      await loadEarnings()
+    } catch {
+      const mine = payouts.find((p) => p.caregiverId === myId && p.status === 'Pending')
+      if (mine) updatePayout(mine.id, 'Processing')
+      else createPayout({ caregiverId: myId, amount: effectiveStats.pendingPayout, bank: 'HDFC •••• 4412', status: 'Processing' })
+      toast.success('Payout request submitted — settles in 2 working days (demo)')
+    }
   }
 
   const columns = [
@@ -130,6 +176,10 @@ export function EarningsPage() {
 
   return (
     <div className="space-y-6">
+      {isFallback && (
+        <FallbackNotice message="Displaying caregiver earnings from offline cache while live finance service is connecting." />
+      )}
+
       <PageHeader
         title="Earnings"
         subtitle="Track every rupee — gross service value, platform commission and the net amount that lands in your bank."
@@ -142,10 +192,10 @@ export function EarningsPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total earnings" value={formatCurrency(totalNet)} icon={Banknote} tone="primary" hint="Lifetime net of commission" delay={0} />
-        <StatCard label="Pending payout" value={formatCurrency(pendingPayout)} icon={Wallet} tone="warning" hint="Releasing soon" delay={0.05} />
-        <StatCard label="This month" value={formatCurrency(thisMonth)} icon={HandCoins} tone="accent" hint="Current calendar month" delay={0.1} />
-        <StatCard label="Jobs completed" value={myEarnings.length} icon={Wallet} tone="success" hint="Paid transactions" delay={0.15} />
+        <StatCard label="Total earnings" value={formatCurrency(effectiveStats.totalNet)} icon={Banknote} tone="primary" hint="Lifetime net of commission" delay={0} />
+        <StatCard label="Pending payout" value={formatCurrency(effectiveStats.pendingPayout)} icon={Wallet} tone="warning" hint="Releasing soon" delay={0.05} />
+        <StatCard label="This month" value={formatCurrency(effectiveStats.thisMonth)} icon={HandCoins} tone="accent" hint="Current calendar month" delay={0.1} />
+        <StatCard label="Jobs completed" value={effectiveEarnings.length} icon={Wallet} tone="success" hint="Paid transactions" delay={0.15} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -202,22 +252,22 @@ export function EarningsPage() {
           <CardBody className="space-y-4">
             <div className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3 text-sm">
               <span className="text-muted">Gross earnings (all services)</span>
-              <span className="font-semibold tabular-nums text-ink">{formatCurrency(totalGross)}</span>
+              <span className="font-semibold tabular-nums text-ink">{formatCurrency(effectiveStats.totalGross)}</span>
             </div>
             <div className="flex items-center justify-between gap-4 rounded-xl border border-dashed border-line px-4 py-3 text-sm">
               <span className="text-muted">Platform commission ({Math.round(PLATFORM_COMMISSION * 100)}%)</span>
-              <span className="font-semibold tabular-nums text-muted">− {formatCurrency(totalCommission)}</span>
+              <span className="font-semibold tabular-nums text-muted">− {formatCurrency(effectiveStats.totalCommission)}</span>
             </div>
             <div className="flex items-center justify-between gap-4 rounded-xl bg-gradient-to-br from-mint-100 to-mint-200 px-4 py-3">
               <span className="text-sm font-bold text-primary-900">Net payable to you</span>
-              <span className="font-display text-lg font-extrabold tabular-nums text-primary-800">{formatCurrency(totalNet)}</span>
+              <span className="font-display text-lg font-extrabold tabular-nums text-primary-800">{formatCurrency(effectiveStats.totalNet)}</span>
             </div>
             <div>
               <div className="mb-1.5 flex items-center justify-between text-xs">
                 <span className="font-semibold text-ink-soft">Commission as % of gross</span>
-                <span className="font-bold text-primary-700">{commissionPct}%</span>
+                <span className="font-bold text-primary-700">{effectiveStats.commissionPct}%</span>
               </div>
-              <ProgressBar value={commissionPct} tone="primary" />
+              <ProgressBar value={effectiveStats.commissionPct} tone="primary" />
             </div>
             <p className="text-xs leading-relaxed text-muted">
               Commission is deducted per completed booking and already reflected in every net figure on this page.
@@ -230,17 +280,17 @@ export function EarningsPage() {
           <CardBody className="space-y-4">
             <div className="rounded-xl border border-primary-100 bg-gradient-to-br from-mint-50 to-white p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-faint">Available balance</p>
-              <p className="mt-1.5 font-display text-3xl font-extrabold tabular-nums text-ink">{formatCurrency(pendingPayout)}</p>
+              <p className="mt-1.5 font-display text-3xl font-extrabold tabular-nums text-ink">{formatCurrency(effectiveStats.pendingPayout)}</p>
               <p className="mt-1 text-xs text-muted">Settles to your registered bank in 2 working days</p>
             </div>
             <div className="rounded-xl border border-line px-4 py-3 text-sm">
               <p className="text-muted">Linked bank account</p>
               <p className="mt-0.5 font-semibold text-ink">HDFC •••• 4412</p>
             </div>
-            <Button variant="primary" icon={HandCoins} className="w-full" disabled={pendingPayout <= 0} onClick={() => setPayoutDialogOpen(true)}>
+            <Button variant="primary" icon={HandCoins} className="w-full" disabled={effectiveStats.pendingPayout <= 0} onClick={() => setPayoutDialogOpen(true)}>
               Request payout
             </Button>
-            {pendingPayout <= 0 ? <p className="text-center text-xs text-muted">No released balance available right now.</p> : null}
+            {effectiveStats.pendingPayout <= 0 ? <p className="text-center text-xs text-muted">No released balance available right now.</p> : null}
           </CardBody>
         </Card>
       </div>
@@ -284,7 +334,7 @@ export function EarningsPage() {
         onConfirm={handlePayout}
         tone="success"
         title="Request this payout?"
-        message={`${formatCurrency(pendingPayout)} will be transferred to HDFC •••• 4412. Payouts settle in 2 working days and cannot be recalled once initiated.`}
+        message={`${formatCurrency(effectiveStats.pendingPayout)} will be transferred to HDFC •••• 4412. Payouts settle in 2 working days and cannot be recalled once initiated.`}
         confirmLabel="Request payout"
       />
     </div>

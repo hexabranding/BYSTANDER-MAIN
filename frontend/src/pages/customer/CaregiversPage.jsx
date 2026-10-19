@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, LayoutGrid, List, SearchX, SlidersHorizontal, UserRound } from 'lucide-react'
 import { useData } from '@/context/DataContext'
@@ -13,7 +13,9 @@ import { CaregiverCard } from '@/components/caregiver/CaregiverCard'
 import { Pagination } from '@/components/common/Pagination'
 import { Chip } from '@/components/common/Tabs'
 import { Button } from '@/components/common/Button'
-import { EmptyState } from '@/components/common/States'
+import { CardSkeleton, EmptyState, ErrorState } from '@/components/common/States'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { fetchPublicCaregivers } from '@/services/caregiversService'
 
 const AVAILABILITY_OPTIONS = [
   'Any availability',
@@ -43,7 +45,12 @@ const SORT_OPTIONS = [
 export function CaregiversPage() {
   useDocumentTitle('Caretakers')
   const navigate = useNavigate()
-  const { caregivers, shortlist } = useData()
+  const { shortlist } = useData()
+
+  const [caregiverList, setCaregiverList] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
 
   const [search, setSearch] = useState('')
   const [service, setService] = useState('All services')
@@ -54,9 +61,34 @@ export function CaregiversPage() {
   const [shortlistOnly, setShortlistOnly] = useState(false)
   const shortlisted = useMemo(() => new Set(shortlist), [shortlist])
 
+  const loadCaregivers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetchPublicCaregivers({
+        search,
+        service: service !== 'All services' ? service : undefined,
+        availability: availability !== AVAILABILITY_OPTIONS[0] ? availability : undefined,
+        minRating: minRating > 0 ? minRating : undefined,
+        sort,
+        limit: 50,
+      })
+      setCaregiverList(res.data?.caregivers || [])
+      setIsFallback(Boolean(res.isFallback))
+    } catch (err) {
+      setError(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [search, service, availability, minRating, sort])
+
+  useEffect(() => {
+    loadCaregivers()
+  }, [loadCaregivers])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let list = caregivers.filter((c) => {
+    let list = caregiverList.filter((c) => {
       const matchesSearch =
         !q ||
         c.name.toLowerCase().includes(q) ||
@@ -72,15 +104,15 @@ export function CaregiversPage() {
     })
 
     list = [...list]
-    if (sort === 'rating') list.sort((a, b) => b.rating - a.rating)
+    if (sort === 'rating') list.sort((a, b) => (b.rating || 0) - (a.rating || 0))
     else if (sort === 'priceAsc') list.sort((a, b) => a.hourlyRate - b.hourlyRate)
     else if (sort === 'priceDesc') list.sort((a, b) => b.hourlyRate - a.hourlyRate)
     else if (sort === 'distance') list.sort((a, b) => (a.distanceKm || 99) - (b.distanceKm || 99))
     else if (sort === 'experience') list.sort((a, b) => b.experienceYears - a.experienceYears)
-    else list.sort((a, b) => Number(b.verified) - Number(a.verified) || b.rating - a.rating)
+    else list.sort((a, b) => Number(b.verified) - Number(a.verified) || (b.rating || 0) - (a.rating || 0))
 
     return list
-  }, [caregivers, search, service, availability, minRating, sort, shortlistOnly, shortlisted])
+  }, [caregiverList, search, service, availability, minRating, sort, shortlistOnly, shortlisted])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
   useEffect(() => {
@@ -118,6 +150,10 @@ export function CaregiversPage() {
           </>
         }
       />
+
+      {isFallback ? (
+        <FallbackNotice message="Offline Preview: Displaying local caretaker directory while the live server is unreachable." />
+      ) : null}
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <SearchBar
@@ -203,7 +239,17 @@ export function CaregiversPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <CardSkeleton count={6} />
+      ) : error && caregiverList.length === 0 ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Unable to load caretakers"
+            description={error?.message || 'A network error occurred while connecting to the caregiver directory.'}
+            onRetry={loadCaregivers}
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}

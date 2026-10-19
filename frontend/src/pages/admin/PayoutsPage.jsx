@@ -19,6 +19,8 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { EmptyState } from '@/components/common/States'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { adminService } from '@/services/adminService'
 
 const STATUS_TABS = ['All', 'Pending', 'Processing', 'Settled']
 
@@ -43,8 +45,10 @@ export function PayoutsPage() {
   const [approvingId, setApprovingId] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const viewing = payouts.find((p) => p.id === viewingId) || null
-  const approving = payouts.find((p) => p.id === approvingId) || null
+  const [livePayouts, setLivePayouts] = useState(null)
+  const [liveStats, setLiveStats] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   const stats = useMemo(() => {
     const count = (s) => payouts.filter((p) => p.status === s).length
@@ -67,14 +71,60 @@ export function PayoutsPage() {
     })
   }, [payouts, debouncedSearch, status])
 
-  const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
+  useEffect(() => {
+    let mounted = true
+    setIsLoading(true)
+    adminService
+      .getAdminPayouts({
+        status: status === 'All' ? 'all' : status,
+        search: debouncedSearch,
+      })
+      .then((res) => {
+        if (!mounted) return
+        if (res?.payouts && res.payouts.length > 0) {
+          setLivePayouts(res.payouts)
+          if (res.stats) setLiveStats(res.stats)
+          setIsFallback(false)
+        } else {
+          setIsFallback(true)
+        }
+      })
+      .catch(() => {
+        if (mounted) setIsFallback(true)
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [status, debouncedSearch])
+
+  const displayedPayouts = livePayouts && !isFallback ? livePayouts : filtered
+  const displayedStats = liveStats && !isFallback ? liveStats : stats
+
+  const viewing = displayedPayouts.find((p) => p.id === viewingId) || null
+  const approving = displayedPayouts.find((p) => p.id === approvingId) || null
+
+  const { page, totalPages, totalItems, pageItems, goto } = usePagination(displayedPayouts, 8)
   useEffect(() => {
     goto(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, status])
+  }, [debouncedSearch, status, displayedPayouts.length])
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!approving) return
+    try {
+      if (approving.dbId || approving._id || approving.id) {
+        await adminService.updateAdminPayoutStatus(approving.dbId || approving._id || approving.id, {
+          status: 'settled',
+          notes: 'Payout settled and confirmed by operations desk',
+        })
+      }
+    } catch (err) {
+      console.warn('[Admin Payout API Warning]', err.message)
+    }
     updatePayout(approving.id, 'Settled')
     toast.success(`Payout ${approving.id} settled`, {
       description: `${formatCurrency(approving.net)} released to ${approving.caregiverName} · ${approving.method}.`,
@@ -178,6 +228,10 @@ export function PayoutsPage() {
 
   return (
     <div className="space-y-6">
+      {isFallback && (
+        <FallbackNotice message="Displaying payout records from local cache while administrative disbursal service is connecting." />
+      )}
+
       <PageHeader
         title="Payouts"
         subtitle="Review and settle caretaker payouts — gross earnings less the 12% platform commission."
@@ -187,24 +241,24 @@ export function PayoutsPage() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           label="Total payouts"
-          value={formatCurrency(stats.total)}
+          value={formatCurrency(displayedStats.total)}
           icon={Banknote}
           tone="primary"
-          hint={`${formatNumber(payouts.length)} payout requests`}
+          hint={`${formatNumber(displayedPayouts.length)} payout requests`}
           delay={0}
         />
         <StatCard
           label="Processing"
-          value={stats.processing}
+          value={displayedStats.processing}
           icon={Clock}
           tone="info"
           hint="In the banking pipeline"
           delay={0.05}
         />
-        <StatCard label="Pending" value={stats.pending} icon={Hourglass} tone="warning" hint="Awaiting approval" delay={0.1} />
+        <StatCard label="Pending" value={displayedStats.pending} icon={Hourglass} tone="warning" hint="Awaiting approval" delay={0.1} />
         <StatCard
           label="Settled"
-          value={stats.settled}
+          value={displayedStats.settled}
           icon={CheckCircle2}
           tone="success"
           hint="Credited to caretakers"

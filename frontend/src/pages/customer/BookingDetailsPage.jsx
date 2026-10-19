@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   MapPin,
   MessageSquare,
   QrCode,
+  RotateCw,
   ShieldAlert,
   ShieldCheck,
   Smartphone,
@@ -36,11 +37,12 @@ import { Button } from '@/components/common/Button'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, PageSkeleton } from '@/components/common/States'
 import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePrice'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Modal } from '@/components/common/Modal'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
+import { bookingService } from '@/services'
 
 const COMPLAINT_CATEGORIES = ['Misbehavior', 'Theft', 'Abuse', 'Harassment', 'Medical negligence', 'Other']
 
@@ -76,12 +78,60 @@ export function BookingDetailsPage() {
 
   useDocumentTitle(`Booking ${id || ''}`)
 
-  const booking = useMemo(() => {
-    const listHit = bookings.find((b) => b.id === id)
-    return listHit || getBookingById(id) || null
-  }, [bookings, id])
+  const [realBooking, setRealBooking] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const caregiver = caregivers.find((c) => c.id === booking?.caregiverId) || null
+  const [otpData, setOtpData] = useState(null)
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
+
+  const loadBooking = useCallback(async () => {
+    if (!id) return
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await bookingService.getBookingById(id)
+      setRealBooking(data)
+    } catch (err) {
+      const mock = bookings.find((b) => b.id === id) || getBookingById(id) || null
+      if (mock) {
+        setRealBooking(mock)
+      } else {
+        setError(err.message || 'Booking not found')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [id, bookings])
+
+  useEffect(() => {
+    loadBooking()
+  }, [loadBooking])
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return
+    const interval = setInterval(() => {
+      setCooldownSeconds((s) => Math.max(0, s - 1))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [cooldownSeconds])
+
+  const booking = realBooking
+
+  const caregiver = useMemo(() => {
+    if (!booking) return null
+    if (booking.caregiver && typeof booking.caregiver === 'object') {
+      return {
+        id: booking.caregiverId,
+        name: booking.caregiverName,
+        qualification: booking.caregiver.qualification || 'Caregiver',
+        photo: booking.caregiver.avatar || booking.caregiver.photo || '',
+        rating: 4.8,
+      }
+    }
+    return caregivers.find((c) => c.id === booking.caregiverId) || null
+  }, [booking, caregivers])
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [complaintOpen, setComplaintOpen] = useState(false)
@@ -95,19 +145,98 @@ export function BookingDetailsPage() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [reschedule, setReschedule] = useState(() => ({ date: '', startTime: '', hours: 0 }))
 
-  if (!booking) {
+  const handleRequestCheckInOtp = async () => {
+    if (otpLoading || cooldownSeconds > 0 || !booking) return
+    setOtpLoading(true)
+    try {
+      const res = await bookingService.requestCheckInOtp(booking.id)
+      setOtpData(res)
+      setCooldownSeconds(60)
+      toast.success('Check-in OTP generated', {
+        description: 'Share this 6-digit code with your caregiver when they arrive.',
+      })
+    } catch (err) {
+      if (err.statusCode === 429) {
+        setCooldownSeconds(60)
+      }
+      toast.error('Unable to generate OTP', {
+        description: err.message || 'Please wait before requesting another OTP.',
+      })
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const handleRequestCheckOutOtp = async () => {
+    if (otpLoading || cooldownSeconds > 0 || !booking) return
+    setOtpLoading(true)
+    try {
+      const res = await bookingService.requestCheckOutOtp(booking.id)
+      setOtpData(res)
+      setCooldownSeconds(60)
+      toast.success('Check-out OTP generated', {
+        description: 'Share this 6-digit code with your caregiver upon shift completion.',
+      })
+    } catch (err) {
+      if (err.statusCode === 429) {
+        setCooldownSeconds(60)
+      }
+      toast.error('Unable to generate OTP', {
+        description: err.message || 'Please wait before requesting another OTP.',
+      })
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const handleCancelBooking = async () => {
+    if (!booking) return
+    try {
+      const updated = await bookingService.cancelBooking(
+        booking.id,
+        'Cancelled by customer from booking details',
+      )
+      setRealBooking(updated)
+      if (cancelBooking) {
+        cancelBooking(booking.id, 'Cancelled by customer from booking details')
+      }
+      toast.success('Booking cancelled', {
+        description:
+          booking.paymentStatus === 'Escrow Held'
+            ? 'Your escrow amount will be refunded within 3–5 working days.'
+            : 'The booking has been cancelled.',
+      })
+    } catch (err) {
+      toast.error('Cancellation failed', {
+        description: err.message || 'Could not cancel booking.',
+      })
+    } finally {
+      setCancelOpen(false)
+    }
+  }
+
+  if (loading) {
+    return <PageSkeleton />
+  }
+
+  if (error || !booking) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Booking not found" subtitle={`We couldn't find a booking with ID ${id}.`} />
+        <PageHeader title="Booking unavailable" subtitle={error || `We couldn't find a booking with ID ${id}.`} />
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={XCircle}
             title="Booking unavailable"
-            description="This booking may have been removed, or the link is incorrect."
+            description={error || "This booking may have been removed, or the link is incorrect."}
             action={
-              <Button to="/customer/bookings" icon={ArrowLeft}>
-                Back to my bookings
-              </Button>
+              <div className="flex gap-2">
+                <Button to="/customer/bookings" icon={ArrowLeft} variant="outline">
+                  Back to my bookings
+                </Button>
+                <Button onClick={loadBooking} icon={RotateCw}>
+                  Retry
+                </Button>
+              </div>
             }
           />
         </div>
@@ -125,9 +254,10 @@ export function BookingDetailsPage() {
   const canPay = booking.paymentStatus === 'Pending'
   const canSettle = booking.status === 'Completed' && booking.paymentStatus === 'Escrow Held'
   const canRate = booking.status === 'Completed' && !booking.customerRating
-  const hasCheckedIn = Boolean(booking.checkIn)
-  const hasCheckedOut = Boolean(booking.checkOut)
+  const hasCheckedIn = Boolean(booking.checkIn?.at) || ['In Progress', 'Completed'].includes(booking.status)
+  const hasCheckedOut = Boolean(booking.checkOut?.at) || booking.status === 'Completed'
   const canReschedule = canCancel && !hasCheckedIn
+
 
   const handleDownloadInvoice = () => {
     const rows = [
@@ -408,75 +538,153 @@ export function BookingDetailsPage() {
               <CardHeader
                 title="Your visit pass"
                 icon={QrCode}
-                subtitle="Show this code to your caretaker at check-in"
+                subtitle="Cryptographic verification code for arrival and shift completion"
               />
               <CardBody className="space-y-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <div className="grid shrink-0 place-items-center rounded-2xl border border-line bg-white p-3 shadow-card">
-                    <div
-                      className="grid h-28 w-28 gap-[3px] p-1"
-                      style={{ gridTemplateColumns: 'repeat(11, 1fr)' }}
-                      role="img"
-                      aria-label={`Booking QR code ${booking.qrCode || `CM-QR-${booking.id}`}`}
-                    >
-                      {Array.from({ length: 121 }).map((_, i) => {
-                        const code = booking.qrCode || `CM-QR-${booking.id}`
-                        const dark =
-                          (i * 7 + code.charCodeAt(i % code.length)) % 3 === 0 ||
-                          i % 11 === 0 ||
-                          Math.floor(i / 11) % 5 === 0
-                        return (
-                          <span
-                            key={i}
-                            className="rounded-[1px]"
-                            style={{ background: dark ? '#0F172A' : 'transparent' }}
-                          />
-                        )
-                      })}
-                    </div>
+                  <div className="grid shrink-0 place-items-center rounded-2xl border border-line bg-white p-4 shadow-card">
+                    {otpData?.otp ? (
+                      <div className="flex flex-col items-center justify-center p-2 text-center">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                          {hasCheckedIn ? 'Check-out code' : 'Check-in code'}
+                        </span>
+                        <span className="mt-1 font-mono text-3xl font-extrabold tracking-widest text-primary-800">
+                          {otpData.otp}
+                        </span>
+                        <span className="mt-1 text-[10px] font-medium text-muted">
+                          {otpData.maxAttempts ?? 5} attempts left
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        className="grid h-24 w-24 gap-[3px] p-1"
+                        style={{ gridTemplateColumns: 'repeat(11, 1fr)' }}
+                        role="img"
+                        aria-label={`Booking reference pass ${booking.ref || booking.id}`}
+                      >
+                        {Array.from({ length: 121 }).map((_, i) => {
+                          const code = booking.ref || booking.id
+                          const dark =
+                            (i * 7 + code.charCodeAt(i % code.length)) % 3 === 0 ||
+                            i % 11 === 0 ||
+                            Math.floor(i / 11) % 5 === 0
+                          return (
+                            <span
+                              key={i}
+                              className="rounded-[1px]"
+                              style={{ background: dark ? '#0F172A' : 'transparent' }}
+                            />
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold uppercase tracking-wider text-faint">Booking code</p>
-                    <p className="font-display mt-1 text-lg font-extrabold tracking-wide text-ink tabular-nums">
-                      {booking.qrCode || `CM-QR-${booking.id}`}
-                    </p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-muted">
-                      Your caretaker will ask for this at arrival and again at check-out. It proves the visit
-                      started at your address, at the recorded time.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        icon={QrCode}
-                        onClick={() => {
-                          navigator.clipboard
-                            ?.writeText(booking.qrCode || `CM-QR-${booking.id}`)
-                            .then(() => toast.success('Booking code copied'))
-                            .catch(() => toast.error('Could not copy the code'))
-                        }}
-                      >
-                        Copy code
-                      </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-faint">
+                        {otpData?.otp
+                          ? hasCheckedIn
+                            ? 'Active check-out OTP'
+                            : 'Active check-in OTP'
+                          : 'Visit authentication'}
+                      </p>
                       {hasCheckedIn ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-3 py-1.5 text-xs font-bold text-success-700 ring-1 ring-inset ring-success-400/50">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Checked in
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-0.5 text-xs font-bold text-success-700 ring-1 ring-inset ring-success-400/50">
+                          <CheckCircle2 className="h-3 w-3" /> Shift in progress
+                        </span>
+                      ) : booking.status === 'Confirmed' ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-mint-100 px-2.5 py-0.5 text-xs font-bold text-primary-800">
+                          <Clock className="h-3 w-3" /> Confirmed · Ready for check-in
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-mint-100 px-3 py-1.5 text-xs font-bold text-primary-800">
-                          <Clock className="h-3.5 w-3.5" /> Awaiting check-in
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                          Pending confirmation
                         </span>
                       )}
+                    </div>
+
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                      {hasCheckedIn
+                        ? 'When the caregiver concludes their shift, request your check-out OTP and share it with them to finalize the visit.'
+                        : booking.status === 'Confirmed'
+                          ? 'Share the 6-digit code with your caregiver when they arrive at the address. This confirms attendance securely.'
+                          : 'Your booking is awaiting caretaker confirmation. Once accepted, you can generate your check-in OTP code here.'}
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {booking.status === 'Confirmed' && !hasCheckedIn ? (
+                        <>
+                          <Button
+                            size="sm"
+                            icon={QrCode}
+                            loading={otpLoading}
+                            disabled={cooldownSeconds > 0}
+                            onClick={handleRequestCheckInOtp}
+                          >
+                            {cooldownSeconds > 0
+                              ? `Wait ${cooldownSeconds}s`
+                              : otpData?.otp
+                                ? 'Refresh check-in code'
+                                : 'Generate check-in code'}
+                          </Button>
+                          {otpData?.otp ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                navigator.clipboard
+                                  ?.writeText(otpData.otp)
+                                  .then(() => toast.success('Check-in OTP copied'))
+                                  .catch(() => toast.error('Could not copy OTP'))
+                              }}
+                            >
+                              Copy code
+                            </Button>
+                          ) : null}
+                        </>
+                      ) : null}
+
+                      {hasCheckedIn && !hasCheckedOut ? (
+                        <>
+                          <Button
+                            size="sm"
+                            icon={QrCode}
+                            loading={otpLoading}
+                            disabled={cooldownSeconds > 0}
+                            onClick={handleRequestCheckOutOtp}
+                          >
+                            {cooldownSeconds > 0
+                              ? `Wait ${cooldownSeconds}s`
+                              : otpData?.otp
+                                ? 'Refresh check-out code'
+                                : 'Generate check-out code'}
+                          </Button>
+                          {otpData?.otp ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                navigator.clipboard
+                                  ?.writeText(otpData.otp)
+                                  .then(() => toast.success('Check-out OTP copied'))
+                                  .catch(() => toast.error('Could not copy OTP'))
+                              }}
+                            >
+                              Copy code
+                            </Button>
+                          ) : null}
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>
 
                 <ol className="grid gap-2 border-t border-line pt-4 text-xs text-muted sm:grid-cols-3">
                   {[
-                    '1. Caretaker arrives and opens check-in',
-                    '2. They scan or enter your booking code',
-                    '3. Both of you confirm — timestamps recorded',
+                    '1. Caretaker arrives at scheduled service address',
+                    '2. You generate & provide the authoritative 6-digit OTP',
+                    '3. Caretaker verifies code — timestamps recorded securely',
                   ].map((step) => (
                     <li key={step} className="rounded-xl bg-slate-50 px-3 py-2.5 leading-relaxed">
                       {step}
@@ -724,16 +932,7 @@ export function BookingDetailsPage() {
       <ConfirmationDialog
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        onConfirm={() => {
-          cancelBooking(booking.id, 'Cancelled by customer from booking details')
-          setCancelOpen(false)
-          toast.success('Booking cancelled', {
-            description:
-              booking.paymentStatus === 'Escrow Held'
-                ? 'Your escrow amount will be refunded within 3–5 working days.'
-                : 'The booking has been cancelled.',
-          })
-        }}
+        onConfirm={handleCancelBooking}
         title="Cancel this booking?"
         message={`You are about to cancel ${booking.id} (${booking.service}) on ${formatDate(booking.date, { long: true })}. Cancellations within 4 hours of the start time may attract a fee.`}
         confirmLabel="Yes, cancel booking"

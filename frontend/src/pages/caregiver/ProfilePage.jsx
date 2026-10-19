@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { Eye, MapPin, Save, ShieldCheck } from 'lucide-react'
@@ -15,6 +15,7 @@ import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
 import { Chip, ProgressBar } from '@/components/common/Tabs'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
+import { profileService } from '@/services'
 
 const CARE_SETTINGS = ['Home Care', 'Hospital Care']
 
@@ -24,8 +25,9 @@ export function ProfilePage() {
   const { user, updateProfile } = useAuth()
   const { caregivers, verifications } = useData()
 
+  const [realProfile, setRealProfile] = useState(null)
   const myId = user?.caregiverId || 'cg-101'
-  const caregiver = caregivers.find((c) => c.id === myId) || caregivers[0]
+  const caregiver = realProfile || caregivers.find((c) => c.id === myId) || caregivers[0]
   const verification = verifications.find((v) => v.caregiverId === myId)
 
   const verifiedDocs = (verification?.documents || []).filter((d) => d.status === 'Verified').length
@@ -42,6 +44,7 @@ export function ProfilePage() {
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
@@ -56,6 +59,32 @@ export function ProfilePage() {
       area: caregiver?.area || '',
     },
   })
+
+  useEffect(() => {
+    let isMounted = true
+    profileService
+      .getCaregiverProfile()
+      .then((data) => {
+        if (!isMounted || !data) return
+        setRealProfile(data)
+        reset({
+          name: data.fullName || data.name || user?.name || '',
+          qualification: data.qualification || QUALIFICATIONS[0],
+          experienceYears: data.experienceYears ?? 0,
+          hourlyRate: data.hourlyRate ?? 0,
+          languages: data.languages || [],
+          careSettings: data.careSettings || ['Home Care'],
+          bio: data.bio || '',
+          city: data.city || CITIES[0],
+          area: data.area || '',
+        })
+      })
+      .catch(() => {})
+
+    return () => {
+      isMounted = false
+    }
+  }, [reset, user?.name])
 
   const languages = watch('languages')
   const careSettings = watch('careSettings')
@@ -74,24 +103,36 @@ export function ProfilePage() {
     setValue('careSettings', next, { shouldDirty: true })
   }
 
-  const onSubmit = (data) => {
-    updateProfile({
-      name: data.name,
-      qualification: data.qualification,
-      experienceYears: Number(data.experienceYears),
-      hourlyRate: Number(data.hourlyRate),
-      languages: data.languages,
-      careSettings: data.careSettings,
-      bio: data.bio,
-      city: data.city,
-      area: data.area,
-    })
-    toast.success('Profile updated')
+  const onSubmit = async (data) => {
+    try {
+      const sanitized = {
+        bio: data.bio.trim(),
+        experienceYears: Number(data.experienceYears) || 0,
+        hourlyRate: Number(data.hourlyRate) || 0,
+        languages: data.languages,
+        careSettings: data.careSettings,
+        city: data.city,
+        area: data.area.trim(),
+      }
+      const updated = await profileService.updateCaregiverProfile(sanitized)
+      setRealProfile(updated)
+      updateProfile({
+        name: data.name,
+        qualification: data.qualification,
+        ...sanitized,
+      })
+      toast.success('Profile updated successfully')
+    } catch (err) {
+      toast.error('Profile update failed', {
+        description: err.message || 'Server rejected changes.',
+      })
+    }
   }
 
   const handlePreview = () => {
     toast.info('This is exactly what customers see')
   }
+
 
   return (
     <div className="space-y-6">

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { CalendarCheck, CheckCircle2, ClipboardList, Clock, LogIn, LogOut, QrCode, Search, ShieldCheck, Wallet } from 'lucide-react'
+import { CalendarCheck, CheckCircle2, ClipboardList, Clock, LogIn, LogOut, QrCode, RotateCw, Search, ShieldCheck, Wallet } from 'lucide-react'
 
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -19,10 +19,11 @@ import { SearchBar } from '@/components/common/SearchBar'
 import { DataTable } from '@/components/common/DataTable'
 import { Pagination } from '@/components/common/Pagination'
 import { Modal } from '@/components/common/Modal'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { BookingCard } from '@/components/booking/BookingCard'
 import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePrice'
 import { CheckInOutModal } from '@/components/booking/CheckInOutModal'
+import { bookingService } from '@/services'
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -37,18 +38,38 @@ export function BookingsPage() {
   useDocumentTitle('My Bookings')
 
   const { user } = useAuth()
-  const { bookings, advanceBooking, confirmBooking, cancelBooking } = useData()
+  const { advanceBooking, confirmBooking, cancelBooking } = useData()
 
-  const myId = user?.caregiverId || 'cg-101'
+  const [realBookings, setRealBookings] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
   const [tab, setTab] = useState('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(null)
   const [checkFlow, setCheckFlow] = useState(null)
 
+  const fetchBookings = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await bookingService.getBookings()
+      setRealBookings(res.bookings || [])
+    } catch (err) {
+      setError(err.message || 'Unable to load caregiver bookings')
+      setRealBookings([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchBookings()
+  }, [fetchBookings])
+
   const myBookings = useMemo(() => {
-    const list = bookings.filter((b) => b.caregiverId === myId)
-    return list.length ? list : bookingsForCaregiver(myId)
-  }, [bookings, myId])
+    return realBookings || []
+  }, [realBookings])
 
   const counts = useMemo(() => {
     const c = { all: myBookings.length }
@@ -61,24 +82,45 @@ export function BookingsPage() {
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((b) =>
-      [b.id, b.ref, b.service, getCustomerById(b.customerId)?.name, b.patient?.name].join(' ').toLowerCase().includes(q),
+      [
+        b.id,
+        b.ref,
+        b.service,
+        b.customerName,
+        b.customer?.fullName,
+        b.patient?.name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
     )
   }, [myBookings, tab, query])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 6)
 
-  const handleRequest = (action) => {
+  const handleRequest = async (action) => {
     if (!selected) return
-    if (action === 'accept') {
-      confirmBooking(selected.id)
-      toast.success('Booking request accepted', {
-        description: `${selected.service} on ${formatDate(selected.date, { long: true })} is confirmed.`,
+    try {
+      if (action === 'accept') {
+        const updated = await bookingService.acceptBooking(selected.id)
+        if (confirmBooking) confirmBooking(selected.id)
+        setRealBookings((prev) => (prev || []).map((b) => (b.id === selected.id ? updated : b)))
+        toast.success('Booking request accepted', {
+          description: `${selected.service} on ${formatDate(selected.date, { long: true })} is confirmed.`,
+        })
+      } else {
+        const updated = await bookingService.rejectBooking(selected.id, 'Declined by caretaker')
+        if (cancelBooking) cancelBooking(selected.id, 'Declined by caretaker')
+        setRealBookings((prev) => (prev || []).map((b) => (b.id === selected.id ? updated : b)))
+        toast.info('Booking request declined', { description: 'The customer has been notified.' })
+      }
+      setSelected(null)
+    } catch (err) {
+      toast.error(action === 'accept' ? 'Failed to accept booking' : 'Failed to decline booking', {
+        description: err.message || 'Server rejected the request.',
       })
-    } else {
-      cancelBooking(selected.id, 'Declined by caretaker')
-      toast.info('Booking request declined', { description: 'The customer has been notified.' })
     }
-    setSelected(null)
   }
 
   const openCheckFlow = (booking, mode) => {
@@ -86,18 +128,33 @@ export function BookingsPage() {
     setCheckFlow({ booking, mode })
   }
 
-  const handleCheckConfirm = (payload) => {
+  const handleCheckConfirm = async (payload) => {
     if (!checkFlow) return
     const { booking, mode } = checkFlow
-    advanceBooking(booking.id, mode === 'checkin' ? 'start' : 'complete', payload)
-    toast.success(
-      mode === 'checkin'
-        ? 'Checked in — the service is now in progress'
-        : 'Checked out — the service is marked complete',
-      {
-        description: `QR ${payload.qrCode} verified at ${formatDateTime(payload.capturedAt)}.`,
-      },
-    )
+
+    const checkData = {
+      otp: payload.otp,
+      selfieUrl: payload.selfieUrl,
+      location: payload.location,
+      notes: payload.notes || '',
+    }
+
+    if (mode === 'checkin') {
+      const updated = await bookingService.verifyCheckIn(booking.id, checkData)
+      setRealBookings((prev) => (prev || []).map((b) => (b.id === booking.id ? updated : b)))
+      if (advanceBooking) advanceBooking(booking.id, 'start', payload)
+      toast.success('Checked in — the service is now in progress', {
+        description: `Verified at ${formatDateTime(payload.capturedAt)}.`,
+      })
+    } else {
+      const updated = await bookingService.verifyCheckOut(booking.id, checkData)
+      setRealBookings((prev) => (prev || []).map((b) => (b.id === booking.id ? updated : b)))
+      if (advanceBooking) advanceBooking(booking.id, 'complete', payload)
+      toast.success('Checked out — the service is marked complete', {
+        description: `Verified at ${formatDateTime(payload.capturedAt)}.`,
+      })
+    }
+
     setCheckFlow(null)
   }
 
@@ -185,7 +242,17 @@ export function BookingsPage() {
 
       <SearchBar value={query} onChange={setQuery} placeholder="Search by booking ID, service or customer…" />
 
-      {filtered.length ? (
+      {loading ? (
+        <TableSkeleton rows={5} cols={5} />
+      ) : error ? (
+        <Card>
+          <ErrorState
+            title="Unable to load bookings"
+            description={error}
+            onRetry={fetchBookings}
+          />
+        </Card>
+      ) : filtered.length ? (
         <>
           <div className="hidden lg:block">
             <DataTable columns={columns} data={pageItems} keyExtractor={(row) => row.id} emptyIcon={Search} />

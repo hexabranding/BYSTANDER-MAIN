@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import * as caregiverSelfController from '../controllers/caregiverSelfController.js';
+import * as adminFinanceController from '../controllers/adminFinanceController.js';
 import { authenticate, authorizeRoles } from '../middleware/auth.js';
 import {
   validateUpdateCaregiverProfile,
   validateCaregiverAvailability,
 } from '../middleware/validateCaregiver.js';
+import { validateCaregiverPayoutRequest } from '../middleware/validateAdminFinance.js';
 
 const router = Router();
 
@@ -18,5 +20,9 @@ router.patch('/profile', validateUpdateCaregiverProfile, caregiverSelfController
 // Availability management
 router.get('/availability', caregiverSelfController.getMyAvailability);
 router.put('/availability', validateCaregiverAvailability, caregiverSelfController.updateMyAvailability);
+
+// Earnings & Payouts management
+router.get('/earnings', adminFinanceController.getCaregiverEarnings);
+router.post('/payouts/request', validateCaregiverPayoutRequest, adminFinanceController.requestCaregiverPayout);
 
 export default router;

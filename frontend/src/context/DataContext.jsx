@@ -381,12 +381,16 @@ export function DataProvider({ children }) {
         id,
         status: 'Open',
         assignedTo: '',
-        emergencyContactNotified: true,
+        emergencyContactNotified: false,
+        emergencyContactNotification: {
+          status: 'not_configured',
+          notes: 'Automated telephony/SMS emergency dispatch provider is not configured.',
+        },
         reportedAt: now,
         priority: 'Critical',
         timeline: [
-          { at: now, action: 'SOS triggered from booking screen', by: payload.raisedBy },
-          { at: now, action: 'Emergency contact notified (SMS)', by: 'System' },
+          { at: now, action: 'SOS triggered from care portal', by: payload.raisedBy },
+          { at: now, action: 'Operations desk alerted (in-app only; external SMS not configured)', by: 'System' },
         ],
         ...payload,
       }

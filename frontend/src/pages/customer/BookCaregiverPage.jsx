@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -30,6 +30,7 @@ import { FormField, Input, Select, Textarea } from '@/components/forms/FormField
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
 import { CaregiverCard } from '@/components/caregiver/CaregiverCard'
 import { RatingStars } from '@/components/common/RatingStars'
+import { bookingService, servicesService, caregiversService, isMongoObjectId } from '@/services'
 
 const STEP_LABELS = [
   'Care service',
@@ -59,6 +60,34 @@ export function BookCaregiverPage() {
   const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const { caregivers, createBooking } = useData()
+
+  const [availableServices, setAvailableServices] = useState(SERVICES)
+  const [availableCaregivers, setAvailableCaregivers] = useState(caregivers)
+
+  useEffect(() => {
+    let isMounted = true
+    servicesService
+      .getServices()
+      .then((res) => {
+        if (isMounted && Array.isArray(res?.services) && res.services.length > 0) {
+          setAvailableServices(res.services)
+        }
+      })
+      .catch(() => {})
+
+    caregiversService
+      .getCaregivers()
+      .then((res) => {
+        if (isMounted && Array.isArray(res?.caregivers) && res.caregivers.length > 0) {
+          setAvailableCaregivers(res.caregivers)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const patientInfo = user?.patientInfo
   const preselectedId = searchParams.get('caregiver') || ''
@@ -92,16 +121,19 @@ export function BookCaregiverPage() {
 
   const matchedCaregiver = useMemo(() => {
     if (selectedCaregiverId) {
-      const picked = caregivers.find((c) => c.id === selectedCaregiverId)
+      const picked = availableCaregivers.find(
+        (c) => c.id === selectedCaregiverId || c._id === selectedCaregiverId,
+      )
       if (picked) return picked
     }
     if (!form.service) return null
     return (
-      caregivers.find((c) => c.verified && c.services?.includes(form.service.name)) ||
-      caregivers.find((c) => c.services?.includes(form.service.name)) ||
+      availableCaregivers.find((c) => c.verified && c.services?.includes(form.service.name)) ||
+      availableCaregivers.find((c) => c.services?.includes(form.service.name)) ||
+      availableCaregivers[0] ||
       null
     )
-  }, [caregivers, form.service, selectedCaregiverId])
+  }, [availableCaregivers, form.service, selectedCaregiverId])
 
   const rate = matchedCaregiver?.hourlyRate || form.service?.startingPrice || 399
   const hours = Number(form.hours) || 0
@@ -112,10 +144,10 @@ export function BookCaregiverPage() {
 
   const stripCaregivers = useMemo(() => {
     const pool = form.service
-      ? caregivers.filter((c) => c.services?.includes(form.service.name) && c.verified)
-      : caregivers.filter((c) => c.verified)
-    return (pool.length ? pool : caregivers).slice(0, 6)
-  }, [caregivers, form.service])
+      ? availableCaregivers.filter((c) => c.services?.includes(form.service.name) && c.verified)
+      : availableCaregivers.filter((c) => c.verified)
+    return (pool.length ? pool : availableCaregivers).slice(0, 6)
+  }, [availableCaregivers, form.service])
 
   const stepValid = [
     Boolean(form.service),
@@ -146,43 +178,108 @@ export function BookCaregiverPage() {
       extras: f.extras.includes(extra) ? f.extras.filter((e) => e !== extra) : [...f.extras, extra],
     }))
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!form.service || submitting) return
     setSubmitting(true)
-    const locationLabel =
-      form.careType === 'Hospital Care'
-        ? `${form.address}, ${form.area}, ${form.city}`
-        : `${form.address}, ${form.area}, ${form.city}`
-    const booking = createBooking({
-      customerId: user?.id || 'cu-201',
-      caregiverId: matchedCaregiver?.id || '',
-      caregiverName: matchedCaregiver?.name || '',
-      service: form.service.name,
-      patient: {
-        name: form.patientName.trim(),
-        age: Number(form.patientAge),
-        relation: form.relation,
-      },
-      careType: form.careType,
-      address: locationLabel,
-      city: form.city,
-      date: form.date,
-      startTime: form.startTime,
-      hours: Number(form.hours),
-      hourlyRate: rate,
-      subtotal,
-      platformFee,
-      tax,
-      total,
-      notes: form.requirements.trim(),
-      specialInstructions: [form.instructions.trim(), ...form.extras].filter(Boolean).join(' · '),
-    })
-    setCreated(booking)
-    setSubmitting(false)
-    toast.success('Booking request sent', {
-      description: `Reference ${booking.ref} — ${matchedCaregiver?.name || 'Your caretaker'} has been notified.`,
-    })
+
+    try {
+      // 1. Resolve Caregiver ObjectId
+      let caregiverId = matchedCaregiver?._id || matchedCaregiver?.id
+      if (!isMongoObjectId(caregiverId)) {
+        const found = availableCaregivers.find(
+          (c) =>
+            isMongoObjectId(c._id || c.id) &&
+            (c.name === matchedCaregiver?.name || c.id === matchedCaregiver?.id),
+        )
+        if (found) {
+          caregiverId = found._id || found.id
+        }
+      }
+
+      // 2. Resolve Service ObjectId
+      let serviceId = form.service?._id || form.service?.id
+      if (!isMongoObjectId(serviceId)) {
+        const found = availableServices.find(
+          (s) =>
+            isMongoObjectId(s._id || s.id) &&
+            (s.name === form.service?.name || s.slug === form.service?.slug),
+        )
+        if (found) {
+          serviceId = found._id || found.id
+        }
+      }
+
+      if (!isMongoObjectId(caregiverId) || !isMongoObjectId(serviceId)) {
+        throw new Error(
+          'Please ensure a registered caregiver and valid service from the system catalog are selected.',
+        )
+      }
+
+      // 3. Temporal bounds
+      if (!form.date || !form.startTime) {
+        throw new Error('Please select both a service date and start time.')
+      }
+
+      const [startHour, startMin] = (form.startTime || '08:00').split(':').map(Number)
+      const [year, month, day] = form.date.split('-').map(Number)
+      const localStartDate = new Date(year, month - 1, day, startHour, startMin, 0)
+
+      if (isNaN(localStartDate.getTime())) {
+        throw new Error('Invalid start date or time format.')
+      }
+
+      if (localStartDate.getTime() <= Date.now()) {
+        throw new Error(
+          'Scheduled start time must be in the future. Please pick an upcoming date or time.',
+        )
+      }
+
+      const hoursNum = Math.max(0.5, Math.min(24, Number(form.hours) || 1))
+      const localEndDate = new Date(localStartDate.getTime() + hoursNum * 60 * 60 * 1000)
+
+      const payload = {
+        caregiverId,
+        serviceId,
+        startDateTime: localStartDate.toISOString(),
+        endDateTime: localEndDate.toISOString(),
+        timezone: 'Asia/Kolkata',
+        location: {
+          addressLine: form.address.trim(),
+          city: form.city.trim(),
+          area: form.area.trim(),
+          careSetting: form.careType === 'Hospital Care' ? 'Hospital Care' : 'Home Care',
+        },
+        patientDetails: {
+          name: form.patientName.trim(),
+          age: Number(form.patientAge) || 0,
+          gender: 'Other',
+          specialInstructions: [form.instructions.trim(), ...form.extras].filter(Boolean).join(' · '),
+        },
+      }
+
+      const booking = await bookingService.createBooking(payload)
+
+      if (createBooking) {
+        createBooking({
+          ...booking,
+          customerId: user?.id || booking.customerId,
+          notes: form.requirements.trim(),
+        })
+      }
+
+      setCreated(booking)
+      toast.success('Booking request sent', {
+        description: `Reference ${booking.ref} — ${matchedCaregiver?.name || 'Your caretaker'} has been notified.`,
+      })
+    } catch (err) {
+      toast.error('Booking creation failed', {
+        description: err.message || 'Unable to submit booking request to the server.',
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
+
 
   /* ---------------- success screen ---------------- */
 
@@ -309,8 +406,8 @@ export function BookCaregiverPage() {
                 <Card>
                   <CardHeader title="What care does your loved one need?" subtitle="Pick the service that fits best — you can add notes later." />
                   <CardBody className="grid gap-3 sm:grid-cols-2">
-                    {SERVICES.map((svc) => {
-                      const selected = form.service?.id === svc.id
+                    {availableServices.map((svc) => {
+                      const selected = form.service?.id === svc.id || form.service?._id === svc._id
                       const Icon = svc.icon
                       return (
                         <button
@@ -591,12 +688,15 @@ export function BookCaregiverPage() {
                       <p className="text-sm text-muted">No matching caretakers found — a coordinator will assign one after you confirm.</p>
                     ) : null}
                     {stripCaregivers.map((cg) => {
-                      const selected = matchedCaregiver?.id === cg.id
+                      const selected =
+                        matchedCaregiver?.id === cg.id ||
+                        (matchedCaregiver?._id && (matchedCaregiver._id === cg._id || matchedCaregiver._id === cg.id))
+                      const cgIdentifier = cg._id || cg.id
                       return (
                         <button
-                          key={cg.id}
+                          key={cgIdentifier}
                           type="button"
-                          onClick={() => setSelectedCaregiverId(cg.id)}
+                          onClick={() => setSelectedCaregiverId(cgIdentifier)}
                           className={cn(
                             'flex w-full items-center gap-4 rounded-card border p-4 text-left transition',
                             selected

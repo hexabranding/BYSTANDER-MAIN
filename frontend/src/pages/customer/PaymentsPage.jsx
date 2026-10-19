@@ -17,6 +17,8 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Select } from '@/components/forms/FormField'
 import { Button } from '@/components/common/Button'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { financeService } from '@/services/financeService'
 
 const STATUS_OPTIONS = ['All statuses', 'Escrow Held', 'Released', 'Refunded', 'Paid', 'Pending']
 
@@ -27,6 +29,9 @@ export function PaymentsPage() {
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState(STATUS_OPTIONS[0])
+  const [liveTransactions, setLiveTransactions] = useState(null)
+  const [liveStats, setLiveStats] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
   const debouncedSearch = useDebouncedValue(search)
 
   const customerId = user?.id || 'cu-201'
@@ -47,6 +52,29 @@ export function PaymentsPage() {
     return { totalSpent: spent, escrowHeld: escrow, refunded: ref }
   }, [mine])
 
+  const loadPayments = async () => {
+    try {
+      const res = await financeService.getCustomerPayments({
+        status: status === STATUS_OPTIONS[0] ? 'all' : status,
+        search: debouncedSearch,
+      })
+      if (res?.transactions && res.transactions.length > 0) {
+        setLiveTransactions(res.transactions)
+        if (res.stats) setLiveStats(res.stats)
+        setIsFallback(false)
+      } else {
+        setIsFallback(true)
+      }
+    } catch {
+      setIsFallback(true)
+    }
+  }
+
+  useEffect(() => {
+    loadPayments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, status, debouncedSearch])
+
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
     return mine.filter((t) => {
@@ -62,18 +90,21 @@ export function PaymentsPage() {
     })
   }, [mine, debouncedSearch, status])
 
-  const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
+  const effectiveTransactions = liveTransactions && !isFallback ? liveTransactions : filtered
+  const effectiveStats = liveStats && !isFallback ? liveStats : { totalSpent, escrowHeld, refunded }
+
+  const { page, totalPages, totalItems, pageItems, goto } = usePagination(effectiveTransactions, 8)
   useEffect(() => {
     goto(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, status])
+  }, [debouncedSearch, status, effectiveTransactions.length])
 
   const handleExport = () => {
-    if (!filtered.length) {
+    if (!effectiveTransactions.length) {
       toast.error('Nothing to export', { description: 'Adjust your filters and try again.' })
       return
     }
-    const rows = filtered.map((t) => ({
+    const rows = effectiveTransactions.map((t) => ({
       Date: t.date,
       'Transaction ID': t.id,
       Booking: t.bookingId,
@@ -120,6 +151,10 @@ export function PaymentsPage() {
 
   return (
     <div className="space-y-6">
+      {isFallback && (
+        <FallbackNotice message="Displaying payment transactions from offline cache while live billing service is connecting." />
+      )}
+
       <PageHeader
         title="Payments"
         subtitle="Every rupee you have spent on care — escrow, settlements and refunds."
@@ -136,9 +171,9 @@ export function PaymentsPage() {
       />
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Total spent" value={formatCurrency(totalSpent)} icon={IndianRupee} tone="primary" hint="All settled + escrow" delay={0} />
-        <StatCard label="Escrow held" value={formatCurrency(escrowHeld)} icon={Lock} tone="warning" hint="Released after service" delay={0.05} />
-        <StatCard label="Refunded this year" value={formatCurrency(refunded)} icon={RefreshCcw} tone="success" hint="Back to original method" delay={0.1} />
+        <StatCard label="Total spent" value={formatCurrency(effectiveStats.totalSpent)} icon={IndianRupee} tone="primary" hint="All settled + escrow" delay={0} />
+        <StatCard label="Escrow held" value={formatCurrency(effectiveStats.escrowHeld)} icon={Lock} tone="warning" hint="Released after service" delay={0.05} />
+        <StatCard label="Refunded this year" value={formatCurrency(effectiveStats.refunded)} icon={RefreshCcw} tone="success" hint="Back to original method" delay={0.1} />
         <StatCard label="Next payout to caretakers" value="Awaiting settlement" icon={Wallet} tone="info" hint="Handled by CareMate ops" delay={0.15} />
       </div>
 

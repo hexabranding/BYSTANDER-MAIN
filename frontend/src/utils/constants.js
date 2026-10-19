@@ -44,6 +44,8 @@ export const STATUS_STYLES = {
   expired: 'bg-slate-100 text-slate-600 ring-slate-400/40',
   processing: 'bg-accent-50 text-accent-600 ring-accent-500/40',
   refundedPartial: 'bg-warning-50 text-warning-700 ring-warning-400/50',
+  dismissed: 'bg-slate-100 text-slate-600 ring-slate-400/40',
+  'action-taken': 'bg-accent-50 text-accent-600 ring-accent-500/40',
 }
 
 export const STATUS_DOT = {
@@ -57,6 +59,8 @@ export const STATUS_DOT = {
   'in-progress': 'bg-accent-400',
   completed: 'bg-success-500',
   resolved: 'bg-success-500',
+  dismissed: 'bg-slate-400',
+  'action-taken': 'bg-accent-400',
   paid: 'bg-success-500',
   cancelled: 'bg-danger-500',
   rejected: 'bg-danger-500',
@@ -95,6 +99,7 @@ export const COMPLAINT_STATUSES = [
   'Under Review',
   'Investigation',
   'Resolved',
+  'Dismissed',
 ]
 
 export const PLATFORM_COMMISSION = 0.12

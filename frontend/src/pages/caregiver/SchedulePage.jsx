@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { CalendarDays, CalendarOff, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
@@ -14,8 +14,13 @@ import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Modal } from '@/components/common/Modal'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { FormField, Input, Textarea } from '@/components/forms/FormField'
+import {
+  availabilityService,
+  bookingService,
+  adaptWeekAvailabilityToWeeklySchedule,
+} from '@/services'
 
 const iso = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -41,13 +46,51 @@ export function SchedulePage() {
   const myId = user?.caregiverId || 'cg-101'
   const caregiver = caregivers.find((c) => c.id === myId) || caregivers[0]
 
+  const [realAvailability, setRealAvailability] = useState(null)
+  const [realBookings, setRealBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
   const [weekOffset, setWeekOffset] = useState(0)
   const [timeOffOpen, setTimeOffOpen] = useState(false)
 
+  const fetchAvailability = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await availabilityService.getCaregiverAvailability()
+      setRealAvailability(data)
+    } catch (err) {
+      setError(err.message || 'Unable to load caregiver availability')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAvailability()
+    bookingService
+      .getBookings()
+      .then((res) => {
+        if (Array.isArray(res?.bookings)) {
+          setRealBookings(res.bookings)
+        }
+      })
+      .catch(() => {})
+  }, [fetchAvailability])
+
   const myBookings = useMemo(() => {
+    if (realBookings.length > 0) return realBookings
     const list = bookings.filter((b) => b.caregiverId === myId)
     return list.length ? list : bookingsForCaregiver(myId)
-  }, [bookings, myId])
+  }, [realBookings, bookings, myId])
+
+  const weekAvailability = useMemo(() => {
+    if (realAvailability?.weekAvailability) {
+      return realAvailability.weekAvailability
+    }
+    return caregiver?.weekAvailability || []
+  }, [realAvailability, caregiver])
 
   const days = useMemo(() => {
     const today = new Date()
@@ -89,15 +132,58 @@ export function SchedulePage() {
     defaultValues: { from: iso(new Date()), to: iso(new Date()), reason: '' },
   })
 
-  const onSubmitTimeOff = (data) => {
+  const onSubmitTimeOff = async (data) => {
     if (data.to < data.from) {
       toast.error('The return date must be after the start date')
       return
     }
-    toast.success('Time-off request submitted (demo)')
-    reset()
-    setTimeOffOpen(false)
+
+    try {
+      const newExceptions = []
+      const [fY, fM, fD] = data.from.split('-').map(Number)
+      const [tY, tM, tD] = data.to.split('-').map(Number)
+      const curr = new Date(Date.UTC(fY, fM - 1, fD))
+      const end = new Date(Date.UTC(tY, tM - 1, tD))
+
+      while (curr <= end) {
+        newExceptions.push({
+          date: curr.toISOString().slice(0, 10),
+          isAvailable: false,
+          reason: data.reason.trim(),
+          slots: [],
+        })
+        curr.setUTCDate(curr.getUTCDate() + 1)
+      }
+
+      const existing = realAvailability?.dateExceptions || []
+      const existingMap = new Map(existing.map((e) => [e.date, e]))
+      newExceptions.forEach((e) => existingMap.set(e.date, e))
+      const mergedExceptions = Array.from(existingMap.values())
+
+      const payload = {
+        timezone: realAvailability?.timezone || 'Asia/Kolkata',
+        availabilityStatus: realAvailability?.availabilityStatus || 'Available Now',
+        weeklySchedule:
+          realAvailability?.weeklySchedule?.length === 7
+            ? realAvailability.weeklySchedule
+            : adaptWeekAvailabilityToWeeklySchedule(weekAvailability),
+        dateExceptions: mergedExceptions,
+      }
+
+      const updated = await availabilityService.updateCaregiverAvailability(payload)
+      setRealAvailability(updated)
+      toast.success('Time-off saved successfully', {
+        description: `Blocked dates from ${data.from} to ${data.to}.`,
+      })
+      reset()
+      setTimeOffOpen(false)
+    } catch (err) {
+      toast.error('Failed to submit time-off', {
+        description: err.message || 'Server rejected availability update.',
+      })
+    }
   }
+
 
   return (
     <div className="space-y-6">
@@ -133,7 +219,19 @@ export function SchedulePage() {
         <div className="grid min-w-[1050px] grid-cols-7 gap-3">
           {days.map((day, i) => {
             const key = iso(day)
-            const availability = caregiver?.weekAvailability?.[i] || { day: 'Mon', status: 'blocked', slots: [] }
+            const dayShort = day.toLocaleDateString('en-IN', { weekday: 'short' })
+            const exception = (realAvailability?.dateExceptions || []).find((e) => e.date === key)
+            const defaultAvail =
+              weekAvailability.find((w) => w.day === dayShort) ||
+              weekAvailability[i] ||
+              { day: dayShort, status: 'blocked', slots: [] }
+            const availability = exception
+              ? {
+                  day: dayShort,
+                  status: exception.isAvailable ? 'available' : 'blocked',
+                  slots: exception.slots || [],
+                }
+              : defaultAvail
             const dayBookings = weekBookings.filter((b) => b.date === key)
             const isToday = key === iso(new Date())
             return (
@@ -249,7 +347,7 @@ export function SchedulePage() {
           <CardHeader title="Availability at a glance" subtitle="Default weekly pattern" icon={Clock} />
           <CardBody>
             <ul className="space-y-2.5">
-              {(caregiver?.weekAvailability || []).map((w) => (
+              {weekAvailability.map((w) => (
                 <li key={w.day} className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-2.5 transition hover:border-primary-200 hover:bg-mint-50/50">
                   <span className="text-sm font-semibold text-ink">{w.day}</span>
                   <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', BLOCK_STYLES[w.status])}>

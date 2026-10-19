@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, ClipboardList, CreditCard, MessageSquare, Plus, SearchX, Star } from 'lucide-react'
 import { toast } from 'sonner'
@@ -17,8 +17,9 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { BookingCard } from '@/components/booking/BookingCard'
 import { Button } from '@/components/common/Button'
 import { Chip } from '@/components/common/Tabs'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { RatingModal } from '@/components/booking/RatingModal'
+import { bookingService, reviewService, isMongoObjectId } from '@/services'
 
 const STATUS_TABS = ['All', 'Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled']
 const PHASES = ['All', 'Current', 'Upcoming', 'Previous']
@@ -32,7 +33,7 @@ const startOfToday = () => {
 /** Time-based grouping: what is happening now, what is still to come, what is done. */
 const phaseOf = (b) => {
   if (b.status === 'In Progress') return 'Current'
-  if (b.status === 'Completed' || b.status === 'Cancelled') return 'Previous'
+  if (b.status === 'Completed' || b.status === 'Cancelled' || b.status === 'Rejected') return 'Previous'
   const when = new Date(`${b.date}T00:00:00`)
   if (Number.isNaN(when.getTime())) return 'Upcoming'
   return when >= startOfToday() ? 'Upcoming' : 'Previous'
@@ -42,7 +43,11 @@ export function BookingsPage() {
   useDocumentTitle('My bookings')
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { bookings, caregivers, updateBooking, addTransaction, addReview, ensureConversation } = useData()
+  const { caregivers, updateBooking, addTransaction, addReview, ensureConversation } = useData()
+
+  const [realBookings, setRealBookings] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [search, setSearch] = useState('')
   const [phase, setPhase] = useState('All')
@@ -50,14 +55,36 @@ export function BookingsPage() {
   const [rateTarget, setRateTarget] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const customerId = user?.id || 'cu-201'
+  const fetchBookings = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await bookingService.getBookings()
+      setRealBookings(res.bookings || [])
+    } catch (err) {
+      setError(err.message || 'Unable to load bookings from server')
+      setRealBookings([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const myBookings = useMemo(
-    () => bookings.filter((b) => b.customerId === customerId),
-    [bookings, customerId],
-  )
+  useEffect(() => {
+    fetchBookings()
+  }, [fetchBookings])
 
-  const caregiverName = (id) => caregivers.find((c) => c.id === id)?.name || 'Assigning…'
+  const myBookings = useMemo(() => {
+    return realBookings || []
+  }, [realBookings])
+
+  const caregiverName = (cgId, row) => {
+    if (row?.caregiverName) return row.caregiverName
+    if (row?.caregiver?.user?.fullName) return row.caregiver.user.fullName
+    if (row?.caregiver?.fullName) return row.caregiver.fullName
+    if (row?.caregiver?.name) return row.caregiver.name
+    const found = caregivers.find((c) => c.id === cgId || c._id === cgId)
+    return found?.name || 'Assigning…'
+  }
 
   const counts = useMemo(() => {
     const c = { All: myBookings.length, Current: 0, Upcoming: 0, Previous: 0 }
@@ -107,7 +134,26 @@ export function BookingsPage() {
     })
   }
 
-  const handleSubmitRating = (b, { criteria, average, comment }) => {
+  const handleSubmitRating = async (b, { criteria, average, comment }) => {
+    const targetBookingId = b.dbId || b.id
+
+    if (isMongoObjectId(targetBookingId)) {
+      try {
+        await reviewService.submitReview({
+          bookingId: targetBookingId,
+          rating: average,
+          criteria,
+          comment,
+        })
+      } catch (err) {
+        console.error('[Review Submission Error]', err)
+        toast.error('Unable to submit review', {
+          description: err.message || 'Please check that the booking is completed and try again.',
+        })
+        return
+      }
+    }
+
     addReview({
       bookingId: b.id,
       caregiverId: b.caregiverId,
@@ -258,7 +304,17 @@ export function BookingsPage() {
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <TableSkeleton rows={5} cols={5} />
+      ) : error ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Unable to load bookings"
+            description={error}
+            onRetry={fetchBookings}
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}

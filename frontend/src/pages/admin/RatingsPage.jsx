@@ -18,8 +18,10 @@ import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { RatingStars } from '@/components/common/RatingStars'
 import { Modal } from '@/components/common/Modal'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { FormField, Select } from '@/components/forms/FormField'
+import { adminService, isMongoObjectId } from '@/services'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -34,29 +36,74 @@ export function RatingsPage() {
 
   const { reviews, caregivers } = useData()
 
+  const [serverData, setServerData] = useState(null)
+  const [serverReviews, setServerReviews] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+
   const [search, setSearch] = useState('')
   const [city, setCity] = useState('All')
   const [status, setStatus] = useState('All')
   const [viewing, setViewing] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
+  const fetchRatings = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await adminService.getAdminRatings()
+      if (data && data.rows && data.rows.length) {
+        setServerData(data)
+      }
+    } catch (err) {
+      console.warn('[Ratings API Warning]', err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchRatings()
+  }, [])
+
+  useEffect(() => {
+    if (!viewing) {
+      setServerReviews([])
+      return
+    }
+    const targetId = viewing.caregiverProfileId || viewing.id
+    if (isMongoObjectId(targetId)) {
+      adminService
+        .getAdminCaregiverReviews(targetId)
+        .then((revs) => setServerReviews(revs || []))
+        .catch(() => setServerReviews([]))
+    }
+  }, [viewing])
+
+  const effectiveRows = useMemo(() => {
+    return serverData?.rows?.length ? serverData.rows : RATING_ROWS
+  }, [serverData])
+
   const cities = useMemo(() => {
     const seen = []
-    RATING_ROWS.forEach((r) => {
+    effectiveRows.forEach((r) => {
       if (!seen.includes(r.city)) seen.push(r.city)
     })
     return ['All', ...seen]
-  }, [])
+  }, [effectiveRows])
 
   const statuses = useMemo(() => {
     const seen = []
-    RATING_ROWS.forEach((r) => {
+    effectiveRows.forEach((r) => {
       if (!seen.includes(r.status)) seen.push(r.status)
     })
     return ['All', ...seen]
-  }, [])
+  }, [effectiveRows])
 
   const stats = useMemo(() => {
+    if (serverData?.stats) {
+      return serverData.stats
+    }
     const totalReviews = RATING_ROWS.reduce((s, r) => s + r.reviews, 0)
     const weighted = RATING_ROWS.reduce((s, r) => s + r.rating * r.reviews, 0)
     const fiveStar = reviews.filter((r) => r.rating === 5).length
@@ -66,18 +113,18 @@ export function RatingsPage() {
       fiveShare: reviews.length ? Math.round((fiveStar / reviews.length) * 100) : 0,
       attention: RATING_ROWS.filter((r) => r.status === 'Needs attention').length,
     }
-  }, [reviews])
+  }, [reviews, serverData])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
-    return RATING_ROWS.filter((r) => {
+    return effectiveRows.filter((r) => {
       const matchesCity = city === 'All' || r.city === city
       const matchesStatus = status === 'All' || r.status === status
       const matchesSearch =
         !q || [r.caregiverName, r.city, r.status].join(' ').toLowerCase().includes(q)
       return matchesCity && matchesStatus && matchesSearch
     })
-  }, [debouncedSearch, city, status])
+  }, [effectiveRows, debouncedSearch, city, status])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
   useEffect(() => {
@@ -87,11 +134,20 @@ export function RatingsPage() {
 
   const caregiverReviews = useMemo(() => {
     if (!viewing) return []
+    const mappedServerReviews = serverReviews.map((sr) => ({
+      id: sr._id || sr.id,
+      rating: sr.rating,
+      customerName: sr.customer?.fullName || 'Customer',
+      date: sr.createdAt ? new Date(sr.createdAt).toISOString().slice(0, 10) : 'Recent',
+      comment: sr.comment,
+      reply: sr.reply,
+    }))
     const caregiver = caregivers.find((c) => c.name === viewing.caregiverName)
-    return reviews.filter(
+    const localReviews = reviews.filter(
       (r) => r.caregiverId === caregiver?.id || r.caregiverName === viewing.caregiverName,
     )
-  }, [reviews, caregivers, viewing])
+    return [...mappedServerReviews, ...localReviews]
+  }, [reviews, caregivers, viewing, serverReviews])
 
   const columns = [
     {
@@ -173,6 +229,10 @@ export function RatingsPage() {
           </Button>
         }
       />
+
+      {!isLoading && !serverData && (
+        <FallbackNotice message="Demo Mode: The live caregiver ratings API is currently unreachable. Displaying local ratings directory and distribution data." />
+      )}
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Ban,
@@ -16,9 +16,9 @@ import {
 import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
-import { CUSTOMERS } from '@/data/bookings'
 import { formatDate, formatCurrency, maskEmail, maskPhone } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
+import { adminService } from '@/services/adminService'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -27,43 +27,78 @@ import { DataTable } from '@/components/common/DataTable'
 import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
-import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
-import { EmptyState } from '@/components/common/States'
-import { Select } from '@/components/forms/FormField'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
+import { FormField, Select, Textarea } from '@/components/forms/FormField'
 
 const STATUS_TABS = ['All', 'Active', 'Inactive']
+const DEFAULT_CITIES = ['All', 'Mumbai, MH', 'New Delhi, DL', 'Bengaluru, KA', 'Chennai, TN', 'Kolkata, WB', 'Hyderabad, TS', 'Pune, MH']
 
 export function CustomersPage() {
   useDocumentTitle('Customers')
 
   const { bookings } = useData()
 
+  const [customers, setCustomers] = useState([])
+  const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, lifetime: 0 })
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
   const [city, setCity] = useState('All')
   const [viewingId, setViewingId] = useState(null)
-  const [overrides, setOverrides] = useState({})
+
+  // Account status mutation dialog state
   const [suspendTarget, setSuspendTarget] = useState(null)
+  const [suspendReason, setSuspendReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
+  const [isUpdating, setIsUpdating] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search)
 
-  const customers = useMemo(() => CUSTOMERS.map((c) => ({ ...c, status: overrides[c.id] ?? c.status })), [overrides])
+  const fetchCustomers = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const query = {
+        search: debouncedSearch.trim() || undefined,
+        status: status === 'All' ? undefined : (status === 'Active' ? 'active' : 'suspended'),
+        city: city === 'All' ? undefined : city,
+      }
+      const result = await adminService.getCustomers(query)
+      setCustomers(result.customers || [])
+      setStats({
+        total: result.stats?.total ?? result.customers.length,
+        active: result.stats?.active ?? result.customers.filter((c) => c.status === 'Active').length,
+        inactive: (result.stats?.suspended || 0) + (result.stats?.blocked || 0) || result.customers.filter((c) => c.status !== 'Active').length,
+        lifetime: result.customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0),
+      })
+    } catch (err) {
+      setError(err.message || 'Failed to retrieve registered customers from server.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [debouncedSearch, status, city])
 
-  const cities = useMemo(() => [...new Set(CUSTOMERS.map((c) => c.city))].sort(), [])
+  useEffect(() => {
+    fetchCustomers()
+  }, [fetchCustomers])
 
-  const stats = useMemo(() => {
-    const active = customers.filter((c) => c.status === 'Active').length
-    const lifetime = customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0)
-    return { total: customers.length, active, inactive: customers.length - active, lifetime }
+  const cities = useMemo(() => {
+    const fromData = customers.map((c) => c.city).filter((c) => c && c !== '—')
+    return [...new Set([...DEFAULT_CITIES.slice(1), ...fromData])].sort()
   }, [customers])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
     return customers.filter((c) => {
-      const matchesStatus = status === 'All' || c.status === status
+      const matchesStatus =
+        status === 'All' ||
+        (status === 'Active' && c.status === 'Active') ||
+        (status === 'Inactive' && c.status !== 'Active')
       const matchesCity = city === 'All' || c.city === city
       const matchesSearch =
         !q ||
@@ -86,7 +121,7 @@ export function CustomersPage() {
   const selectedBookings = useMemo(
     () =>
       selected
-        ? bookings.filter((b) => b.customerId === selected.id).sort((a, b) => b.date.localeCompare(a.date))
+        ? bookings.filter((b) => b.customerId === selected.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
         : [],
     [bookings, selected],
   )
@@ -95,17 +130,65 @@ export function CustomersPage() {
     .filter((b) => b.status !== 'Cancelled')
     .reduce((sum, b) => sum + (b.total || 0), 0)
 
-  const handleSuspend = () => {
+  const handleOpenSuspendModal = (targetCustomer) => {
+    setSuspendTarget(targetCustomer)
+    setSuspendReason('')
+    setReasonError('')
+  }
+
+  const handleSuspendSubmit = async () => {
     if (!suspendTarget) return
-    const next = suspendTarget.status === 'Active' ? 'Inactive' : 'Active'
-    setOverrides((prev) => ({ ...prev, [suspendTarget.id]: next }))
-    toast[next === 'Active' ? 'success' : 'error'](
-      next === 'Active'
-        ? `${suspendTarget.name}'s account reactivated`
-        : `${suspendTarget.name}'s account suspended`,
-      { description: next === 'Active' ? 'They can book and message caretakers again.' : 'New bookings are blocked until you reactivate.' },
-    )
-    setSuspendTarget(null)
+    const trimmedReason = suspendReason.trim()
+    if (trimmedReason.length < 3) {
+      setReasonError('An auditable reason of at least 3 characters is mandatory.')
+      return
+    }
+
+    setIsUpdating(true)
+    const isCurrentlyActive = suspendTarget.status === 'Active'
+    const nextStatus = isCurrentlyActive ? 'suspended' : 'active'
+
+    try {
+      await adminService.updateUserStatus(suspendTarget.id, {
+        status: nextStatus,
+        reason: trimmedReason,
+      })
+
+      // Update local state with the server-confirmed result
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === suspendTarget.id
+            ? {
+                ...c,
+                status: nextStatus === 'active' ? 'Active' : 'Suspended',
+                accountStatus: nextStatus,
+                statusReason: trimmedReason,
+                statusUpdatedAt: new Date().toISOString(),
+              }
+            : c,
+        ),
+      )
+
+      toast.success(
+        nextStatus === 'active'
+          ? `${suspendTarget.name}'s account reactivated`
+          : `${suspendTarget.name}'s account suspended`,
+        {
+          description:
+            nextStatus === 'active'
+              ? 'They can book and message caretakers again.'
+              : 'New bookings are blocked until you reactivate.',
+        },
+      )
+      setSuspendTarget(null)
+      setSuspendReason('')
+    } catch (err) {
+      toast.error(err.message || 'Failed to update account status', {
+        description: 'Server rejected the status transition.',
+      })
+    } finally {
+      setIsUpdating(false)
+    }
   }
 
   const columns = [
@@ -117,13 +200,13 @@ export function CustomersPage() {
           <Avatar src={c.avatar} name={c.name} size="sm" />
           <div className="min-w-0">
             <p className="truncate font-semibold text-ink">{c.name}</p>
-            <p className="truncate text-xs text-faint">{c.area}</p>
+            <p className="truncate text-xs text-faint">{c.area || c.city}</p>
           </div>
         </div>
       ),
     },
-    { key: 'email', header: 'Email', render: (c) => <span className="tabular-nums">{maskEmail(c.email)}</span> },
-    { key: 'phone', header: 'Phone', render: (c) => <span className="tabular-nums">{maskPhone(c.phone)}</span> },
+    { key: 'email', header: 'Email', render: (c) => <span className="tabular-nums">{c.email ? maskEmail(c.email) : '—'}</span> },
+    { key: 'phone', header: 'Phone', render: (c) => <span className="tabular-nums">{c.phone ? maskPhone(c.phone) : '—'}</span> },
     { key: 'city', header: 'City' },
     { key: 'totalBookings', header: 'Bookings', align: 'right' },
     {
@@ -132,7 +215,7 @@ export function CustomersPage() {
       align: 'right',
       render: (c) => <span className="font-semibold tabular-nums text-ink">{formatCurrency(c.totalSpent)}</span>,
     },
-    { key: 'joinedOn', header: 'Joined', render: (c) => <span className="whitespace-nowrap">{formatDate(c.joinedOn)}</span> },
+    { key: 'createdAt', header: 'Joined', render: (c) => <span className="whitespace-nowrap">{formatDate(c.createdAt)}</span> },
     { key: 'status', header: 'Status', render: (c) => <StatusBadge status={c.status} size="sm" /> },
     {
       key: 'action',
@@ -159,7 +242,7 @@ export function CustomersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Customers"
-        subtitle="Every registered family — contact details, booking history and lifetime value."
+        subtitle="Every registered family — contact details, live booking history and account status."
         action={
           <Button to="/admin/bookings" variant="outline" icon={CalendarDays}>
             Booking ledger
@@ -170,14 +253,14 @@ export function CustomersPage() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard label="Total customers" value={stats.total} icon={Users} tone="primary" hint="All registered accounts" delay={0} />
         <StatCard label="Active" value={stats.active} icon={UserRound} tone="success" trend={8} hint="Currently booking" delay={0.05} />
-        <StatCard label="Inactive" value={stats.inactive} icon={Ban} tone="warning" hint="Dormant or suspended" delay={0.1} />
+        <StatCard label="Inactive / Suspended" value={stats.inactive} icon={Ban} tone="warning" hint="Dormant or suspended" delay={0.1} />
         <StatCard
           label="Lifetime value"
           value={formatCurrency(stats.lifetime)}
           icon={IndianRupee}
           tone="accent"
           trend={13}
-          hint="Gross value across all customers"
+          hint="Gross value across customers"
           delay={0.15}
         />
       </div>
@@ -193,7 +276,12 @@ export function CustomersPage() {
           tabs={STATUS_TABS.map((s) => ({
             id: s,
             label: s,
-            count: s === 'All' ? customers.length : customers.filter((c) => c.status === s).length,
+            count:
+              s === 'All'
+                ? customers.length
+                : s === 'Active'
+                  ? customers.filter((c) => c.status === 'Active').length
+                  : customers.filter((c) => c.status !== 'Active').length,
           }))}
           active={status}
           onChange={setStatus}
@@ -211,7 +299,19 @@ export function CustomersPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="rounded-card border border-line bg-white p-6 shadow-card">
+          <TableSkeleton rows={6} cols={6} />
+        </div>
+      ) : error ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Unable to load customer directory"
+            description={error}
+            onRetry={fetchCustomers}
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}
@@ -246,24 +346,33 @@ export function CustomersPage() {
         </>
       )}
 
+      {/* View Customer Dossier Modal */}
       <Modal
         open={Boolean(selected)}
         onClose={() => setViewingId(null)}
         title={selected?.name || 'Customer'}
-        subtitle={selected ? `Customer since ${formatDate(selected.joinedOn, { long: true })}` : ''}
+        subtitle={selected ? `Customer since ${formatDate(selected.createdAt, { long: true })}` : ''}
         size="xl"
         footer={
           selected ? (
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button
-                variant="dangerGhost"
+                variant={selected.status === 'Active' ? 'dangerGhost' : 'outline'}
                 icon={Ban}
-                onClick={() => setSuspendTarget(selected)}
+                onClick={() => handleOpenSuspendModal(selected)}
               >
                 {selected.status === 'Active' ? 'Suspend account' : 'Reactivate account'}
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Button variant="outline" icon={MessageSquare} onClick={() => toast.info(`Message thread opened with ${selected.name}`, { description: 'Replies land in the shared admin inbox.' })}>
+                <Button
+                  variant="outline"
+                  icon={MessageSquare}
+                  onClick={() =>
+                    toast.info(`Message thread opened with ${selected.name}`, {
+                      description: 'Administrative notification channel.',
+                    })
+                  }
+                >
                   Message
                 </Button>
                 <Button onClick={() => setViewingId(null)}>Done</Button>
@@ -283,15 +392,20 @@ export function CustomersPage() {
                 </div>
                 <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
                   <span className="inline-flex items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5" /> {selected.email}
+                    <Mail className="h-3.5 w-3.5" /> {selected.email || '—'}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
-                    <Phone className="h-3.5 w-3.5" /> {selected.phone}
+                    <Phone className="h-3.5 w-3.5" /> {selected.phone || '—'}
                   </span>
                 </div>
                 <p className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-muted">
-                  <MapPin className="h-3.5 w-3.5" /> {selected.address}
+                  <MapPin className="h-3.5 w-3.5" /> {selected.defaultAddress?.addressLine || selected.area ? `${selected.defaultAddress?.addressLine || ''} ${selected.area}, ${selected.city}` : selected.city}
                 </p>
+                {selected.statusReason ? (
+                  <p className="mt-2 text-xs italic text-amber-700">
+                    Status Note: "{selected.statusReason}" {selected.statusUpdatedAt ? `(${formatDate(selected.statusUpdatedAt)})` : ''}
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-3 sm:shrink-0">
                 <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-center">
@@ -309,46 +423,46 @@ export function CustomersPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Card>
-                <CardHeader title="Patient information" subtitle="Care recipient on file" />
+                <CardHeader title="Patient Information" subtitle="Family members on file" />
                 <CardBody className="space-y-3 text-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Patient name</span>
-                    <span className="font-semibold text-ink">{selected.patientInfo?.name || '—'}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Age</span>
-                    <span className="font-semibold text-ink">{selected.patientInfo?.age ?? '—'} yrs</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Relation</span>
-                    <span className="font-semibold text-ink">{selected.patientInfo?.relation || '—'}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Condition</span>
-                    <span className="max-w-[60%] text-right font-semibold text-ink">
-                      {selected.patientInfo?.condition || '—'}
-                    </span>
-                  </div>
+                  {selected.patients && selected.patients.length > 0 ? (
+                    selected.patients.map((pat, idx) => (
+                      <div key={pat._id || idx} className="rounded-lg border border-line p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-semibold text-ink">{pat.name}</span>
+                          <span className="text-xs text-muted">{pat.relation} · {pat.gender}</span>
+                        </div>
+                        {pat.age ? <p className="text-xs text-muted">Age: {pat.age} yrs</p> : null}
+                        {pat.condition ? <p className="mt-1 text-xs text-ink-soft">Condition: {pat.condition}</p> : null}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted">No patient records on file.</p>
+                  )}
                 </CardBody>
               </Card>
 
               <Card>
-                <CardHeader title="Address" subtitle="Service location" />
+                <CardHeader title="Emergency Contact & Address" subtitle="Service details" />
                 <CardBody className="space-y-3 text-sm">
                   <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Street address</span>
-                    <span className="max-w-[65%] text-right font-semibold text-ink">{selected.address}</span>
+                    <span className="text-muted">Emergency contact</span>
+                    <span className="font-semibold text-ink">
+                      {selected.emergencyContact?.name ? `${selected.emergencyContact.name} (${selected.emergencyContact.relation || 'Contact'})` : '—'}
+                    </span>
+                  </div>
+                  {selected.emergencyContact?.phone ? (
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-muted">Emergency phone</span>
+                      <span className="tabular-nums font-semibold text-ink">{maskPhone(selected.emergencyContact.phone)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-muted">City / Area</span>
+                    <span className="font-semibold text-ink">{selected.city} · {selected.area || '—'}</span>
                   </div>
                   <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Area</span>
-                    <span className="font-semibold text-ink">{selected.area}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">City</span>
-                    <span className="font-semibold text-ink">{selected.city}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Spend in context bookings</span>
+                    <span className="text-muted">Spend in context</span>
                     <span className="font-semibold tabular-nums text-ink">{formatCurrency(selectedSpend)}</span>
                   </div>
                 </CardBody>
@@ -395,19 +509,67 @@ export function CustomersPage() {
         ) : null}
       </Modal>
 
-      <ConfirmationDialog
+      {/* Account Status Transition Dialog with Mandatory Reason */}
+      <Modal
         open={Boolean(suspendTarget)}
-        onClose={() => setSuspendTarget(null)}
-        onConfirm={handleSuspend}
-        tone={suspendTarget?.status === 'Active' ? 'danger' : 'success'}
-        title={suspendTarget?.status === 'Active' ? 'Suspend this account?' : 'Reactivate this account?'}
-        message={
+        onClose={() => {
+          if (!isUpdating) {
+            setSuspendTarget(null)
+            setSuspendReason('')
+            setReasonError('')
+          }
+        }}
+        title={suspendTarget?.status === 'Active' ? 'Suspend Customer Account' : 'Reactivate Customer Account'}
+        description={
           suspendTarget?.status === 'Active'
-            ? `${suspendTarget?.name} will not be able to book caretakers or start new conversations. Existing bookings stay unaffected and you can reactivate at any time.`
-            : `${suspendTarget?.name} will be able to book caretakers and message the care team again.`
+            ? `Suspend ${suspendTarget?.name}. They will not be able to book caretakers or send new messages.`
+            : `Reactivate ${suspendTarget?.name}'s account so they can resume normal access.`
         }
-        confirmLabel={suspendTarget?.status === 'Active' ? 'Suspend account' : 'Reactivate account'}
-      />
+      >
+        <div className="space-y-4">
+          <FormField
+            label="Reason for status change *"
+            error={reasonError}
+            hint="An auditable reason is required for administrative status transitions (min 3 characters)."
+          >
+            <Textarea
+              value={suspendReason}
+              onChange={(e) => {
+                setSuspendReason(e.target.value)
+                if (e.target.value.trim().length >= 3) setReasonError('')
+              }}
+              placeholder="e.g. Account suspended due to repeatedly cancelled bookings / Client requested temporary pause..."
+              rows={3}
+              disabled={isUpdating}
+            />
+          </FormField>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSuspendTarget(null)
+                setSuspendReason('')
+                setReasonError('')
+              }}
+              disabled={isUpdating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={suspendTarget?.status === 'Active' ? 'danger' : 'primary'}
+              onClick={handleSuspendSubmit}
+              disabled={isUpdating || suspendReason.trim().length < 3}
+            >
+              {isUpdating
+                ? 'Updating…'
+                : suspendTarget?.status === 'Active'
+                  ? 'Suspend Account'
+                  : 'Reactivate Account'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

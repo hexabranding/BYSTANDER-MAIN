@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Camera, KeyRound, LogOut, Mail, Pencil, RefreshCcw, Save, ShieldCheck, UserRound } from 'lucide-react'
@@ -16,6 +16,7 @@ import { Button } from '@/components/common/Button'
 import { Chip, ProgressBar } from '@/components/common/Tabs'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
+import { profileService } from '@/services'
 
 const PREF_ITEMS = [
   { key: 'bookings', label: 'Booking updates', hint: 'Confirmations, caretaker assignment and live status changes.' },
@@ -72,6 +73,9 @@ export function ProfilePage() {
 
   const [signOutOpen, setSignOutOpen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
+  const [savingPersonal, setSavingPersonal] = useState(false)
+  const [savingPatient, setSavingPatient] = useState(false)
+
   const [prefs, setPrefs] = useState(() => ({
     bookings: true,
     messages: true,
@@ -103,6 +107,38 @@ export function ProfilePage() {
     },
   })
 
+  useEffect(() => {
+    let isMounted = true
+    profileService
+      .getCustomerProfile()
+      .then((data) => {
+        if (!isMounted || !data) return
+        personal.reset({
+          fullName: data.fullName || user?.name || '',
+          email: data.email || user?.email || '',
+          mobile: data.phone || user?.phone || '',
+          city: data.defaultAddress?.city || user?.city || CITIES[0],
+          area: data.defaultAddress?.area || user?.area || '',
+          address: data.defaultAddress?.addressLine || user?.address || '',
+        })
+        const p = data.patients?.[0]
+        if (p) {
+          patient.reset({
+            patientName: p.name || '',
+            patientAge: p.age ? String(p.age) : '',
+            relation: p.relation || '',
+            condition: p.condition || '',
+            careType: CARE_TYPES[0],
+          })
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const password = useForm({
     mode: 'onTouched',
     defaultValues: { current: '', next: '', confirm: '' },
@@ -112,30 +148,63 @@ export function ProfilePage() {
   const score = strengthScore(nextValue)
   const strength = STRENGTH[score]
 
-  const onPersonal = (values) => {
-    updateProfile({
-      name: values.fullName.trim(),
-      email: values.email.trim(),
-      phone: values.mobile.trim(),
-      city: values.city,
-      area: values.area.trim(),
-      address: values.address.trim(),
-    })
-    toast.success('Profile updated')
+  const onPersonal = async (values) => {
+    setSavingPersonal(true)
+    try {
+      await profileService.updateCustomerProfile({
+        fullName: values.fullName.trim(),
+        defaultAddress: {
+          addressLine: values.address.trim(),
+          city: values.city,
+          area: values.area.trim(),
+        },
+      })
+      updateProfile({
+        name: values.fullName.trim(),
+        email: values.email.trim(),
+        phone: values.mobile.trim(),
+        city: values.city,
+        area: values.area.trim(),
+        address: values.address.trim(),
+      })
+      toast.success('Profile updated successfully')
+    } catch (err) {
+      toast.error('Profile update failed', {
+        description: err.message || 'Server rejected changes.',
+      })
+    } finally {
+      setSavingPersonal(false)
+    }
   }
 
-  const onPatient = (values) => {
-    updateProfile({
-      patientInfo: {
+  const onPatient = async (values) => {
+    setSavingPatient(true)
+    try {
+      const patientData = {
         name: values.patientName.trim(),
         age: Number(values.patientAge) || 0,
         relation: values.relation.trim(),
         condition: values.condition.trim(),
-        preferredCareType: values.careType,
-      },
-    })
-    toast.success('Profile updated')
+      }
+      await profileService.updateCustomerProfile({
+        patients: [patientData],
+      })
+      updateProfile({
+        patientInfo: {
+          ...patientData,
+          preferredCareType: values.careType,
+        },
+      })
+      toast.success('Patient details saved')
+    } catch (err) {
+      toast.error('Patient update failed', {
+        description: err.message || 'Server rejected patient updates.',
+      })
+    } finally {
+      setSavingPatient(false)
+    }
   }
+
 
   const onPassword = ({ current, next }) => {
     // Demo accounts all share the seeded password; a custom one is only kept in
@@ -293,7 +362,7 @@ export function ProfilePage() {
             </FormField>
 
             <div className="flex justify-end">
-              <Button type="submit" icon={Save}>
+              <Button type="submit" icon={Save} loading={savingPersonal}>
                 Save changes
               </Button>
             </div>
@@ -374,7 +443,7 @@ export function ProfilePage() {
             </FormField>
 
             <div className="flex justify-end">
-              <Button type="submit" icon={Save}>
+              <Button type="submit" icon={Save} loading={savingPatient}>
                 Save patient information
               </Button>
             </div>

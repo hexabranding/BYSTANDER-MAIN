@@ -11,3 +11,7 @@ export { SimulatedPayment } from './SimulatedPayment.js';
 export { SosIncident } from './SosIncident.js';
 export { Message } from './Message.js';
 export { Notification } from './Notification.js';
+export { Complaint } from './Complaint.js';
+export { Review } from './Review.js';
+export { Transaction } from './Transaction.js';
+export { Payout } from './Payout.js';

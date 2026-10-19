@@ -173,7 +173,7 @@ export function RegisterCustomerPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const onSubmit = (values) => {
+  const onSubmit = async (values) => {
     const payload = {
       fullName: values.fullName.trim(),
       mobile: values.mobile.trim(),
@@ -191,9 +191,9 @@ export function RegisterCustomerPage() {
         preferredCareType: values.preferredCareType || '',
       },
     }
-    const result = registerUser(payload)
+    const result = await registerUser(payload)
     if (!result.ok) {
-      toast.error('Could not create your account. Please try again.')
+      toast.error(result.message || 'Could not create your account. Please try again.')
       return
     }
     registerCustomerRecord({
@@ -206,8 +206,8 @@ export function RegisterCustomerPage() {
       address: payload.address,
       patientInfo: payload.patientInfo,
     })
-    toast.success('Account created. Verify your mobile to continue.')
-    navigate('/verify-otp', { state: { email: payload.email, next: '/customer/dashboard' } })
+    toast.success('Account created successfully.')
+    navigate('/customer/dashboard', { replace: true })
   }
 
   const handleFormSubmit = (event) => {

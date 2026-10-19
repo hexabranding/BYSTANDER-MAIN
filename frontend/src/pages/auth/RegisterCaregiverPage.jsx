@@ -227,7 +227,7 @@ export function RegisterCaregiverPage() {
     navigate('/verify-otp', { state: { email: pendingEmail.current, next: '/caregiver/dashboard' } })
   }
 
-  const onSubmit = (values) => {
+  const onSubmit = async (values) => {
     const DOC_LABELS = {
       nursingCertificate: 'Nursing certificate',
       nursingStudentId: 'Nursing student ID',
@@ -268,13 +268,13 @@ export function RegisterCaregiverPage() {
         ifsc: values.ifsc.trim().toUpperCase(),
       },
     }
-    const result = registerCaregiver(payload)
+    const result = await registerCaregiver(payload)
     if (!result.ok) {
-      toast.error('Could not submit your application. Please try again.')
+      toast.error(result.message || 'Could not submit your application. Please try again.')
       return
     }
     registerCaregiverProfile({
-      caregiverId: result.user.id,
+      caregiverId: result.user?.id || 'cg-new',
       name: payload.fullName,
       city: payload.city,
       area: payload.area,

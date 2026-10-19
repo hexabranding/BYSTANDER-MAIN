@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -25,7 +25,6 @@ import { cn } from '@/utils/cn'
 import { formatCurrency, formatDate, initials } from '@/utils/format'
 import { durationBasis } from '@/utils/duration'
 import { reveal } from '@/utils/motion'
-import { getCaregiverById } from '@/data/caregivers'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { Button } from '@/components/common/Button'
@@ -34,12 +33,14 @@ import { Reveal } from '@/components/common/Reveal'
 import { Avatar } from '@/components/common/Avatar'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { RatingStars } from '@/components/common/RatingStars'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, PageSkeleton } from '@/components/common/States'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
 import { FormField, Textarea } from '@/components/forms/FormField'
+import { fetchPublicCaregiverById } from '@/services/caregiversService'
 
 const DAY_STYLE = {
   available: 'border-success-200 bg-success-50',
@@ -58,7 +59,31 @@ const ESTIMATED_HOURS = 4
 export function CaregiverDetailsPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const caregiver = getCaregiverById(id)
+
+  const [caregiver, setCaregiver] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
+
+  const loadCaregiver = useCallback(async () => {
+    if (!id) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetchPublicCaregiverById(id)
+      setCaregiver(res.data)
+      setIsFallback(Boolean(res.isFallback))
+    } catch (err) {
+      setError(err)
+      setCaregiver(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    loadCaregiver()
+  }, [loadCaregiver])
 
   useDocumentTitle(caregiver ? caregiver.name : 'Caretaker')
 
@@ -70,16 +95,44 @@ export function CaregiverDetailsPage() {
   const [rating, setRating] = useState(5)
   const [comment, setComment] = useState('')
 
+  if (loading) {
+    return (
+      <div className="bg-canvas">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+          <PageSkeleton />
+        </div>
+      </div>
+    )
+  }
+
+  if (error && error.status !== 404 && !caregiver) {
+    return (
+      <div className="bg-canvas">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="rounded-card border border-line bg-white shadow-card">
+            <ErrorState
+              title="Unable to load caretaker profile"
+              description={error?.message || 'A network error occurred while loading this profile.'}
+              onRetry={loadCaregiver}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!caregiver) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="rounded-card border border-line bg-white shadow-card">
-          <EmptyState
-            icon={ShieldCheck}
-            title="Caretaker not found"
-            description="This profile may have been removed or the link is incorrect. Browse all verified caretakers to find the right match."
-            action={<Button to="/caregivers">Browse caretakers</Button>}
-          />
+      <div className="bg-canvas">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="rounded-card border border-line bg-white shadow-card">
+            <EmptyState
+              icon={ShieldCheck}
+              title="Caretaker not found"
+              description="This profile may have been removed or the link is incorrect. Browse all verified caretakers to find the right match."
+              action={<Button to="/caregivers">Browse caretakers</Button>}
+            />
+          </div>
         </div>
       </div>
     )
@@ -164,6 +217,13 @@ export function CaregiverDetailsPage() {
     <div className="bg-canvas">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <Breadcrumbs items={[{ label: 'Caretakers', to: '/caregivers' }, { label: name }]} />
+
+        {isFallback ? (
+          <FallbackNotice
+            className="mt-4"
+            message="Offline Preview: Displaying local caretaker profile while the live server is unreachable. Information is for preview purposes only."
+          />
+        ) : null}
 
         <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_21rem] lg:items-start">
           {/* ---------------- left column ---------------- */}

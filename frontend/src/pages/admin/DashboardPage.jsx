@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -46,6 +46,8 @@ import { Button } from '@/components/common/Button'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/States'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { adminService } from '@/services/adminService'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -80,8 +82,48 @@ export function DashboardPage() {
   useDocumentTitle('Admin dashboard')
 
   const { bookings, caregivers, verifications, sos } = useData()
+  const [liveMetrics, setLiveMetrics] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    setIsLoading(true)
+    adminService
+      .getAdminMetrics()
+      .then((data) => {
+        if (mounted && data) {
+          setLiveMetrics(data)
+        }
+      })
+      .catch((err) => {
+        console.warn('[Dashboard Metrics API Warning]', err.message)
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const stats = useMemo(() => {
+    if (liveMetrics?.stats) {
+      const s = liveMetrics.stats
+      const pendingVerifications = verifications.filter((v) => v.status === 'Pending' || v.status === 'Under Review')
+      return {
+        customers: s.customers,
+        caregivers: s.caregivers,
+        pendingVerifications,
+        active: s.active,
+        completed: s.completed,
+        cancelled: s.cancelled,
+        liveCount: s.liveCount,
+        gross: s.gross,
+        revenue: s.revenue,
+        avgValue: s.avgValue,
+        completionRate: s.completionRate,
+      }
+    }
     const active = bookings.filter((b) => ['Pending', 'Confirmed', 'In Progress'].includes(b.status))
     const completed = bookings.filter((b) => b.status === 'Completed')
     const cancelled = bookings.filter((b) => b.status === 'Cancelled')
@@ -102,44 +144,62 @@ export function DashboardPage() {
       avgValue: Math.round(gross / Math.max(1, live.length)),
       completionRate: Math.round((completed.length / Math.max(1, completed.length + cancelled.length)) * 100),
     }
-  }, [bookings, caregivers, verifications])
+  }, [bookings, caregivers, verifications, liveMetrics])
 
-  const recentBookings = useMemo(
-    () =>
-      [...bookings]
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 5),
-    [bookings],
-  )
+  const recentBookings = useMemo(() => {
+    if (liveMetrics?.recentBookings?.length) {
+      return liveMetrics.recentBookings.map((b) => ({
+        id: b.id,
+        service: b.service,
+        date: b.date,
+        startTime: b.date ? new Date(b.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM',
+        customerName: b.customerName,
+        status: b.status ? b.status.charAt(0).toUpperCase() + b.status.slice(1).replace('_', ' ') : 'Pending',
+        createdAt: b.createdAt,
+      }))
+    }
+    return [...bookings]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5)
+  }, [bookings, liveMetrics])
 
-  const recentRegistrations = useMemo(
-    () =>
-      [
-        ...CUSTOMERS.map((c) => ({
-          id: c.id,
-          kind: 'Customer',
-          name: c.name,
-          avatar: c.avatar,
-          meta: c.city,
-          joinedOn: c.joinedOn,
-        })),
-        ...caregivers.map((c) => ({
-          id: c.id,
-          kind: 'Caretaker',
-          name: c.name,
-          avatar: c.photo,
-          meta: c.qualification,
-          joinedOn: c.joinedOn,
-        })),
-      ]
-        .sort((a, b) => String(b.joinedOn).localeCompare(String(a.joinedOn)))
-        .slice(0, 5),
-    [caregivers],
-  )
+  const recentRegistrations = useMemo(() => {
+    if (liveMetrics?.recentRegistrations?.length) {
+      return liveMetrics.recentRegistrations
+    }
+    return [
+      ...CUSTOMERS.map((c) => ({
+        id: c.id,
+        kind: 'Customer',
+        name: c.name,
+        avatar: c.avatar,
+        meta: c.city,
+        joinedOn: c.joinedOn,
+      })),
+      ...caregivers.map((c) => ({
+        id: c.id,
+        kind: 'Caretaker',
+        name: c.name,
+        avatar: c.photo,
+        meta: c.qualification,
+        joinedOn: c.joinedOn,
+      })),
+    ]
+      .sort((a, b) => String(b.joinedOn).localeCompare(String(a.joinedOn)))
+      .slice(0, 5)
+  }, [caregivers, liveMetrics])
 
-  const activeSos = useMemo(() => sos.filter((s) => s.status === 'Open' || s.status === 'Under Investigation'), [sos])
+  const activeSos = useMemo(() => {
+    if (liveMetrics?.activeSos?.length) {
+      return liveMetrics.activeSos
+    }
+    return sos.filter((s) => s.status === 'Open' || s.status === 'Under Investigation')
+  }, [sos, liveMetrics])
 
   const payoutSummary = useMemo(() => {
+    if (liveMetrics?.payoutSummary) {
+      return liveMetrics.payoutSummary
+    }
     const month = new Date().toISOString().slice(0, 7)
     const due = PAYOUTS.filter((p) => p.status === 'Pending' || p.status === 'Processing').reduce(
       (sum, p) => sum + p.net,
@@ -151,9 +211,13 @@ export function DashboardPage() {
       0,
     )
     return { due, processing, settled }
-  }, [])
+  }, [liveMetrics])
 
-  const serviceTotal = SERVICE_DISTRIBUTION.reduce((sum, s) => sum + s.value, 0)
+  const bookingActivityData = liveMetrics?.bookingActivity?.length ? liveMetrics.bookingActivity : BOOKING_ACTIVITY
+  const revenueSplitData = liveMetrics?.revenueSplit?.length ? liveMetrics.revenueSplit : REVENUE_SPLIT
+  const serviceDistributionData = liveMetrics?.serviceDistribution?.length ? liveMetrics.serviceDistribution : SERVICE_DISTRIBUTION
+  const cityDistributionData = liveMetrics?.cityDistribution?.length ? liveMetrics.cityDistribution : CITY_DISTRIBUTION
+  const serviceTotal = serviceDistributionData.reduce((sum, s) => sum + s.value, 0)
 
   return (
     <div className="space-y-6">
@@ -239,6 +303,10 @@ export function DashboardPage() {
           ))}
         </div>
       </motion.section>
+
+      {!isLoading && !liveMetrics && (
+        <FallbackNotice message="Demo Mode: The live platform metrics API is unreachable. Displaying local operational and financial seed data for preview purposes." />
+      )}
 
       <SectionLabel>Key metrics</SectionLabel>
 
@@ -328,7 +396,7 @@ export function DashboardPage() {
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={BOOKING_ACTIVITY} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                <BarChart data={bookingActivityData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                   <defs>
                     <linearGradient id="adminBarRequested" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#2DD4BF" />
@@ -377,7 +445,7 @@ export function DashboardPage() {
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_SPLIT} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                <AreaChart data={revenueSplitData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="adminRevenueFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0F766E" stopOpacity={0.26} />
@@ -410,7 +478,7 @@ export function DashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={SERVICE_DISTRIBUTION}
+                      data={serviceDistributionData}
                       dataKey="value"
                       nameKey="name"
                       innerRadius={54}
@@ -419,7 +487,7 @@ export function DashboardPage() {
                       stroke="#FFFFFF"
                       strokeWidth={2}
                     >
-                      {SERVICE_DISTRIBUTION.map((service) => (
+                      {serviceDistributionData.map((service) => (
                         <Cell key={service.name} fill={service.fill} />
                       ))}
                     </Pie>
@@ -428,12 +496,12 @@ export function DashboardPage() {
                 </ResponsiveContainer>
               </div>
               <div className="w-full flex-1 space-y-2.5">
-                {SERVICE_DISTRIBUTION.map((service) => (
+                {serviceDistributionData.map((service) => (
                   <div key={service.name} className="flex items-center gap-2.5 text-sm">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: service.fill }} />
                     <span className="min-w-0 flex-1 truncate text-ink-soft">{service.name}</span>
                     <span className="font-semibold tabular-nums text-ink">
-                      {Math.round((service.value / serviceTotal) * 100)}%
+                      {Math.round((service.value / Math.max(1, serviceTotal)) * 100)}%
                     </span>
                   </div>
                 ))}
@@ -447,7 +515,7 @@ export function DashboardPage() {
           <CardBody>
             <div dir="ltr" className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={CITY_DISTRIBUTION} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                <BarChart data={cityDistributionData} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
                   <defs>
                     <linearGradient id="adminCityBar" x1="0" y1="0" x2="1" y2="0">
                       <stop offset="0%" stopColor="#0F766E" />
@@ -506,7 +574,7 @@ export function DashboardPage() {
                       {b.id} · {b.service}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-muted">
-                      {getCustomerById(b.customerId)?.name || 'Customer'} · {formatDate(b.date)} · {b.startTime}
+                      {b.customerName || getCustomerById(b.customerId)?.name || 'Customer'} · {formatDate(b.date)} · {b.startTime}
                     </p>
                   </div>
                   <div className="hidden shrink-0 text-right sm:block">

@@ -240,6 +240,11 @@ const caregiverProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Dedicated version counter mutated in transactions to serialize concurrent rating recalculations across processes
+    ratingLockVersion: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

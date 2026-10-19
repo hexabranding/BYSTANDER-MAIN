@@ -80,8 +80,8 @@ export function LoginPage() {
     defaultValues: { email: rememberedEmail || '', password: '' },
   })
 
-  const onSubmit = ({ email, password }) => {
-    const result = login({ email: email.trim(), password, role })
+  const onSubmit = async ({ email, password }) => {
+    const result = await login({ email: email.trim(), password, role })
     if (!result.ok) {
       toast.error(result.message)
       setError('password', { type: 'server', message: result.message })

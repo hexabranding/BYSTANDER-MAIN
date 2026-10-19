@@ -27,8 +27,10 @@ import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
 import { EmptyState } from '@/components/common/States'
-import { FormField, Select } from '@/components/forms/FormField'
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { FormField, Select } from '@/components/forms/FormField'
+import { adminService } from '@/services/adminService'
 
 const RANGES = [
   { id: '7', label: 'Last 7 days' },
@@ -71,6 +73,10 @@ export function PaymentsPage() {
   const [selected, setSelected] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
+  const [liveTransactions, setLiveTransactions] = useState(null)
+  const [liveStats, setLiveStats] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
+
   const inRange = useMemo(() => {
     const cutoff = new Date(TODAY)
     cutoff.setDate(cutoff.getDate() - Number(range))
@@ -100,11 +106,41 @@ export function PaymentsPage() {
     return { gross, commission, refunded, escrow }
   }, [inRange])
 
-  const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
+  useEffect(() => {
+    let mounted = true
+    adminService
+      .getAdminPayments({
+        status: status === 'All' ? 'all' : status,
+        range,
+        search: debouncedSearch,
+      })
+      .then((res) => {
+        if (!mounted) return
+        if (res?.transactions && res.transactions.length > 0) {
+          setLiveTransactions(res.transactions)
+          if (res.stats) setLiveStats(res.stats)
+          setIsFallback(false)
+        } else {
+          setIsFallback(true)
+        }
+      })
+      .catch(() => {
+        if (mounted) setIsFallback(true)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [status, range, debouncedSearch])
+
+  const displayedTransactions = liveTransactions && !isFallback ? liveTransactions : filtered
+  const displayedStats = liveStats && !isFallback ? liveStats : stats
+
+  const { page, totalPages, totalItems, pageItems, goto } = usePagination(displayedTransactions, 8)
   useEffect(() => {
     goto(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, status, range])
+  }, [debouncedSearch, status, range, displayedTransactions.length])
 
   const handleExport = () => {
     const rows = filtered.map((t) => ({
@@ -176,11 +212,15 @@ export function PaymentsPage() {
 
   return (
     <div className="space-y-6">
+      {isFallback && (
+        <FallbackNotice message="Displaying financial ledger records from offline cache while administrative transaction service is connecting." />
+      )}
+
       <PageHeader
         title="Payments"
         subtitle="Every rupee moving through CareMate — escrow holdings, releases, refunds and commission."
         action={
-          <Button variant="outline" icon={Download} onClick={handleExport} disabled={!filtered.length}>
+          <Button variant="outline" icon={Download} onClick={handleExport} disabled={!displayedTransactions.length}>
             Export CSV
           </Button>
         }
@@ -189,15 +229,15 @@ export function PaymentsPage() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
           label="Gross transaction value"
-          value={formatCurrency(stats.gross)}
+          value={formatCurrency(displayedStats.gross)}
           icon={IndianRupee}
           tone="primary"
-          hint={`${RANGES.find((r) => r.id === range)?.label} · ${inRange.length} transactions`}
+          hint={`${RANGES.find((r) => r.id === range)?.label} · ${displayedTransactions.length} transactions`}
           delay={0}
         />
         <StatCard
           label="Platform commission earned"
-          value={formatCurrency(stats.commission)}
+          value={formatCurrency(displayedStats.commission)}
           icon={Percent}
           tone="success"
           trend={9}
@@ -206,7 +246,7 @@ export function PaymentsPage() {
         />
         <StatCard
           label="Refunded amount"
-          value={formatCurrency(stats.refunded)}
+          value={formatCurrency(displayedStats.refunded)}
           icon={RotateCcw}
           tone="warning"
           hint="Returned to customers"
@@ -214,7 +254,7 @@ export function PaymentsPage() {
         />
         <StatCard
           label="Escrow held"
-          value={formatCurrency(stats.escrow)}
+          value={formatCurrency(displayedStats.escrow)}
           icon={Lock}
           tone="info"
           hint="Awaiting service completion"

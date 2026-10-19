@@ -1,100 +1,98 @@
-import { createContext, useCallback, useContext, useMemo } from 'react'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
-import { DEMO_USERS, findDemoUser } from '@/data/demoUsers'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import * as authService from '@/services/authService'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useLocalStorage('caremate.auth', null)
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  const login = useCallback(
-    ({ email, password, role }) => {
-      const found = findDemoUser(email)
-      const match = found && found.password === password ? found : null
-      if (match) {
-        setUser(match)
-        return { ok: true, user: match }
+  // 1. Restore authenticated session on application mount via GET /api/auth/me
+  useEffect(() => {
+    let isMounted = true
+
+    const restoreSession = async () => {
+      try {
+        const result = await authService.getMe()
+        if (isMounted) {
+          if (result.ok && result.user) {
+            setUser(result.user)
+          } else {
+            setUser(null)
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setUser(null)
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
       }
-      const fallback = DEMO_USERS.find((u) => u.role === role)
-      if (fallback && fallback.password === password) {
-        setUser(fallback)
-        return { ok: true, user: fallback }
-      }
-      return { ok: false, message: 'Invalid credentials. Try the demo password `caremate123`.' }
-    },
-    [setUser],
-  )
+    }
 
-  const registerCustomer = useCallback(
-    (payload) => {
-      const created = {
-        id: `cu-${Math.floor(300 + Math.random() * 600)}`,
-        role: 'customer',
-        name: payload.fullName,
-        email: payload.email,
-        phone: payload.mobile,
-        password: payload.password,
-        avatar: '',
-        city: payload.city || 'Mumbai, MH',
-        area: payload.area || '',
-        address: payload.address || '',
-        pincode: payload.pincode || '',
-        patientInfo: payload.patientInfo || null,
-        joinedOn: new Date().toISOString().slice(0, 10),
-        isDemoAccount: true,
-      }
-      setUser(created)
-      return { ok: true, user: created }
-    },
-    [setUser],
-  )
+    restoreSession()
 
-  const registerCaregiver = useCallback(
-    (payload) => {
-      const id = `cg-${Math.floor(130 + Math.random() * 600)}`
-      const created = {
-        id,
-        role: 'caregiver',
-        caregiverId: id,
-        name: payload.fullName,
-        email: payload.email,
-        phone: payload.mobile,
-        password: payload.password,
-        avatar: '',
-        dob: payload.dob || '',
-        city: payload.city || 'Mumbai, MH',
-        area: payload.area || '',
-        address: payload.address || '',
-        qualification: payload.qualification,
-        experienceYears: Number(payload.experience || 0),
-        languages: payload.languages || [],
-        careSettings: payload.careSettings || [],
-        nursingRegNo: payload.nursingRegNo || '',
-        documents: payload.documents || [],
-        emergencyContact: payload.emergencyContact || null,
-        bank: payload.bank || null,
-        verificationStatus: 'Pending',
-        joinedOn: new Date().toISOString().slice(0, 10),
-        isDemoAccount: true,
-      }
-      setUser(created)
-      return { ok: true, user: created }
-    },
-    [setUser],
-  )
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
-  const updateProfile = useCallback(
-    (patch) => {
-      setUser((prev) => (prev ? { ...prev, ...patch } : prev))
-    },
-    [setUser],
-  )
+  // 2. Login via POST /api/auth/login
+  const login = useCallback(async ({ identifier, email, password, role }) => {
+    const cleanId = identifier || email
+    const result = await authService.login({ identifier: cleanId, password, role })
+    if (result.ok && result.user) {
+      setUser(result.user)
+    }
+    return result
+  }, [])
 
-  const logout = useCallback(() => setUser(null), [setUser])
+  // 3. Register customer via POST /api/auth/register/customer
+  const registerCustomer = useCallback(async (payload) => {
+    const result = await authService.registerCustomer(payload)
+    if (result.ok && result.user) {
+      setUser(result.user)
+    }
+    return result
+  }, [])
+
+  // 4. Register caregiver via POST /api/auth/register/caregiver
+  const registerCaregiver = useCallback(async (payload) => {
+    const result = await authService.registerCaregiver(payload)
+    if (result.ok && result.user) {
+      setUser(result.user)
+    }
+    return result
+  }, [])
+
+  // 5. Update authenticated user profile fields
+  const updateProfile = useCallback((patch) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev))
+  }, [])
+
+  // 6. Log out via POST /api/auth/logout (clears cookie on server and in-memory session)
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout()
+    } finally {
+      setUser(null)
+    }
+  }, [])
 
   const value = useMemo(
-    () => ({ user, isLoggedIn: Boolean(user), login, logout, registerCustomer, registerCaregiver, updateProfile }),
-    [user, login, logout, registerCustomer, registerCaregiver, updateProfile],
+    () => ({
+      user,
+      isLoggedIn: Boolean(user),
+      loading,
+      login,
+      logout,
+      registerCustomer,
+      registerCaregiver,
+      updateProfile,
+    }),
+    [user, loading, login, logout, registerCustomer, registerCaregiver, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

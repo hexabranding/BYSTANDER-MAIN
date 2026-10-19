@@ -15,7 +15,6 @@ import {
   ShieldAlert,
   Users,
 } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { cn } from '@/utils/cn'
@@ -33,13 +32,13 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { Avatar } from '@/components/common/Avatar'
 import { FormField, Select, Textarea } from '@/components/forms/FormField'
+import { adminService } from '@/services/adminService'
 
 const STATUS_TABS = ['All', ...COMPLAINT_STATUSES]
 const PRIORITIES = ['High', 'Medium', 'Low']
-const ADMIN = 'Admin · Kavya Raman'
 
 function StageStepper({ status }) {
   const current = Math.max(0, COMPLAINT_STATUSES.indexOf(status))
@@ -90,13 +89,35 @@ function StageStepper({ status }) {
 function ComplaintsList() {
   useDocumentTitle('Complaints')
   const navigate = useNavigate()
-  const { complaints } = useData()
+
+  const [complaints, setComplaints] = useState([])
+  const [stats, setStats] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
   const [priority, setPriority] = useState('All')
   const [category, setCategory] = useState('All')
   const debouncedSearch = useDebouncedValue(search)
+
+  const fetchComplaints = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await adminService.getComplaints()
+      setComplaints(data.complaints || [])
+      setStats(data.stats || null)
+    } catch (err) {
+      setError(err.message || 'Failed to load complaints queue')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchComplaints()
+  }, [])
 
   const categories = useMemo(() => {
     const seen = []
@@ -108,12 +129,12 @@ function ComplaintsList() {
 
   const counts = useMemo(
     () => ({
-      total: complaints.length,
-      submitted: complaints.filter((c) => c.status === 'Submitted').length,
-      review: complaints.filter((c) => c.status === 'Under Review').length,
-      resolved: complaints.filter((c) => c.status === 'Resolved').length,
+      total: stats?.total ?? complaints.length,
+      submitted: stats?.open ?? complaints.filter((c) => c.status === 'Submitted').length,
+      review: stats?.underReview ?? complaints.filter((c) => ['Under Review', 'Investigation'].includes(c.status)).length,
+      resolved: stats?.resolved ?? complaints.filter((c) => c.status === 'Resolved').length,
     }),
-    [complaints],
+    [complaints, stats],
   )
 
   const filtered = useMemo(() => {
@@ -200,7 +221,7 @@ function ComplaintsList() {
           icon={Eye}
           onClick={(e) => {
             e.stopPropagation()
-            navigate(`/admin/complaints/${c.id}`)
+            navigate(`/admin/complaints/${c.dbId || c.id}`)
           }}
         >
           Investigate
@@ -208,6 +229,30 @@ function ComplaintsList() {
       ),
     },
   ]
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Complaints" subtitle="Investigate, resolve and audit every customer or caretaker complaint." />
+        <TableSkeleton rows={8} cols={6} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Complaints" subtitle="Investigate, resolve and audit every customer or caretaker complaint." />
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Failed to load complaints queue"
+            description={error}
+            onRetry={fetchComplaints}
+          />
+        </div>
+      </div>
+    )
+  }
 
   if (!complaints.length) {
     return (
@@ -307,7 +352,7 @@ function ComplaintsList() {
             columns={columns}
             data={pageItems}
             keyExtractor={(row) => row.id}
-            onRowClick={(row) => navigate(`/admin/complaints/${row.id}`)}
+            onRowClick={(row) => navigate(`/admin/complaints/${row.dbId || row.id}`)}
             initialSort={{ key: 'submittedOn', dir: 'desc' }}
             emptyTitle="No complaints found"
             emptyIcon={ShieldAlert}
@@ -321,9 +366,9 @@ function ComplaintsList() {
 
 function ComplaintDetail({ id }) {
   useDocumentTitle(`Complaint ${id}`)
-  const { complaints, updateComplaint } = useData()
-
-  const complaint = complaints.find((c) => c.id === id)
+  const [complaint, setComplaint] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [note, setNote] = useState('')
   const [resolution, setResolution] = useState('')
@@ -331,12 +376,35 @@ function ComplaintDetail({ id }) {
   const [nextStage, setNextStage] = useState(null)
   const [resolveOpen, setResolveOpen] = useState(false)
 
-  useEffect(() => {
-    setResolution(complaint?.resolution || '')
-    setNote('')
-  }, [id, complaint?.resolution])
+  const fetchComplaint = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await adminService.getComplaintById(id)
+      setComplaint(data)
+      setResolution(data?.resolution || '')
+    } catch (err) {
+      setError(err.message || 'Failed to load complaint dossier')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  if (!complaint) {
+  useEffect(() => {
+    fetchComplaint()
+    setNote('')
+  }, [id])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Breadcrumbs items={[{ label: 'Complaints', to: '/admin/complaints' }, { label: id }]} />
+        <TableSkeleton rows={6} cols={4} />
+      </div>
+    )
+  }
+
+  if (error || !complaint) {
     return (
       <div className="space-y-6">
         <Breadcrumbs items={[{ label: 'Complaints', to: '/admin/complaints' }, { label: id }]} />
@@ -344,7 +412,7 @@ function ComplaintDetail({ id }) {
           <EmptyState
             icon={SearchX}
             title="Complaint not found"
-            description={`No complaint with ID ${id} exists in the demo data.`}
+            description={error || `No complaint with ID ${id} exists.`}
             action={
               <Button to="/admin/complaints" icon={ArrowLeft}>
                 Back to complaints
@@ -358,45 +426,54 @@ function ComplaintDetail({ id }) {
 
   const currentIndex = COMPLAINT_STATUSES.indexOf(complaint.status)
   const nextStatus = COMPLAINT_STATUSES[currentIndex + 1]
-  const isResolved = complaint.status === 'Resolved'
+  const isResolved = complaint.status === 'Resolved' || complaint.status === 'Dismissed'
 
-  const handleStageChange = () => {
+  const handleStageChange = async () => {
     if (!nextStage) return
-    updateComplaint(complaint.id, { status: nextStage }, `Status changed to ${nextStage}`)
-    toast.success(`${complaint.id} moved to ${nextStage}`)
-    setNextStage(null)
+    try {
+      const updated = await adminService.updateComplaintStatus(complaint.dbId || complaint.id, { status: nextStage })
+      setComplaint(updated)
+      toast.success(`${complaint.id} moved to ${nextStage}`)
+      setNextStage(null)
+    } catch (err) {
+      toast.error(err.message || 'Failed to update complaint stage')
+    }
   }
 
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     const text = note.trim()
     if (!text) {
       toast.error('Write a note before adding it')
       return
     }
-    updateComplaint(
-      complaint.id,
-      {
-        internalNotes: [
-          ...(complaint.internalNotes || []),
-          { by: ADMIN, at: new Date().toISOString(), note: text },
-        ],
-      },
-      'Internal note added',
-    )
-    setNote('')
-    toast.success('Internal note added', { description: 'Visible to CareMate operations only.' })
+    try {
+      const updated = await adminService.addComplaintNote(complaint.dbId || complaint.id, { note: text })
+      setComplaint(updated)
+      setNote('')
+      toast.success('Internal note added', { description: 'Visible to CareMate operations only.' })
+    } catch (err) {
+      toast.error(err.message || 'Failed to add internal note')
+    }
   }
 
-  const handleResolve = () => {
+  const handleResolve = async () => {
     const text = resolution.trim() || complaint.resolution
     if (!text) {
       toast.error('Add resolution notes before resolving')
       setResolveOpen(false)
       return
     }
-    updateComplaint(complaint.id, { status: 'Resolved', resolution: text }, 'Complaint resolved')
-    setResolveOpen(false)
-    toast.success(`${complaint.id} resolved`, { description: 'The complainant is notified automatically in the demo.' })
+    try {
+      const updated = await adminService.updateComplaintStatus(complaint.dbId || complaint.id, {
+        status: 'Resolved',
+        resolutionDetails: text,
+      })
+      setComplaint(updated)
+      setResolveOpen(false)
+      toast.success(`${complaint.id} resolved`, { description: 'The complainant is notified automatically.' })
+    } catch (err) {
+      toast.error(err.message || 'Failed to resolve complaint')
+    }
   }
 
   const partyCard = (label, name, type, tone) => (

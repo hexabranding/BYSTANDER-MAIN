@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, Search, Sparkles, X } from 'lucide-react'
 import { useDocumentTitle, useDebouncedValue } from '@/hooks/useUi'
 import { formatCurrency } from '@/utils/format'
 import { reveal } from '@/utils/motion'
-import { SERVICES } from '@/data/services'
 import { Button } from '@/components/common/Button'
 import { Container } from '@/components/common/Container'
 import { Section } from '@/components/common/Section'
 import { PageHero } from '@/components/common/PageHero'
 import { Chip } from '@/components/common/Tabs'
-import { EmptyState } from '@/components/common/States'
+import { CardSkeleton, EmptyState, ErrorState } from '@/components/common/States'
 import { SearchBar } from '@/components/common/SearchBar'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { fetchPublicServices } from '@/services/servicesService'
 
 const CATEGORIES = [
   { id: 'all', label: 'All services' },
@@ -38,24 +39,47 @@ export function ServicesPage() {
   const [category, setCategory] = useState('all')
   const debouncedQuery = useDebouncedValue(query, 250)
 
+  const [rawServices, setRawServices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
+
+  const loadServices = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetchPublicServices({ limit: 50 })
+      setRawServices(res.data?.services || [])
+      setIsFallback(Boolean(res.isFallback))
+    } catch (err) {
+      setError(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadServices()
+  }, [loadServices])
+
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase()
     const chip = CATEGORIES.find((c) => c.id === category)
 
-    return SERVICES.filter((svc) => {
+    return rawServices.filter((svc) => {
       const matchesText =
         !q ||
         svc.name.toLowerCase().includes(q) ||
-        svc.short.toLowerCase().includes(q) ||
-        svc.description.toLowerCase().includes(q) ||
-        svc.tags.some((t) => t.toLowerCase().includes(q))
+        (svc.short && svc.short.toLowerCase().includes(q)) ||
+        (svc.description && svc.description.toLowerCase().includes(q)) ||
+        (Array.isArray(svc.tags) && svc.tags.some((t) => t.toLowerCase().includes(q)))
 
       if (!matchesText) return false
       if (category === 'popular') return svc.popular
-      if (chip?.tag) return svc.tags.some((t) => t.toLowerCase() === chip.tag.toLowerCase())
+      if (chip?.tag) return Array.isArray(svc.tags) && svc.tags.some((t) => t.toLowerCase() === chip.tag.toLowerCase())
       return true
     })
-  }, [debouncedQuery, category])
+  }, [rawServices, debouncedQuery, category])
 
   const activeFilters = (query ? 1 : 0) + (category !== 'all' ? 1 : 0)
 
@@ -108,20 +132,39 @@ export function ServicesPage() {
 
       {/* grid */}
       <Container className="py-10 sm:py-14">
+        {isFallback ? (
+          <FallbackNotice
+            className="mb-6"
+            message="Offline Preview: Displaying local care services catalog while the live backend is unreachable."
+          />
+        ) : null}
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted">
             Showing <span className="font-display font-extrabold tabular-nums text-ink">{filtered.length}</span> of{' '}
-            {SERVICES.length} services
+            {rawServices.length} services
           </p>
           <p className="text-xs text-faint">Rates shown are starting prices per hour unless stated otherwise</p>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="mt-5">
+            <CardSkeleton count={6} />
+          </div>
+        ) : error && rawServices.length === 0 ? (
+          <div className="mt-5 rounded-card border border-line bg-white shadow-card">
+            <ErrorState
+              title="Unable to load care services"
+              description={error?.message || 'A network error occurred while connecting to the services catalog.'}
+              onRetry={loadServices}
+            />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="mt-4 rounded-card border border-line bg-white shadow-card">
             <EmptyState
               icon={Search}
               title="No services match those filters"
-              description="Try a different keyword or clear the category chip to see all nine care services."
+              description="Try a different keyword or clear the category chip to see all care services."
               action={
                 <Button variant="outline" onClick={resetFilters}>
                   Reset filters

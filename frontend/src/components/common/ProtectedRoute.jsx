@@ -1,10 +1,19 @@
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { ShieldAlert } from 'lucide-react'
+import { PageSkeleton } from '@/components/common/States'
 
 export function ProtectedRoute({ roles, children, fallback }) {
-  const { isLoggedIn, user } = useAuth()
+  const { isLoggedIn, user, loading } = useAuth()
   const location = useLocation()
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <PageSkeleton />
+      </div>
+    )
+  }
 
   if (!isLoggedIn) {
     return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />

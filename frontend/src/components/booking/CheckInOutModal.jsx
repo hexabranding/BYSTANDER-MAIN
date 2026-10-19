@@ -11,51 +11,58 @@ const EXPECTED_QR_PREFIX = 'CM-QR'
 export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onConfirm }) {
   const isCheckIn = mode === 'checkin'
   const [selfieAt, setSelfieAt] = useState(null)
-  const [qrCode, setQrCode] = useState('')
-  const [qrError, setQrError] = useState('')
+  const [otp, setOtp] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
   const [now, setNow] = useState(() => new Date().toISOString())
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setSelfieAt(null)
-    setQrCode('')
-    setQrError('')
+    setOtp('')
+    setErrorMsg('')
     setSubmitting(false)
     setNow(new Date().toISOString())
     const timer = setInterval(() => setNow(new Date().toISOString()), 1000)
     return () => clearInterval(timer)
   }, [open])
 
-  const expectedQr = booking ? `${EXPECTED_QR_PREFIX}-${booking.id}` : `${EXPECTED_QR_PREFIX}-DEMO`
-
-  const captureSelfie = () => setSelfieAt(new Date().toISOString())
-
-  const scanQr = () => {
-    setQrCode(expectedQr)
-    setQrError('')
+  const captureSelfie = () => {
+    setSelfieAt(new Date().toISOString())
+    setErrorMsg('')
   }
 
-  const canSubmit = Boolean(selfieAt) && qrCode.trim().length >= 4
+  const canSubmit = Boolean(selfieAt) && /^\d{6}$/.test(otp.trim())
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selfieAt) {
-      setQrError('Capture the verification selfie first.')
+      setErrorMsg('Capture the verification selfie first.')
       return
     }
-    if (qrCode.trim().length < 4) {
-      setQrError('Scan or enter the customer QR code to continue.')
+    const cleanOtp = otp.trim()
+    if (!/^\d{6}$/.test(cleanOtp)) {
+      setErrorMsg('Enter the 6-digit verification code provided by the customer.')
       return
     }
+
     setSubmitting(true)
-    onConfirm?.({
-      selfie: selfieAt,
-      qrCode: qrCode.trim(),
-      capturedAt: new Date().toISOString(),
-      location: `${booking?.address || ''}`.trim(),
-    })
-    onClose?.()
+    setErrorMsg('')
+    try {
+      await onConfirm?.({
+        otp: cleanOtp,
+        selfieUrl: selfieAt,
+        location: `${booking?.address || booking?.location?.addressLine || ''}`.trim(),
+        notes: '',
+        capturedAt: new Date().toISOString(),
+      })
+      onClose?.()
+    } catch (err) {
+      setErrorMsg(err.message || 'Verification failed. Please check the code with customer.')
+    } finally {
+      setSubmitting(false)
+    }
   }
+
 
   return (
     <Modal
@@ -136,25 +143,26 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
         <div className="rounded-card border border-line bg-white p-5">
           <div className="flex items-center gap-2 text-sm font-bold text-ink">
             <QrCode className="h-4 w-4 text-primary-700" />
-            Step 2 — customer QR verification
+            Step 2 — 6-digit verification code
           </div>
           <p className="mt-1 text-xs text-muted">
-            Ask the customer for their booking QR code, or scan it with the camera. Demo code: <code className="font-mono text-primary-700">{expectedQr}</code>
+            Ask the customer for the 6-digit OTP displayed on their visit pass.
           </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <FormField className="flex-1" error={qrError}>
+          <div className="mt-3">
+            <FormField error={errorMsg}>
               <Input
-                value={qrCode}
+                value={otp}
                 onChange={(e) => {
-                  setQrCode(e.target.value)
-                  setQrError('')
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 6)
+                  setOtp(val)
+                  setErrorMsg('')
                 }}
-                placeholder="Enter QR code"
+                maxLength={6}
+                inputMode="numeric"
+                className="font-mono text-center text-lg tracking-widest"
+                placeholder="• • • • • •"
               />
             </FormField>
-            <Button variant="secondary" onClick={scanQr} icon={ScanLine} className="sm:self-start">
-              Scan code
-            </Button>
           </div>
         </div>
 

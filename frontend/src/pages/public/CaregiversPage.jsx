@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -21,16 +21,17 @@ import { cn } from '@/utils/cn'
 import { CARE_TYPES, CITIES, QUALIFICATIONS } from '@/utils/constants'
 import { EASE, reveal } from '@/utils/motion'
 import { getServiceById } from '@/data/services'
-import { CAREGIVERS } from '@/data/caregivers'
 import { Button } from '@/components/common/Button'
 import { Container } from '@/components/common/Container'
 import { PageHero } from '@/components/common/PageHero'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Pagination } from '@/components/common/Pagination'
-import { EmptyState } from '@/components/common/States'
+import { CardSkeleton, EmptyState, ErrorState } from '@/components/common/States'
+import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { FilterPanel, FilterGroup, CheckOption } from '@/components/common/FilterPanel'
 import { FormField, Select } from '@/components/forms/FormField'
 import { CaregiverCard } from '@/components/caregiver/CaregiverCard'
+import { fetchPublicCaregivers } from '@/services/caregiversService'
 
 const AVAILABILITY_OPTIONS = ['Any', 'Available Now', 'Available Today', 'Available Tonight']
 const RATING_OPTIONS = [
@@ -81,18 +82,50 @@ export function CaregiversPage() {
   const debouncedQuery = useDebouncedValue(query, 300)
   const servicesKey = selectedServices.join('|')
 
+  const [caregiverList, setCaregiverList] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [isFallback, setIsFallback] = useState(false)
+
+  const loadCaregivers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetchPublicCaregivers({
+        search: debouncedQuery,
+        city,
+        qualification: qualification !== 'Any' ? qualification : undefined,
+        service: selectedServices.length === 1 ? selectedServices[0] : undefined,
+        minRating: minRating > 0 ? minRating : undefined,
+        availability: availability !== 'Any' ? availability : undefined,
+        sort,
+        limit: 50,
+      })
+      setCaregiverList(res.data?.caregivers || [])
+      setIsFallback(Boolean(res.isFallback))
+    } catch (err) {
+      setError(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [debouncedQuery, city, qualification, selectedServices, minRating, availability, sort])
+
+  useEffect(() => {
+    loadCaregivers()
+  }, [loadCaregivers])
+
   const results = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase()
-    const filtered = CAREGIVERS.filter((cg) => {
+    const filtered = caregiverList.filter((cg) => {
       if (q) {
-        const haystack = `${cg.name} ${cg.qualification} ${cg.area} ${cg.city} ${cg.services.join(' ')}`.toLowerCase()
+        const haystack = `${cg.name} ${cg.qualification} ${cg.area} ${cg.city} ${(cg.services || []).join(' ')}`.toLowerCase()
         if (!haystack.includes(q)) return false
       }
-      if (city && cg.city !== city) return false
-      if (selectedServices.length && !selectedServices.every((s) => cg.services.includes(s))) return false
+      if (city && !cg.city.toLowerCase().includes(city.toLowerCase())) return false
+      if (selectedServices.length && !selectedServices.every((s) => (cg.services || []).includes(s))) return false
       if (availability !== 'Any' && cg.availability !== availability) return false
       if (qualification !== 'Any' && cg.qualification !== qualification) return false
-      if (minRating && cg.rating < minRating) return false
+      if (minRating && (cg.rating || 0) < minRating) return false
       if (cg.distanceKm > maxDistance) return false
       return true
     })
@@ -101,9 +134,9 @@ export function CaregiversPage() {
       if (sort === 'price-asc') return a.hourlyRate - b.hourlyRate
       if (sort === 'price-desc') return b.hourlyRate - a.hourlyRate
       if (sort === 'experience') return b.experienceYears - a.experienceYears
-      return b.rating - a.rating || b.reviewCount - a.reviewCount
+      return (b.rating || 0) - (a.rating || 0) || (b.reviewCount || 0) - (a.reviewCount || 0)
     })
-  }, [debouncedQuery, city, selectedServices, availability, qualification, minRating, maxDistance, sort])
+  }, [caregiverList, debouncedQuery, city, selectedServices, availability, qualification, minRating, maxDistance, sort])
 
   const pagination = usePagination(results, 8)
   const { goto, reset, page, totalPages, totalItems, pageItems } = pagination
@@ -382,7 +415,26 @@ export function CaregiversPage() {
               </p>
             </div>
 
-            {totalItems === 0 ? (
+            {isFallback ? (
+              <FallbackNotice
+                className="mt-4"
+                message="Offline Preview: Displaying local caretaker directory while the live server is unreachable. Sample profiles and rates are for preview purposes only."
+              />
+            ) : null}
+
+            {loading ? (
+              <div className="mt-4">
+                <CardSkeleton count={6} />
+              </div>
+            ) : error && caregiverList.length === 0 ? (
+              <div className="mt-4 rounded-card border border-line bg-white shadow-card">
+                <ErrorState
+                  title="Unable to load caretakers"
+                  description={error?.message || 'A network error occurred while connecting to the caregiver directory.'}
+                  onRetry={loadCaregivers}
+                />
+              </div>
+            ) : totalItems === 0 ? (
               <div className="mt-4 rounded-card border border-line bg-white shadow-card">
                 <EmptyState
                   icon={UserSearch}

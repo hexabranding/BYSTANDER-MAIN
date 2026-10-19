@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ArrowLeft, MessageSquare, Phone, Send } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, MessageSquare, Phone, Send } from 'lucide-react'
 import { useData } from '@/context/DataContext'
+import { useAuth } from '@/context/AuthContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatTime, relativeTime } from '@/utils/format'
@@ -13,23 +14,75 @@ import { SearchBar } from '@/components/common/SearchBar'
 import { Avatar } from '@/components/common/Avatar'
 import { Chip } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
+import { bookingService, messageService, isMongoObjectId } from '@/services'
 
 export function MessagesPage() {
   useDocumentTitle('Messages')
-
-  const { conversations, sendMessage, markConversationRead } = useData()
-
-  const caregiverConversations = useMemo(
-    () => conversations.filter((c) => c.audience?.includes('caregiver')),
-    [conversations],
-  )
+  const { user } = useAuth()
+  const { conversations: localConversations, sendMessage: localSendMessage, markConversationRead: localMarkRead } = useData()
 
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState(() => searchParams.get('thread'))
   const [showThread, setShowThread] = useState(() => Boolean(searchParams.get('thread')))
   const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+  const [apiThreads, setApiThreads] = useState([])
+  const [threadMessages, setThreadMessages] = useState({})
+  const [unreadMap, setUnreadMap] = useState({})
   const threadRef = useRef(null)
+
+  // 1. Load caregiver booking threads and unread counts
+  const loadCaregiverThreads = useCallback(async () => {
+    if (!user) return
+    try {
+      const [bookingsRes, unreadRes] = await Promise.all([
+        bookingService.getBookings({ limit: 50 }),
+        messageService.getUnreadCounts().catch(() => ({ totalUnread: 0, unreadByBooking: [] })),
+      ])
+
+      const unreadMapping = {}
+      if (Array.isArray(unreadRes.unreadByBooking)) {
+        unreadRes.unreadByBooking.forEach((u) => {
+          unreadMapping[String(u.bookingId)] = u.unreadCount
+        })
+      }
+      setUnreadMap(unreadMapping)
+
+      const realThreads = (bookingsRes.bookings || []).map((b) => {
+        const canSend = b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress'
+        return {
+          id: b.id,
+          bookingId: b.id,
+          bookingRef: b.ref,
+          bookingStatus: b.status,
+          audience: ['caregiver'],
+          name: b.customer?.name || 'Customer',
+          role: `${b.service?.name || 'Care Engagement'} · ${b.status}`,
+          avatar: b.customer?.avatar || '',
+          unread: unreadMapping[b.id] || 0,
+          canSend,
+          messages: [],
+        }
+      })
+
+      if (realThreads.length > 0) {
+        setApiThreads(realThreads)
+      }
+    } catch {
+      // Fallback safely for demo mode
+    }
+  }, [user])
+
+  useEffect(() => {
+    loadCaregiverThreads()
+  }, [loadCaregiverThreads])
+
+  // Determine conversation list
+  const caregiverConversations = useMemo(() => {
+    if (apiThreads.length > 0) return apiThreads
+    return (localConversations || []).filter((c) => c.audience?.includes('caregiver'))
+  }, [apiThreads, localConversations])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -50,33 +103,106 @@ export function MessagesPage() {
     }
   }, [caregiverConversations, activeId, searchParams, setSearchParams])
 
+  // Fetch messages and mark as read when thread is active
   useEffect(() => {
-    if (active?.unread) markConversationRead(active.id)
-  }, [active, markConversationRead])
+    if (!activeId) return
+    let isMounted = true
+
+    if (isMongoObjectId(activeId)) {
+      messageService
+        .getMessages(activeId, { limit: 50 }, user?._id || user?.id)
+        .then((res) => {
+          if (!isMounted) return
+          setThreadMessages((prev) => ({
+            ...prev,
+            [activeId]: res.messages || [],
+          }))
+        })
+        .catch(() => {})
+
+      messageService
+        .markMessagesAsRead(activeId)
+        .then(() => {
+          if (!isMounted) return
+          setUnreadMap((prev) => ({ ...prev, [activeId]: 0 }))
+          setApiThreads((prev) =>
+            prev.map((t) => (t.id === activeId ? { ...t, unread: 0 } : t)),
+          )
+        })
+        .catch(() => {})
+    } else {
+      if (active?.unread && typeof localMarkRead === 'function') {
+        localMarkRead(active.id)
+      }
+    }
+
+    return () => {
+      isMounted = false
+    }
+  }, [activeId, user, active?.id, active?.unread, localMarkRead])
+
+  const activeMessages = useMemo(() => {
+    if (!active) return []
+    return threadMessages[active.id] || active.messages || []
+  }, [active, threadMessages])
 
   useEffect(() => {
     const el = threadRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [activeId, active?.messages?.length])
+  }, [activeId, activeMessages.length])
 
   const openConversation = (id) => {
     setActiveId(id)
     setShowThread(true)
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = draft.trim()
     if (!text || !active) return
-    sendMessage(active.id, text)
-    setDraft('')
+
+    if (active.canSend === false) {
+      toast.error(
+        `Cannot send messages for a booking in '${active.bookingStatus || 'closed'}' status. Messaging is only permitted during pending, confirmed, or in-progress care engagements.`,
+      )
+      return
+    }
+
+    setSending(true)
+    try {
+      if (isMongoObjectId(active.id)) {
+        const createdMsg = await messageService.sendMessage(active.id, text, user?._id || user?.id)
+        setThreadMessages((prev) => ({
+          ...prev,
+          [active.id]: [...(prev[active.id] || []), createdMsg],
+        }))
+        setDraft('')
+
+        if (createdMsg.isFlagged) {
+          toast.info('Message sent. Note: contact details/phone patterns are flagged for platform review.')
+        }
+      } else {
+        if (typeof localSendMessage === 'function') {
+          localSendMessage(active.id, text)
+        }
+        setDraft('')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to send message')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Messages"
-        subtitle="Chat with customers and CareMate operations about your shifts — responses land here in real time."
-        meta={<span className="text-sm text-muted">{caregiverConversations.length} conversation{caregiverConversations.length === 1 ? '' : 's'}</span>}
+        subtitle="Chat with customers and CareMate operations about your shifts."
+        meta={
+          <span className="text-sm text-muted">
+            {caregiverConversations.length} conversation{caregiverConversations.length === 1 ? '' : 's'}
+          </span>
+        }
       />
 
       {caregiverConversations.length === 0 ? (
@@ -101,8 +227,11 @@ export function MessagesPage() {
             <div className="thin-scrollbar flex-1 overflow-y-auto">
               {filtered.length ? (
                 filtered.map((c) => {
-                  const last = c.messages[c.messages.length - 1]
+                  const msgs = threadMessages[c.id] || c.messages || []
+                  const last = msgs[msgs.length - 1]
                   const isActive = c.id === activeId
+                  const unreadCount = unreadMap[c.id] ?? c.unread ?? 0
+
                   return (
                     <button
                       key={c.id}
@@ -117,14 +246,16 @@ export function MessagesPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-sm font-bold text-ink">{c.name}</p>
-                          <span className="shrink-0 text-[11px] text-faint">{last ? relativeTime(last.at) : ''}</span>
+                          <span className="shrink-0 text-[11px] text-faint">
+                            {last ? relativeTime(last.at) : ''}
+                          </span>
                         </div>
                         <p className="truncate text-xs text-muted">{c.role}</p>
                         <div className="mt-1 flex items-center justify-between gap-2">
-                          <p className="truncate text-xs text-faint">{last?.text}</p>
-                          {c.unread ? (
+                          <p className="truncate text-xs text-faint">{last?.text || 'No messages yet'}</p>
+                          {unreadCount ? (
                             <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary-700 px-1.5 text-[10px] font-bold text-white">
-                              {c.unread}
+                              {unreadCount}
                             </span>
                           ) : null}
                         </div>
@@ -167,30 +298,45 @@ export function MessagesPage() {
                     variant="outline"
                     size="icon"
                     aria-label="Call"
-                    onClick={() => toast.info('Calling is simulated in this demo')}
+                    onClick={() => toast.info('Direct calling is not integrated. Please coordinate via secure in-app chat.')}
                   >
                     <Phone className="h-4 w-4" />
                   </Button>
                 </div>
 
+                {active.canSend === false ? (
+                  <div className="flex items-center gap-2 border-b border-warning-200 bg-warning-50 px-4 py-2 text-xs text-warning-800">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-warning-600" />
+                    <span>
+                      This booking is {active.bookingStatus?.toLowerCase() || 'closed'}. Messaging is in read-only mode.
+                    </span>
+                  </div>
+                ) : null}
+
                 <div ref={threadRef} className="thin-scrollbar flex-1 space-y-3 overflow-y-auto bg-slate-50/60 px-4 py-5 sm:px-5">
-                  {active.messages.map((m) => (
-                    <div key={m.id} className={cn('flex', m.from === 'me' ? 'justify-end' : 'justify-start')}>
-                      <div className={cn('max-w-[85%] sm:max-w-[70%]', m.from === 'me' ? 'text-right' : 'text-left')}>
-                        <div
-                          className={cn(
-                            'rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
-                            m.from === 'me'
-                              ? 'rounded-br-sm bg-primary-700 text-white'
-                              : 'rounded-bl-sm border border-line bg-white text-ink-soft shadow-card',
-                          )}
-                        >
-                          {m.text}
+                  {activeMessages.length ? (
+                    activeMessages.map((m) => (
+                      <div key={m.id} className={cn('flex', m.from === 'me' ? 'justify-end' : 'justify-start')}>
+                        <div className={cn('max-w-[85%] sm:max-w-[70%]', m.from === 'me' ? 'text-right' : 'text-left')}>
+                          <div
+                            className={cn(
+                              'rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+                              m.from === 'me'
+                                ? 'rounded-br-sm bg-primary-700 text-white'
+                                : 'rounded-bl-sm border border-line bg-white text-ink-soft shadow-card',
+                            )}
+                          >
+                            {m.text}
+                          </div>
+                          <p className="mt-1 px-1 text-[11px] text-faint">{formatTime(m.at)}</p>
                         </div>
-                        <p className="mt-1 px-1 text-[11px] text-faint">{formatTime(m.at)}</p>
                       </div>
+                    ))
+                  ) : (
+                    <div className="grid h-full place-items-center text-center">
+                      <p className="text-sm text-muted">No messages in this conversation yet. Send the first message below.</p>
                     </div>
-                  ))}
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 border-t border-line px-4 py-3 sm:px-5">
@@ -204,11 +350,16 @@ export function MessagesPage() {
                         handleSend()
                       }
                     }}
-                    placeholder="Type a message…"
+                    placeholder={
+                      active.canSend === false
+                        ? 'Messaging is closed for this booking'
+                        : 'Type a message…'
+                    }
                     aria-label="Message"
-                    className="h-11 flex-1 rounded-xl border border-line-strong bg-white px-3.5 text-sm text-ink placeholder:text-faint transition focus:border-primary-400 focus:outline-none focus:ring-4 focus:ring-primary-100"
+                    disabled={active.canSend === false || sending}
+                    className="h-11 flex-1 rounded-xl border border-line-strong bg-white px-3.5 text-sm text-ink placeholder:text-faint transition focus:border-primary-400 focus:outline-none focus:ring-4 focus:ring-primary-100 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   />
-                  <Button variant="primary" icon={Send} disabled={!draft.trim()} onClick={handleSend}>
+                  <Button variant="primary" icon={Send} disabled={!draft.trim() || active.canSend === false || sending} loading={sending} onClick={handleSend}>
                     Send
                   </Button>
                 </div>

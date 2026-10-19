@@ -15,6 +15,7 @@ import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
 import { EmptyState } from '@/components/common/States'
 import { FormField, Input, Select } from '@/components/forms/FormField'
+import { adminService } from '@/services/adminService'
 
 const RANGES = [
   { id: 'all', label: 'All time' },
@@ -76,6 +77,7 @@ export function ReportsPage() {
   const [scheduled, setScheduled] = useState(2)
   const [range, setRange] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const reports = useMemo(() => [...generated, ...REPORTS], [generated])
 
@@ -115,7 +117,32 @@ export function ReportsPage() {
     reset()
   }
 
-  const onCreate = (values) => {
+  const onCreate = async (values) => {
+    setIsSubmitting(true)
+    try {
+      const res = await adminService.generateAdminReport({
+        type: values.type,
+        period: values.period,
+        format: values.format,
+      })
+      if (res && res.report) {
+        const report = {
+          ...res.report,
+          csvData: res.csvContent,
+        }
+        setGenerated((prev) => [report, ...prev])
+        toast.success('Report generated', {
+          description: `${report.title} · ${report.period} · ${report.format} is ready to download.`,
+        })
+        closeCreate()
+        return
+      }
+    } catch (err) {
+      console.warn('[Report Generation API Warning]', err.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+
     const report = {
       id: uid('RP'),
       title: values.type,
@@ -134,6 +161,11 @@ export function ReportsPage() {
   }
 
   const handleDownload = (report) => {
+    if (report.csvData) {
+      downloadText(`${slug(report.title)}.csv`, report.csvData)
+      toast.success('Report downloaded', { description: `${slug(report.title)}.csv is ready.` })
+      return
+    }
     const meta = [
       ['Report', report.title],
       ['Report ID', report.id],
@@ -300,7 +332,7 @@ export function ReportsPage() {
             <Button variant="ghost" onClick={closeCreate}>
               Cancel
             </Button>
-            <Button type="submit" form="generate-report-form" icon={FileSpreadsheet}>
+            <Button type="submit" form="generate-report-form" icon={FileSpreadsheet} loading={isSubmitting}>
               Generate report
             </Button>
           </div>

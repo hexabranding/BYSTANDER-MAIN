@@ -104,10 +104,17 @@ export function toCSV(rows) {
   if (!rows?.length) return ''
   const headers = Object.keys(rows[0])
   const escape = (v) => {
-    const s = String(v ?? '')
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    if (v === null || v === undefined) return '""'
+    const s = String(v)
+    const isNumeric = typeof v === 'number' || (/^-?\d+(\.\d+)?$/.test(s.trim()) && !isNaN(Number(s.trim())))
+    if (isNumeric) return s.trim()
+    let safe = s
+    if (/^[\s\u0000-\u001F]*[=+\-@\t\r]/.test(safe)) {
+      safe = `'${safe}`
+    }
+    return `"${safe.replace(/"/g, '""')}"`
   }
-  return [headers.join(','), ...rows.map((r) => headers.map((h) => escape(r[h])).join(','))].join('\n')
+  return [headers.map(escape).join(','), ...rows.map((r) => headers.map((h) => escape(r[h])).join(','))].join('\n')
 }
 
 export function downloadText(filename, content, type = 'text/csv') {

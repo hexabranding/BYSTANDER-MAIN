@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowLeft, MessageSquare, SearchX, Send } from 'lucide-react'
+import { ArrowLeft, MessageSquare, SearchX, Send, AlertTriangle } from 'lucide-react'
+import { toast } from 'sonner'
 import { useData } from '@/context/DataContext'
+import { useAuth } from '@/context/AuthContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { formatDate, formatTime, relativeTime } from '@/utils/format'
 import { cn } from '@/utils/cn'
@@ -12,33 +14,96 @@ import { Button } from '@/components/common/Button'
 import { Chip } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
 import { Input } from '@/components/forms/FormField'
+import { bookingService, messageService, isMongoObjectId } from '@/services'
 
-const lastOf = (c) => c.messages[c.messages.length - 1]
+const lastOf = (c) => (c.messages && c.messages.length > 0 ? c.messages[c.messages.length - 1] : null)
 
 export function MessagesPage() {
   useDocumentTitle('Messages')
-  const { conversations, sendMessage, markConversationRead } = useData()
+  const { user } = useAuth()
+  const { conversations: localConversations, sendMessage: localSendMessage, markConversationRead: localMarkRead } = useData()
 
   const [search, setSearch] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeId, setActiveId] = useState(() => searchParams.get('thread'))
   const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
   const [mobilePane, setMobilePane] = useState(() => (searchParams.get('thread') ? 'chat' : 'list'))
+  const [apiThreads, setApiThreads] = useState([])
+  const [threadMessages, setThreadMessages] = useState({})
+  const [unreadMap, setUnreadMap] = useState({})
+
   const debouncedSearch = useDebouncedValue(search)
   const threadRef = useRef(null)
 
-  const mine = useMemo(() => conversations.filter((c) => c.audience?.includes('customer')), [conversations])
+  // 1. Fetch real bookings and unread counts for customer
+  const loadCustomerThreads = useCallback(async () => {
+    if (!user) return
+    try {
+      const [bookingsRes, unreadRes] = await Promise.all([
+        bookingService.getBookings({ limit: 50 }),
+        messageService.getUnreadCounts().catch(() => ({ totalUnread: 0, unreadByBooking: [] })),
+      ])
 
-  const sorted = useMemo(
-    () => [...mine].sort((a, b) => new Date(lastOf(b)?.at || 0) - new Date(lastOf(a)?.at || 0)),
-    [mine],
-  )
+      const unreadMapping = {}
+      if (Array.isArray(unreadRes.unreadByBooking)) {
+        unreadRes.unreadByBooking.forEach((u) => {
+          unreadMapping[String(u.bookingId)] = u.unreadCount
+        })
+      }
+      setUnreadMap(unreadMapping)
+
+      const realThreads = (bookingsRes.bookings || []).map((b) => {
+        const canSend = b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress'
+        return {
+          id: b.id,
+          bookingId: b.id,
+          bookingRef: b.ref,
+          bookingStatus: b.status,
+          audience: ['customer'],
+          name: b.caregiver?.name || 'Assigned Caretaker',
+          role: `${b.service?.name || 'Care Service'} · ${b.status}`,
+          avatar: b.caregiver?.avatar || '',
+          unread: unreadMapping[b.id] || 0,
+          canSend,
+          messages: [],
+        }
+      })
+
+      if (realThreads.length > 0) {
+        setApiThreads(realThreads)
+      }
+    } catch {
+      // If unauthenticated or network error, fallback safely
+    }
+  }, [user])
+
+  useEffect(() => {
+    loadCustomerThreads()
+  }, [loadCustomerThreads])
+
+  // Determine active conversation list: prefer real backend booking threads if present
+  const mine = useMemo(() => {
+    if (apiThreads.length > 0) return apiThreads
+    return (localConversations || []).filter((c) => c.audience?.includes('customer'))
+  }, [apiThreads, localConversations])
+
+  const sorted = useMemo(() => {
+    return [...mine].sort((a, b) => {
+      const aMsgs = threadMessages[a.id] || a.messages || []
+      const bMsgs = threadMessages[b.id] || b.messages || []
+      const aLast = aMsgs[aMsgs.length - 1]
+      const bLast = bMsgs[bMsgs.length - 1]
+      return new Date(bLast?.at || 0) - new Date(aLast?.at || 0)
+    })
+  }, [mine, threadMessages])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
     if (!q) return sorted
     return sorted.filter((c) => {
-      const last = lastOf(c)
+      const msgs = threadMessages[c.id] || c.messages || []
+      const last = msgs[msgs.length - 1]
       return (
         c.name.toLowerCase().includes(q) ||
         c.role?.toLowerCase().includes(q) ||
@@ -46,10 +111,11 @@ export function MessagesPage() {
         last?.text?.toLowerCase().includes(q)
       )
     })
-  }, [sorted, debouncedSearch])
+  }, [sorted, debouncedSearch, threadMessages])
 
   const active = useMemo(() => mine.find((c) => c.id === activeId) || null, [mine, activeId])
 
+  // Select initial thread if none selected
   useEffect(() => {
     if (!sorted.length) return
     if (!activeId || !mine.some((c) => c.id === activeId)) {
@@ -58,37 +124,111 @@ export function MessagesPage() {
     }
   }, [sorted, mine, activeId, searchParams, setSearchParams])
 
-  const messageCount = active?.messages?.length || 0
+  // Fetch messages and mark as read when active thread changes
+  useEffect(() => {
+    if (!activeId) return
+    let isMounted = true
+
+    if (isMongoObjectId(activeId)) {
+      messageService
+        .getMessages(activeId, { limit: 50 }, user?._id || user?.id)
+        .then((res) => {
+          if (!isMounted) return
+          setThreadMessages((prev) => ({
+            ...prev,
+            [activeId]: res.messages || [],
+          }))
+        })
+        .catch(() => {})
+
+      messageService
+        .markMessagesAsRead(activeId)
+        .then(() => {
+          if (!isMounted) return
+          setUnreadMap((prev) => ({ ...prev, [activeId]: 0 }))
+          setApiThreads((prev) =>
+            prev.map((t) => (t.id === activeId ? { ...t, unread: 0 } : t)),
+          )
+        })
+        .catch(() => {})
+    }
+
+    return () => {
+      isMounted = false
+    }
+  }, [activeId, user])
+
+  // Auto-scroll to bottom of active thread
+  const activeMessages = useMemo(() => {
+    if (!active) return []
+    return threadMessages[active.id] || active.messages || []
+  }, [active, threadMessages])
+
+  const messageCount = activeMessages.length
   useEffect(() => {
     const el = threadRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [activeId, messageCount])
 
   const groups = useMemo(() => {
-    if (!active) return []
+    if (!activeMessages.length) return []
     const out = []
-    active.messages.forEach((m) => {
-      const key = String(m.at).slice(0, 10)
+    activeMessages.forEach((m) => {
+      const key = String(m.at || '').slice(0, 10)
       const bucket = out[out.length - 1]
       if (bucket && bucket.key === key) bucket.items.push(m)
       else out.push({ key, items: [m] })
     })
     return out
-  }, [active])
+  }, [activeMessages])
 
   const selectConversation = (c) => {
     setActiveId(c.id)
     setDraft('')
     setMobilePane('thread')
-    markConversationRead(c.id)
+    if (typeof localMarkRead === 'function') {
+      localMarkRead(c.id)
+    }
   }
 
-  const handleSend = (event) => {
+  const handleSend = async (event) => {
     event.preventDefault()
     const text = draft.trim()
     if (!text || !active) return
-    sendMessage(active.id, text)
-    setDraft('')
+
+    // Precondition check: only active bookings permit messaging
+    if (active.canSend === false) {
+      toast.error(
+        `Cannot send messages for a booking in '${active.bookingStatus || 'closed'}' status. Messaging is only permitted during pending, confirmed, or in-progress care engagements.`,
+      )
+      return
+    }
+
+    setSending(true)
+    try {
+      if (isMongoObjectId(active.id)) {
+        const createdMsg = await messageService.sendMessage(active.id, text, user?._id || user?.id)
+        setThreadMessages((prev) => ({
+          ...prev,
+          [active.id]: [...(prev[active.id] || []), createdMsg],
+        }))
+        setDraft('')
+
+        if (createdMsg.isFlagged) {
+          toast.info('Message sent. Note: contact details/phone patterns are flagged for platform review.')
+        }
+      } else {
+        // Fallback for static demo threads
+        if (typeof localSendMessage === 'function') {
+          localSendMessage(active.id, text)
+        }
+        setDraft('')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to send message')
+    } finally {
+      setSending(false)
+    }
   }
 
   const today = new Date().toISOString().slice(0, 10)
@@ -135,8 +275,11 @@ export function MessagesPage() {
           {filtered.length ? (
             <div className="thin-scrollbar flex-1 overflow-y-auto">
               {filtered.map((c) => {
-                const last = lastOf(c)
+                const msgs = threadMessages[c.id] || c.messages || []
+                const last = msgs[msgs.length - 1]
                 const isActive = c.id === activeId
+                const unreadCount = unreadMap[c.id] ?? c.unread ?? 0
+
                 return (
                   <button
                     key={c.id}
@@ -151,22 +294,24 @@ export function MessagesPage() {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline justify-between gap-2">
                         <span className="truncate text-sm font-bold text-ink">{c.name}</span>
-                        <span className="shrink-0 text-[11px] text-faint">{relativeTime(last?.at)}</span>
+                        <span className="shrink-0 text-[11px] text-faint">
+                          {last ? relativeTime(last.at) : ''}
+                        </span>
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-muted">{c.role}</span>
                       <span className="mt-1 flex items-center gap-2">
                         <span
                           className={cn(
                             'min-w-0 flex-1 truncate text-xs',
-                            c.unread > 0 ? 'font-semibold text-ink' : 'text-faint',
+                            unreadCount > 0 ? 'font-semibold text-ink' : 'text-faint',
                           )}
                         >
                           {last?.from === 'me' ? 'You: ' : ''}
-                          {last?.text}
+                          {last?.text || 'No messages yet'}
                         </span>
-                        {c.unread > 0 ? (
+                        {unreadCount > 0 ? (
                           <span className="shrink-0 rounded-full bg-primary-700 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                            {c.unread}
+                            {unreadCount}
                           </span>
                         ) : null}
                       </span>
@@ -210,48 +355,68 @@ export function MessagesPage() {
                 {active.bookingRef ? <Chip className="shrink-0">{active.bookingRef}</Chip> : null}
               </div>
 
-              <div ref={threadRef} className="thin-scrollbar flex-1 space-y-4 overflow-y-auto bg-slate-50/60 px-4 py-5">
-                {groups.map((group) => (
-                  <div key={group.key} className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <span className="h-px flex-1 bg-line" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-faint">
-                        {group.key === today ? 'Today' : formatDate(group.items[0].at, { long: true })}
-                      </span>
-                      <span className="h-px flex-1 bg-line" />
-                    </div>
+              {active.canSend === false ? (
+                <div className="flex items-center gap-2 border-b border-warning-200 bg-warning-50 px-4 py-2 text-xs text-warning-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-warning-600" />
+                  <span>
+                    This booking is {active.bookingStatus?.toLowerCase() || 'closed'}. Messaging is in read-only mode.
+                  </span>
+                </div>
+              ) : null}
 
-                    {group.items.map((m) => {
-                      const mineBubble = m.from === 'me'
-                      return (
-                        <div key={m.id} className={cn('flex flex-col', mineBubble ? 'items-end' : 'items-start')}>
-                          <div
-                            className={cn(
-                              'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
-                              mineBubble
-                                ? 'rounded-br-sm bg-primary-700 text-white'
-                                : 'rounded-bl-sm border border-line bg-white text-ink',
-                            )}
-                          >
-                            {m.text}
+              <div ref={threadRef} className="thin-scrollbar flex-1 space-y-4 overflow-y-auto bg-slate-50/60 px-4 py-5">
+                {groups.length ? (
+                  groups.map((group) => (
+                    <div key={group.key} className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <span className="h-px flex-1 bg-line" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                          {group.key === today ? 'Today' : formatDate(group.items[0]?.at, { long: true })}
+                        </span>
+                        <span className="h-px flex-1 bg-line" />
+                      </div>
+
+                      {group.items.map((m) => {
+                        const mineBubble = m.from === 'me'
+                        return (
+                          <div key={m.id} className={cn('flex flex-col', mineBubble ? 'items-end' : 'items-start')}>
+                            <div
+                              className={cn(
+                                'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+                                mineBubble
+                                  ? 'rounded-br-sm bg-primary-700 text-white'
+                                  : 'rounded-bl-sm border border-line bg-white text-ink',
+                              )}
+                            >
+                              {m.text}
+                            </div>
+                            <span className="mt-1 px-1 text-[11px] text-faint">{formatTime(m.at)}</span>
                           </div>
-                          <span className="mt-1 px-1 text-[11px] text-faint">{formatTime(m.at)}</span>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
+                  ))
+                ) : (
+                  <div className="grid h-full place-items-center text-center">
+                    <p className="text-sm text-muted">No messages in this conversation yet. Send the first message below.</p>
                   </div>
-                ))}
+                )}
               </div>
 
               <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-white px-4 py-3">
                 <Input
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder={`Message ${active.name.split(' ')[0]}…`}
+                  placeholder={
+                    active.canSend === false
+                      ? 'Messaging is closed for this booking'
+                      : `Message ${active.name.split(' ')[0]}…`
+                  }
                   aria-label="Message text"
+                  disabled={active.canSend === false || sending}
                   className="flex-1"
                 />
-                <Button type="submit" icon={Send} disabled={!draft.trim()}>
+                <Button type="submit" icon={Send} disabled={!draft.trim() || active.canSend === false || sending} loading={sending}>
                   Send
                 </Button>
               </form>

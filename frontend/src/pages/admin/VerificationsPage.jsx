@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { BadgeCheck, Check, Eye, FileCheck2, History, Info, SearchX, ShieldCheck, XCircle } from 'lucide-react'
+import { BadgeCheck, Check, Eye, FileCheck2, History, Info, RefreshCw, SearchX, ShieldCheck, XCircle } from 'lucide-react'
 import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
@@ -14,8 +14,9 @@ import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
-import { EmptyState } from '@/components/common/States'
+import { CardSkeleton, EmptyState, ErrorState } from '@/components/common/States'
 import { Textarea } from '@/components/forms/FormField'
+import { adminService, isMongoObjectId } from '@/services'
 
 const FILTERS = ['All', 'Pending', 'Under Review', 'Verified', 'Rejected']
 
@@ -219,14 +220,15 @@ function DetailPanel({
 export function VerificationsPage() {
   useDocumentTitle('Verifications')
 
-  const { verifications, setVerificationStatus, updateDocument } = useData()
+  const { verifications: seedVerifications, setVerificationStatus, updateDocument } = useData()
+
+  const [realVerifications, setRealVerifications] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [filter, setFilter] = useState('All')
   const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState(() => {
-    const first = verifications.find((v) => v.status === 'Pending') || verifications.find((v) => v.status === 'Under Review')
-    return first?.id ?? verifications[0]?.id ?? null
-  })
+  const [selectedId, setSelectedId] = useState(null)
   const [isDesktop, setIsDesktop] = useState(true)
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
   const [reasonPrompt, setReasonPrompt] = useState(null)
@@ -236,6 +238,38 @@ export function VerificationsPage() {
   const [previewDoc, setPreviewDoc] = useState(null)
 
   const debouncedQuery = useDebouncedValue(query)
+
+  const fetchVerifications = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await adminService.getVerifications()
+      setRealVerifications(res.verifications || [])
+    } catch (err) {
+      setError(err.message || 'Unable to load caregiver verification queue')
+      setRealVerifications(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchVerifications()
+  }, [fetchVerifications])
+
+  const verifications = useMemo(() => {
+    if (realVerifications !== null) return realVerifications
+    return seedVerifications || []
+  }, [realVerifications, seedVerifications])
+
+  useEffect(() => {
+    if (!selectedId && verifications.length > 0) {
+      const first =
+        verifications.find((v) => v.status === 'Pending') ||
+        verifications.find((v) => v.status === 'Under Review')
+      setSelectedId(first?.id ?? verifications[0]?.id ?? null)
+    }
+  }, [selectedId, verifications])
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)')
@@ -303,25 +337,80 @@ export function VerificationsPage() {
     setReasonError('')
   }
 
-  const runConfirm = () => {
+  const runConfirm = async () => {
     const action = confirmPrompt
     setConfirmPrompt(null)
     if (!action || !record) return
 
     if (action.kind === 'approveApplication') {
-      setVerificationStatus(record.id, 'Verified', 'Application approved — profile marked Verified')
-      toast.success(`${record.name} approved`, {
-        description: 'Profile marked Verified and visible in customer search.',
-      })
+      if (isMongoObjectId(record.id)) {
+        try {
+          await adminService.updateCaregiverVerificationStatus(record.id, {
+            status: 'verified',
+            reason: 'Application approved — profile marked Verified',
+            trustScore: 90,
+          })
+          toast.success(`${record.name} approved`, {
+            description: 'Profile marked Verified and visible in customer search.',
+          })
+          await fetchVerifications()
+        } catch (err) {
+          toast.error('Failed to approve application', { description: err.message })
+        }
+      } else {
+        setVerificationStatus(record.id, 'Verified', 'Application approved — profile marked Verified')
+        toast.success(`${record.name} approved`, {
+          description: 'Profile marked Verified and visible in customer search.',
+        })
+      }
     } else if (action.kind === 'rejectApplication') {
-      setVerificationStatus(record.id, 'Rejected', action.reason)
-      toast.error(`${record.name}'s application rejected`, { description: action.reason })
+      if (isMongoObjectId(record.id)) {
+        try {
+          await adminService.updateCaregiverVerificationStatus(record.id, {
+            status: 'rejected',
+            reason: action.reason,
+          })
+          toast.error(`${record.name}'s application rejected`, { description: action.reason })
+          await fetchVerifications()
+        } catch (err) {
+          toast.error('Failed to reject application', { description: err.message })
+        }
+      } else {
+        setVerificationStatus(record.id, 'Rejected', action.reason)
+        toast.error(`${record.name}'s application rejected`, { description: action.reason })
+      }
     } else if (action.kind === 'approveDocument') {
-      updateDocument(record.id, action.doc.id, { status: 'Verified', feedback: 'Approved by admin' })
-      toast.success(`${action.doc.type} approved`)
+      if (isMongoObjectId(action.doc.id)) {
+        try {
+          await adminService.updateDocumentStatus(action.doc.id, {
+            status: 'verified',
+            notes: 'Approved by admin',
+          })
+          toast.success(`${action.doc.type} approved`)
+          await fetchVerifications()
+        } catch (err) {
+          toast.error('Failed to approve document', { description: err.message })
+        }
+      } else {
+        updateDocument(record.id, action.doc.id, { status: 'Verified', feedback: 'Approved by admin' })
+        toast.success(`${action.doc.type} approved`)
+      }
     } else if (action.kind === 'rejectDocument') {
-      updateDocument(record.id, action.doc.id, { status: 'Rejected', feedback: action.reason })
-      toast.error(`${action.doc.type} rejected`, { description: action.reason })
+      if (isMongoObjectId(action.doc.id)) {
+        try {
+          await adminService.updateDocumentStatus(action.doc.id, {
+            status: 'rejected',
+            notes: action.reason,
+          })
+          toast.error(`${action.doc.type} rejected`, { description: action.reason })
+          await fetchVerifications()
+        } catch (err) {
+          toast.error('Failed to reject document', { description: err.message })
+        }
+      } else {
+        updateDocument(record.id, action.doc.id, { status: 'Rejected', feedback: action.reason })
+        toast.error(`${action.doc.type} rejected`, { description: action.reason })
+      }
     }
   }
 
@@ -385,9 +474,14 @@ export function VerificationsPage() {
           </>
         }
         action={
-          <Button to="/admin/caregivers" variant="outline">
-            Caretaker directory
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" icon={RefreshCw} onClick={fetchVerifications} disabled={loading}>
+              Refresh
+            </Button>
+            <Button to="/admin/caregivers" variant="outline" size="sm">
+              Caretaker directory
+            </Button>
+          </div>
         }
       />
 
@@ -425,7 +519,19 @@ export function VerificationsPage() {
           </nav>
 
           <div className="thin-scrollbar max-h-[26rem] space-y-2 overflow-y-auto pr-1">
-            {filtered.length ? (
+            {loading ? (
+              <div className="space-y-3 p-1">
+                <CardSkeleton count={2} />
+              </div>
+            ) : error && allVerifications.length === 0 ? (
+              <div className="rounded-card border border-line bg-white p-4 shadow-card">
+                <ErrorState
+                  title="Failed to load verifications"
+                  description={error}
+                  onRetry={fetchVerifications}
+                />
+              </div>
+            ) : filtered.length ? (
               filtered.map((v) => {
                 const active = v.id === selectedId
                 const tone = v.overallScore >= 80 ? 'success' : v.overallScore >= 60 ? 'warning' : 'danger'

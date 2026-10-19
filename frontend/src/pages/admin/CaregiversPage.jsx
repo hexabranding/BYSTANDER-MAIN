@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -17,13 +17,13 @@ import {
 import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
-import { DOCUMENT_TYPES } from '@/data/verifications'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
+import { adminService } from '@/services/adminService'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
-import { Tabs, Chip } from '@/components/common/Tabs'
+import { Tabs } from '@/components/common/Tabs'
 import { DataTable } from '@/components/common/DataTable'
 import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -33,22 +33,31 @@ import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
-import { EmptyState } from '@/components/common/States'
-import { Select } from '@/components/forms/FormField'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
+import { FormField, Select, Textarea } from '@/components/forms/FormField'
 
 const STATUS_TABS = ['All', 'Verified', 'Pending', 'Rejected']
 const PENDING_STATUSES = ['Pending', 'Under Review']
+const DEFAULT_CITIES = ['All', 'Mumbai, MH', 'New Delhi, DL', 'Bengaluru, KA', 'Chennai, TN', 'Kolkata, WB', 'Hyderabad, TS', 'Pune, MH']
+const DEFAULT_QUALIFICATIONS = ['All', 'GNM', 'BSc Nursing', 'nursing_student', 'ANM', 'MBBS', 'Certified Elder Care Giver', 'Paramedic', 'other']
+
 const SORTS = [
   { id: 'rating', label: 'Rating — high to low' },
   { id: 'experience', label: 'Experience — high to low' },
   { id: 'rate', label: 'Hourly rate — high to low' },
+  { id: 'newest', label: 'Recently joined' },
 ]
 
 export function CaregiversPage() {
   useDocumentTitle('Caretakers')
 
   const navigate = useNavigate()
-  const { caregivers, bookings, verifications, setVerificationStatus } = useData()
+  const { bookings, verifications } = useData()
+
+  const [caregivers, setCaregivers] = useState([])
+  const [stats, setStats] = useState({ total: 0, verified: 0, pending: 0, avg: '5.0' })
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('All')
@@ -56,32 +65,70 @@ export function CaregiversPage() {
   const [qualification, setQualification] = useState('All')
   const [sort, setSort] = useState('rating')
   const [viewingId, setViewingId] = useState(null)
-  const [approveTarget, setApproveTarget] = useState(null)
+
+  // Status mutation state
   const [suspendTarget, setSuspendTarget] = useState(null)
-  const [suspended, setSuspended] = useState([])
+  const [suspendReason, setSuspendReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
+  const [isUpdating, setIsUpdating] = useState(false)
+
+  // Quick verification target
+  const [approveTarget, setApproveTarget] = useState(null)
 
   const debouncedSearch = useDebouncedValue(search)
 
-  const cities = useMemo(() => [...new Set(caregivers.map((c) => c.city))].sort(), [caregivers])
-  const qualifications = useMemo(() => [...new Set(caregivers.map((c) => c.qualification))].sort(), [caregivers])
+  const fetchCaregivers = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      let verificationFilter = undefined
+      if (tab === 'Verified') verificationFilter = 'verified'
+      else if (tab === 'Pending') verificationFilter = 'pending'
+      else if (tab === 'Rejected') verificationFilter = 'rejected'
 
-  const list = useMemo(
-    () => caregivers.map((c) => ({ ...c, isSuspended: suspended.includes(c.id) })),
-    [caregivers, suspended],
-  )
+      const query = {
+        search: debouncedSearch.trim() || undefined,
+        verificationStatus: verificationFilter,
+        city: city === 'All' ? undefined : city,
+        qualification: qualification === 'All' ? undefined : qualification,
+        sort,
+      }
 
-  const stats = useMemo(() => {
-    const verified = caregivers.filter((c) => c.verificationStatus === 'Verified').length
-    const pending = caregivers.filter((c) => PENDING_STATUSES.includes(c.verificationStatus)).length
-    const avg = caregivers.length
-      ? (caregivers.reduce((sum, c) => sum + (c.rating || 0), 0) / caregivers.length).toFixed(1)
-      : '0.0'
-    return { total: caregivers.length, verified, pending, avg }
+      const result = await adminService.getCaregivers(query)
+      setCaregivers(result.caregivers || [])
+
+      const total = result.stats?.total ?? result.caregivers.length
+      const verified = result.stats?.verified ?? result.caregivers.filter((c) => c.verificationStatus === 'Verified').length
+      const pending = result.stats?.pending ?? result.caregivers.filter((c) => PENDING_STATUSES.includes(c.verificationStatus)).length
+      const avg = result.caregivers.length
+        ? (result.caregivers.reduce((sum, c) => sum + (c.rating || 0), 0) / result.caregivers.length).toFixed(1)
+        : '5.0'
+
+      setStats({ total, verified, pending, avg })
+    } catch (err) {
+      setError(err.message || 'Failed to retrieve caretakers from server.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [debouncedSearch, tab, city, qualification, sort])
+
+  useEffect(() => {
+    fetchCaregivers()
+  }, [fetchCaregivers])
+
+  const cities = useMemo(() => {
+    const fromData = caregivers.map((c) => c.city).filter((c) => c && c !== '—')
+    return [...new Set([...DEFAULT_CITIES.slice(1), ...fromData])].sort()
+  }, [caregivers])
+
+  const qualifications = useMemo(() => {
+    const fromData = caregivers.map((c) => c.qualification).filter(Boolean)
+    return [...new Set([...DEFAULT_QUALIFICATIONS.slice(1), ...fromData])].sort()
   }, [caregivers])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
-    const rows = list.filter((c) => {
+    return caregivers.filter((c) => {
       const matchesTab =
         tab === 'All' ||
         (tab === 'Verified' && c.verificationStatus === 'Verified') ||
@@ -92,17 +139,12 @@ export function CaregiversPage() {
       const matchesSearch =
         !q ||
         c.name.toLowerCase().includes(q) ||
-        c.regNo.toLowerCase().includes(q) ||
-        c.city.toLowerCase().includes(q) ||
+        (c.regNo && c.regNo.toLowerCase().includes(q)) ||
+        (c.city && c.city.toLowerCase().includes(q)) ||
         c.services.join(' ').toLowerCase().includes(q)
       return matchesTab && matchesCity && matchesQual && matchesSearch
     })
-    return [...rows].sort((a, b) => {
-      if (sort === 'experience') return (b.experienceYears || 0) - (a.experienceYears || 0)
-      if (sort === 'rate') return (b.hourlyRate || 0) - (a.hourlyRate || 0)
-      return (b.rating || 0) - (a.rating || 0)
-    })
-  }, [list, debouncedSearch, tab, city, qualification, sort])
+  }, [caregivers, debouncedSearch, tab, city, qualification])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
 
@@ -111,14 +153,14 @@ export function CaregiversPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, tab, city, qualification, sort])
 
-  const selected = viewingId ? list.find((c) => c.id === viewingId) : null
+  const selected = viewingId ? caregivers.find((c) => c.id === viewingId) : null
 
   const selectedRecord = selected ? verifications.find((v) => v.caregiverId === selected.id) : null
 
   const selectedBookings = useMemo(
     () =>
       selected
-        ? bookings.filter((b) => b.caregiverId === selected.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4)
+        ? bookings.filter((b) => b.caregiverId === selected.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 4)
         : [],
     [bookings, selected],
   )
@@ -141,42 +183,102 @@ export function CaregiversPage() {
     toast.success(`Exported ${rows.length} caretaker${rows.length === 1 ? '' : 's'} to CSV`)
   }
 
-  const requestApprove = (caregiver) => {
-    const record = verifications.find((v) => v.caregiverId === caregiver.id)
-    if (!record) {
-      toast.info(`No verification application on file for ${caregiver.name}`, {
-        description: 'Ask them to upload documents from their caretaker profile.',
-      })
+  const handleOpenSuspend = (caregiver) => {
+    setSuspendTarget(caregiver)
+    setSuspendReason('')
+    setReasonError('')
+  }
+
+  const confirmSuspend = async () => {
+    if (!suspendTarget) return
+    const trimmedReason = suspendReason.trim()
+    if (trimmedReason.length < 3) {
+      setReasonError('An auditable reason of at least 3 characters is mandatory.')
       return
     }
-    if (record.status === 'Verified') {
+
+    setIsUpdating(true)
+    const isCurrentlySuspended = suspendTarget.isSuspended
+    const nextStatus = isCurrentlySuspended ? 'active' : 'suspended'
+    const targetUserId = suspendTarget.userId || suspendTarget.id
+
+    try {
+      await adminService.updateUserStatus(targetUserId, {
+        status: nextStatus,
+        reason: trimmedReason,
+      })
+
+      // Update local state with server-confirmed status
+      setCaregivers((prev) =>
+        prev.map((c) =>
+          c.id === suspendTarget.id
+            ? {
+                ...c,
+                isSuspended: nextStatus === 'suspended',
+                status: nextStatus === 'suspended' ? 'Suspended' : 'Active',
+                accountStatus: nextStatus,
+                statusReason: trimmedReason,
+                statusUpdatedAt: new Date().toISOString(),
+              }
+            : c,
+        ),
+      )
+
+      toast.success(
+        isCurrentlySuspended
+          ? `${suspendTarget.name} reinstated`
+          : `${suspendTarget.name} suspended`,
+        {
+          description: isCurrentlySuspended
+            ? 'Bookings and active availability resume as before.'
+            : 'Profile hidden from customers and new bookings paused.',
+        },
+      )
+      setSuspendTarget(null)
+      setSuspendReason('')
+    } catch (err) {
+      toast.error(err.message || 'Failed to update caretaker account status', {
+        description: 'Server rejected the status transition.',
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const requestApprove = (caregiver) => {
+    if (caregiver.verificationStatus === 'Verified') {
       toast.info(`${caregiver.name} is already verified`)
       return
     }
     setApproveTarget(caregiver)
   }
 
-  const confirmApprove = () => {
+  const confirmApprove = async () => {
     if (!approveTarget) return
-    const record = verifications.find((v) => v.caregiverId === approveTarget.id)
-    if (record) {
-      setVerificationStatus(record.id, 'Verified', 'Application approved — profile marked Verified')
-    }
-    toast.success(`${approveTarget.name} approved`, {
-      description: 'Profile marked Verified and live on the marketplace.',
-    })
-    setApproveTarget(null)
-  }
+    try {
+      await adminService.updateCaregiverVerificationStatus(approveTarget.id, {
+        status: 'verified',
+        reason: 'Application approved via admin caretakers directory review',
+        trustScore: 85,
+      })
 
-  const confirmSuspend = () => {
-    if (!suspendTarget) return
-    const isSuspended = suspended.includes(suspendTarget.id)
-    setSuspended((prev) => (isSuspended ? prev.filter((id) => id !== suspendTarget.id) : [...prev, suspendTarget.id]))
-    toast[isSuspended ? 'success' : 'error'](
-      isSuspended ? `${suspendTarget.name} reinstated` : `${suspendTarget.name} suspended`,
-      { description: isSuspended ? 'Bookings and payouts resume as before.' : 'Profile hidden from customers and new jobs paused.' },
-    )
-    setSuspendTarget(null)
+      setCaregivers((prev) =>
+        prev.map((c) =>
+          c.id === approveTarget.id
+            ? { ...c, verificationStatus: 'Verified', verified: true, trustScore: 85 }
+            : c,
+        ),
+      )
+
+      toast.success(`${approveTarget.name} approved`, {
+        description: 'Profile marked Verified and live on the marketplace.',
+      })
+      setApproveTarget(null)
+    } catch (err) {
+      toast.error(err.message || 'Failed to approve caretaker verification', {
+        description: 'Please review documents directly under Verifications.',
+      })
+    }
   }
 
   const columns = [
@@ -208,7 +310,7 @@ export function CaregiversPage() {
       key: 'services',
       header: 'Services',
       align: 'center',
-      render: (c) => <span className="tabular-nums">{c.services.length}</span>,
+      render: (c) => <span className="tabular-nums">{c.services?.length || 0}</span>,
     },
     { key: 'city', header: 'City' },
     {
@@ -233,67 +335,80 @@ export function CaregiversPage() {
       align: 'right',
       sortable: false,
       render: (c) => (
-        <Button
-          size="xs"
-          variant="outline"
-          icon={Eye}
-          onClick={(e) => {
-            e.stopPropagation()
-            setViewingId(c.id)
-          }}
-        >
-          View
-        </Button>
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Button size="xs" variant="outline" icon={Eye} onClick={() => setViewingId(c.id)}>
+            View
+          </Button>
+          {c.verificationStatus !== 'Verified' ? (
+            <Button size="xs" variant="primary" icon={BadgeCheck} onClick={() => requestApprove(c)}>
+              Approve
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              variant={c.isSuspended ? 'outline' : 'dangerGhost'}
+              onClick={() => handleOpenSuspend(c)}
+            >
+              {c.isSuspended ? 'Reinstate' : 'Suspend'}
+            </Button>
+          )}
+        </div>
       ),
     },
   ]
-
-  const docRows = selected
-    ? DOCUMENT_TYPES.map((type) => selectedRecord?.documents.find((d) => d.type === type) || { id: type, type, file: 'Not uploaded', status: 'Not Uploaded' })
-    : []
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Caretakers"
-        subtitle="The care supply side — qualifications, verification standing and performance at a glance."
+        subtitle="Manage registered nurses, bedside attendants and verification statuses."
         action={
-          <>
+          <div className="flex items-center gap-2">
             <Button variant="outline" icon={Download} onClick={handleExport}>
               Export CSV
             </Button>
-            <Button to="/admin/verifications" icon={ShieldCheck}>
+            <Button to="/admin/verifications" variant="primary" icon={ShieldCheck}>
               Verification queue
             </Button>
-          </>
+          </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Total caretakers" value={stats.total} icon={Users} tone="primary" hint="On the platform" delay={0} />
-        <StatCard label="Verified" value={stats.verified} icon={ShieldCheck} tone="success" trend={7} hint="Approved to accept jobs" delay={0.05} />
-        <StatCard label="Pending" value={stats.pending} icon={ShieldAlert} tone="warning" hint="Documents under review" delay={0.1} />
-        <StatCard label="Average rating" value={stats.avg} icon={Star} tone="accent" trend={3} hint="Across all reviews" delay={0.15} />
+        <StatCard label="Total caretakers" value={stats.total} icon={Users} tone="primary" hint="Onboarded records" delay={0} />
+        <StatCard label="Verified" value={stats.verified} icon={ShieldCheck} tone="success" trend={12} hint="Live on directory" delay={0.05} />
+        <StatCard label="Pending review" value={stats.pending} icon={ShieldAlert} tone="warning" hint="Awaiting review" delay={0.1} />
+        <StatCard label="Average rating" value={`${stats.avg} / 5`} icon={Star} tone="accent" hint="Across rated shifts" delay={0.15} />
       </div>
 
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search name, reg no, city or service…"
-          className="xl:max-w-sm xl:flex-1"
+          placeholder="Search by name, reg number, city or service…"
+          className="lg:max-w-md lg:flex-1"
         />
         <Tabs
           tabs={STATUS_TABS.map((t) => ({
             id: t,
             label: t,
-            count: t === 'All' ? caregivers.length : caregivers.filter((c) => (t === 'Pending' ? PENDING_STATUSES.includes(c.verificationStatus) : c.verificationStatus === t)).length,
+            count:
+              t === 'All'
+                ? caregivers.length
+                : t === 'Verified'
+                  ? caregivers.filter((c) => c.verificationStatus === 'Verified').length
+                  : t === 'Pending'
+                    ? caregivers.filter((c) => PENDING_STATUSES.includes(c.verificationStatus)).length
+                    : caregivers.filter((c) => c.verificationStatus === 'Rejected').length,
           }))}
           active={tab}
           onChange={setTab}
           size="sm"
         />
-        <div className="flex flex-col gap-3 sm:flex-row xl:ml-auto">
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="w-44">
           <Select value={city} onChange={(e) => setCity(e.target.value)} aria-label="Filter by city">
             <option value="All">All cities</option>
             {cities.map((c) => (
@@ -302,7 +417,14 @@ export function CaregiversPage() {
               </option>
             ))}
           </Select>
-          <Select value={qualification} onChange={(e) => setQualification(e.target.value)} aria-label="Filter by qualification">
+        </div>
+
+        <div className="w-52">
+          <Select
+            value={qualification}
+            onChange={(e) => setQualification(e.target.value)}
+            aria-label="Filter by qualification"
+          >
             <option value="All">All qualifications</option>
             {qualifications.map((q) => (
               <option key={q} value={q}>
@@ -310,6 +432,9 @@ export function CaregiversPage() {
               </option>
             ))}
           </Select>
+        </div>
+
+        <div className="ml-auto w-56">
           <Select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort caretakers">
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
@@ -320,12 +445,24 @@ export function CaregiversPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="rounded-card border border-line bg-white p-6 shadow-card">
+          <TableSkeleton rows={6} cols={6} />
+        </div>
+      ) : error ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Unable to load caretakers"
+            description={error}
+            onRetry={fetchCaregivers}
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}
-            title="No caretakers found"
-            description="Adjust the verification tab, city, qualification or search term."
+            title="No caretakers match your filters"
+            description="Try clearing the search query or adjusting your city and qualification filters."
             action={
               <Button
                 variant="outline"
@@ -336,7 +473,7 @@ export function CaregiversPage() {
                   setQualification('All')
                 }}
               >
-                Clear filters
+                Reset filters
               </Button>
             }
           />
@@ -348,131 +485,135 @@ export function CaregiversPage() {
             data={pageItems}
             keyExtractor={(row) => row.id}
             onRowClick={(row) => setViewingId(row.id)}
-            initialSort={{ key: 'rating', dir: 'desc' }}
             emptyTitle="No caretakers found"
-            emptyIcon={Stethoscope}
+            emptyIcon={Users}
           />
           <Pagination page={page} totalPages={totalPages} onPageChange={goto} totalItems={totalItems} />
         </>
       )}
 
+      {/* Caretaker Dossier Drawer */}
       <Modal
         open={Boolean(selected)}
         onClose={() => setViewingId(null)}
-        title={selected?.name || 'Caretaker'}
-        subtitle={selected ? `${selected.qualification} · ${selected.regNo}` : ''}
+        title={selected?.name || 'Caretaker details'}
+        subtitle={selected ? `${selected.qualification} · ${selected.city}` : ''}
         size="xl"
         footer={
           selected ? (
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button
-                variant="outline"
-                icon={ExternalLink}
-                onClick={() => {
-                  const id = selected.id
-                  setViewingId(null)
-                  navigate(`/caregivers/${id}`)
-                }}
+                variant={selected.isSuspended ? 'outline' : 'dangerGhost'}
+                onClick={() => handleOpenSuspend(selected)}
               >
-                View public profile
+                {selected.isSuspended ? 'Reinstate account' : 'Suspend account'}
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
-                  variant="dangerGhost"
-                  onClick={() => setSuspendTarget(selected)}
+                  variant="outline"
+                  icon={ExternalLink}
+                  onClick={() => navigate(`/caregivers/${selected.id}`)}
                 >
-                  {selected.isSuspended ? 'Lift suspension' : 'Suspend'}
+                  Public profile
                 </Button>
-                <Button icon={BadgeCheck} onClick={() => requestApprove(selected)}>
-                  Approve
-                </Button>
+                {selected.verificationStatus !== 'Verified' ? (
+                  <Button
+                    variant="primary"
+                    icon={BadgeCheck}
+                    onClick={() => {
+                      setViewingId(null)
+                      navigate('/admin/verifications')
+                    }}
+                  >
+                    Open in Verifications
+                  </Button>
+                ) : null}
+                <Button onClick={() => setViewingId(null)}>Done</Button>
               </div>
             </div>
           ) : null
         }
       >
         {selected ? (
-          <div className="space-y-5">
-            <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <Avatar src={selected.photo} name={selected.name} size="xl" verified={selected.verified} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-lg font-bold text-ink">{selected.name}</h3>
                   <StatusBadge status={selected.verificationStatus} size="sm" />
-                  {selected.isSuspended ? <StatusBadge status="Inactive" size="sm" /> : null}
-                  <span className="text-xs text-muted">Joined {formatDate(selected.joinedOn)}</span>
+                  {selected.isSuspended ? (
+                    <span className="rounded-full bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-600">
+                      Suspended
+                    </span>
+                  ) : null}
                 </div>
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  {selected.badges.map((badge) => (
-                    <Chip key={badge}>{badge}</Chip>
-                  ))}
+                <p className="mt-1 text-sm text-muted">
+                  Council Reg: <span className="font-mono font-medium text-ink">{selected.regNo}</span> · {selected.city}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                  <RatingStars value={selected.rating} size={14} showValue />
+                  <span className="text-muted">·</span>
+                  <span className="font-semibold tabular-nums text-ink">{selected.completedJobs} shifts done</span>
+                  <span className="text-muted">·</span>
+                  <span className="font-semibold tabular-nums text-primary-700">
+                    {formatCurrency(selected.hourlyRate)}/hr
+                  </span>
                 </div>
-                <p className="mt-3 text-sm leading-relaxed text-muted">{selected.bio}</p>
+                {selected.statusReason ? (
+                  <p className="mt-2 text-xs italic text-amber-700">
+                    Account Status Note: "{selected.statusReason}" {selected.statusUpdatedAt ? `(${formatDate(selected.statusUpdatedAt)})` : ''}
+                  </p>
+                ) : null}
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { label: 'Trust score', value: `${selected.trustScore}/100` },
-                { label: 'Response rate', value: `${selected.responseRate}%` },
-                { label: 'Jobs completed', value: selected.completedJobs },
-                { label: 'Hourly rate', value: formatCurrency(selected.hourlyRate) },
-              ].map((item) => (
-                <div key={item.label} className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-3.5 py-3 text-center">
-                  <p className="font-display text-lg font-extrabold tabular-nums text-ink">{item.value}</p>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">{item.label}</p>
-                </div>
-              ))}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Card>
-                <CardHeader title="Services & languages" />
-                <CardBody className="space-y-3">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-faint">Services offered</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selected.services.map((s) => (
-                        <Chip key={s}>{s}</Chip>
-                      ))}
-                    </div>
+                <CardHeader title="Professional details" subtitle="Clinical registration" />
+                <CardBody className="space-y-3 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted">Qualification</span>
+                    <span className="font-semibold text-ink">{selected.qualification}</span>
                   </div>
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-faint">Languages</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selected.languages.map((l) => (
-                        <Chip key={l}>
-                          <Languages className="h-3.5 w-3.5" /> {l}
-                        </Chip>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
+                  <div className="flex justify-between gap-4">
                     <span className="text-muted">Experience</span>
-                    <span className="font-semibold text-ink">{selected.experienceYears} years</span>
+                    <span className="font-semibold tabular-nums text-ink">{selected.experienceYears} years</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted">Rating</span>
-                    <RatingStars value={selected.rating} count={selected.reviewCount} showValue size={13} />
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted">Care settings</span>
+                    <span className="text-right font-semibold text-ink">
+                      {selected.careSettings?.join(', ') || 'Home Care'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted">Availability</span>
+                    <span className="font-semibold text-ink">{selected.availabilityStatus}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-muted">Trust score</span>
+                    <span className="font-semibold tabular-nums text-primary-700">{selected.trustScore} / 100</span>
                   </div>
                 </CardBody>
               </Card>
 
               <Card>
-                <CardHeader
-                  title="Verification documents"
-                  subtitle="Submitted files — private contents stay hidden"
-                  icon={ShieldCheck}
-                />
-                <CardBody className="divide-y divide-line p-0">
-                  {docRows.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-3 px-5 py-2.5 transition hover:bg-mint-50/60">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-ink">{doc.type}</p>
-                        <p className="truncate text-xs text-faint">{doc.file}</p>
-                      </div>
-                      <StatusBadge status={doc.status} size="sm" />
-                    </div>
-                  ))}
+                <CardHeader title="Services offered" subtitle={`${selected.services?.length || 0} care competencies`} />
+                <CardBody className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {selected.services && selected.services.length ? (
+                      selected.services.map((svc) => (
+                        <span
+                          key={svc}
+                          className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
+                        >
+                          {svc}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted">No services listed</span>
+                    )}
+                  </div>
                 </CardBody>
               </Card>
             </div>
@@ -519,6 +660,7 @@ export function CaregiversPage() {
         ) : null}
       </Modal>
 
+      {/* Quick Approve Dialog */}
       <ConfirmationDialog
         open={Boolean(approveTarget)}
         onClose={() => setApproveTarget(null)}
@@ -529,19 +671,67 @@ export function CaregiversPage() {
         confirmLabel="Approve application"
       />
 
-      <ConfirmationDialog
+      {/* Suspend / Reinstate Dialog with Mandatory Reason */}
+      <Modal
         open={Boolean(suspendTarget)}
-        onClose={() => setSuspendTarget(null)}
-        onConfirm={confirmSuspend}
-        tone={suspendTarget?.isSuspended ? 'success' : 'danger'}
-        title={suspendTarget?.isSuspended ? 'Lift this suspension?' : 'Suspend this caretaker?'}
-        message={
+        onClose={() => {
+          if (!isUpdating) {
+            setSuspendTarget(null)
+            setSuspendReason('')
+            setReasonError('')
+          }
+        }}
+        title={suspendTarget?.isSuspended ? 'Reinstate Caretaker Account' : 'Suspend Caretaker Account'}
+        description={
           suspendTarget?.isSuspended
-            ? `${suspendTarget?.name} returns to customer search and can accept new jobs right away.`
-            : `${suspendTarget?.name} will be hidden from customer search and cannot accept new jobs. Completed bookings and payouts are unaffected.`
+            ? `Reinstate ${suspendTarget?.name}. Their profile will reappear in search and they can accept new bookings.`
+            : `Suspend ${suspendTarget?.name}. They will be hidden from customer discovery and cannot accept new bookings.`
         }
-        confirmLabel={suspendTarget?.isSuspended ? 'Lift suspension' : 'Suspend caretaker'}
-      />
+      >
+        <div className="space-y-4">
+          <FormField
+            label="Reason for status change *"
+            error={reasonError}
+            hint="An auditable reason is required for caretaker status transitions (min 3 characters)."
+          >
+            <Textarea
+              value={suspendReason}
+              onChange={(e) => {
+                setSuspendReason(e.target.value)
+                if (e.target.value.trim().length >= 3) setReasonError('')
+              }}
+              placeholder="e.g. Disciplinary suspension due to complaint / Reinstated following review..."
+              rows={3}
+              disabled={isUpdating}
+            />
+          </FormField>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSuspendTarget(null)
+                setSuspendReason('')
+                setReasonError('')
+              }}
+              disabled={isUpdating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={suspendTarget?.isSuspended ? 'primary' : 'danger'}
+              onClick={confirmSuspend}
+              disabled={isUpdating || suspendReason.trim().length < 3}
+            >
+              {isUpdating
+                ? 'Updating…'
+                : suspendTarget?.isSuspended
+                  ? 'Reinstate Caretaker'
+                  : 'Suspend Caretaker'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -10,6 +10,14 @@ import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/authRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 import adminServiceRoutes from './routes/adminServiceRoutes.js';
+import adminVerificationRoutes from './routes/adminVerificationRoutes.js';
+import adminUserRoutes from './routes/adminUserRoutes.js';
+import adminModerationRoutes from './routes/adminModerationRoutes.js';
+import adminComplaintRoutes from './routes/adminComplaintRoutes.js';
+import complaintRoutes from './routes/complaintRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
+import adminAnalyticsRoutes from './routes/adminAnalyticsRoutes.js';
+import adminFinanceRoutes from './routes/adminFinanceRoutes.js';
 import caregiverSelfRoutes from './routes/caregiverSelfRoutes.js';
 import caregiverPublicRoutes from './routes/caregiverPublicRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
@@ -29,7 +37,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // 1. Reverse-Proxy Configuration: Only trust proxy hops when explicitly configured or in production
@@ -80,6 +88,18 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/admin/services', adminServiceRoutes);
+app.use('/api/admin/verifications', adminVerificationRoutes);
+app.use('/api/admin/users', adminUserRoutes);
+app.use('/api/admin/messages', adminModerationRoutes);
+app.use('/api/admin/complaints', adminComplaintRoutes);
+app.use('/api/admin/customers', (req, res, next) => {
+  req.url = '/customers' + (req.url === '/' ? '' : req.url);
+  adminUserRoutes(req, res, next);
+});
+app.use('/api/admin/caregivers', (req, res, next) => {
+  req.url = '/caregivers' + (req.url === '/' ? '' : req.url);
+  adminUserRoutes(req, res, next);
+});
 app.use('/api/customer', customerRoutes);
 app.use('/api/caregiver', caregiverSelfRoutes);
 app.use('/api/caregivers', caregiverPublicRoutes);
@@ -87,6 +107,11 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/sos', sosRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/complaints', complaintRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/admin', adminAnalyticsRoutes);
+app.use('/api/admin', adminFinanceRoutes);
+app.use('/api/admin/financials', adminFinanceRoutes);
 
 // Test-only simulated payment routes (strictly blocked in production)
 if (process.env.NODE_ENV !== 'production') {

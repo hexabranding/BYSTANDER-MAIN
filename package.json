@@ -14,6 +14,7 @@
     "build": "npm --prefix frontend run build",
     "build:frontend": "npm --prefix frontend run build",
     "lint:frontend": "npm --prefix frontend run lint",
+    "test:frontend": "npm --prefix frontend test",
     "test:backend": "npm --prefix backend test"
   }
 }

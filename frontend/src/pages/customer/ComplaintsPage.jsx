@@ -18,8 +18,10 @@ import { SearchBar } from '@/components/common/SearchBar'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
 import { Button } from '@/components/common/Button'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
+import { complaintService } from '@/services/complaintService'
+import { isMongoObjectId } from '@/services/adapters'
 
 const CATEGORIES = ['Misbehavior', 'Theft', 'Abuse', 'Harassment', 'Medical negligence', 'Other']
 const PRIORITIES = ['High', 'Medium', 'Low']
@@ -81,7 +83,7 @@ function ComplaintDetail({ complaint }) {
         <StatusBadge status={complaint.status} />
         <StatusBadge status={complaint.priority} size="sm" dot={false} />
         <Chip>{complaint.category}</Chip>
-        <Chip>{`Booking ${complaint.bookingId || '”'}`}</Chip>
+        <Chip>{`Booking ${complaint.bookingNumber || complaint.bookingId || 'General'}`}</Chip>
       </div>
 
       <div>
@@ -117,32 +119,6 @@ function ComplaintDetail({ complaint }) {
         <StatusStepper status={complaint.status} />
       </div>
 
-      <div>
-        <div className="flex items-center gap-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Internal notes</p>
-          <span className="inline-flex items-center gap-1 rounded-full bg-info-50 px-2 py-0.5 text-[10px] font-semibold text-info-700 ring-1 ring-inset ring-info-500/30">
-            <Lock className="h-3 w-3" /> visible to CareMate operations only
-          </span>
-        </div>
-        {complaint.internalNotes?.length ? (
-          <ul className="mt-3 space-y-3">
-            {complaint.internalNotes.map((n, i) => (
-              <li key={`${n.at}-${i}`} className="rounded-xl border border-line bg-white p-3.5">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-bold text-ink">{n.by}</p>
-                  <p className="text-[11px] text-faint">
-                    {formatDate(n.at)} · {formatTime(n.at)}
-                  </p>
-                </div>
-                <p className="mt-1 text-sm leading-relaxed text-muted">{n.note}</p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-muted">No internal notes have been added yet.</p>
-        )}
-      </div>
-
       {resolved && complaint.resolution ? (
         <div className="rounded-xl border border-success-100 bg-success-50 p-4">
           <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-success-700">
@@ -176,7 +152,12 @@ function ComplaintDetail({ complaint }) {
 export function ComplaintsPage() {
   useDocumentTitle('Complaints')
   const { user } = useAuth()
-  const { bookings, caregivers, complaints, createComplaint } = useData()
+  const { bookings } = useData()
+
+  const [complaints, setComplaints] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
@@ -185,39 +166,53 @@ export function ComplaintsPage() {
   const [viewing, setViewing] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const customerId = user?.id || 'cu-201'
-  const customerName = user?.name || 'Priya Sharma'
+  const customerId = user?.id || user?._id || 'cu-201'
 
-  const myBookings = useMemo(() => bookings.filter((b) => b.customerId === customerId), [bookings, customerId])
+  const myBookings = useMemo(() => {
+    return (bookings || []).filter((b) => b.customerId === customerId || b.customer === customerId)
+  }, [bookings, customerId])
 
-  const mine = useMemo(() => {
-    const bookingIds = new Set(myBookings.map((b) => b.id))
-    return complaints.filter((c) => c.complainant === customerName || bookingIds.has(c.bookingId))
-  }, [complaints, myBookings, customerName])
+  const fetchComplaints = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await complaintService.getMyComplaints()
+      setComplaints(data.complaints || [])
+    } catch (err) {
+      setError(err.message || 'Failed to load complaints')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchComplaints()
+  }, [])
 
   const counts = useMemo(() => {
-    const c = { Total: mine.length, Open: 0, 'Under review': 0, Resolved: 0 }
-    mine.forEach((x) => {
+    const c = { Total: complaints.length, Open: 0, 'Under review': 0, Resolved: 0 }
+    complaints.forEach((x) => {
       if (x.status === 'Resolved') c.Resolved += 1
       else c.Open += 1
-      if (x.status === 'Under Review') c['Under review'] += 1
+      if (['Under Review', 'Investigation'].includes(x.status)) c['Under review'] += 1
     })
     return c
-  }, [mine])
+  }, [complaints])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
-    return mine.filter((c) => {
+    return complaints.filter((c) => {
       const matchesStatus = status === 'All' || c.status === status
       const matchesSearch =
         !q ||
-        c.id.toLowerCase().includes(q) ||
-        c.subject.toLowerCase().includes(q) ||
-        c.category.toLowerCase().includes(q) ||
-        c.bookingId?.toLowerCase().includes(q)
+        (c.id && c.id.toLowerCase().includes(q)) ||
+        (c.subject && c.subject.toLowerCase().includes(q)) ||
+        (c.category && c.category.toLowerCase().includes(q)) ||
+        (c.bookingId && String(c.bookingId).toLowerCase().includes(q)) ||
+        (c.bookingNumber && String(c.bookingNumber).toLowerCase().includes(q))
       return matchesStatus && matchesSearch
     })
-  }, [mine, debouncedSearch, status])
+  }, [complaints, debouncedSearch, status])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 6)
   useEffect(() => {
@@ -249,25 +244,28 @@ export function ComplaintsPage() {
     event.target.value = ''
   }
 
-  const onSubmit = (values) => {
-    const booking = bookings.find((b) => b.id === values.bookingId)
-    const caregiver = caregivers.find((c) => c.id === booking?.caregiverId)
-    const created = createComplaint({
-      bookingId: values.bookingId || '',
-      complainant: customerName,
-      complainantType: 'Customer',
-      against: caregiver?.name || 'CareMate Platform',
-      againstType: caregiver ? 'Caretaker' : 'Platform',
-      category: values.category,
-      priority: values.priority,
-      subject: values.subject.trim(),
-      description: values.description.trim(),
-      evidence,
-    })
-    toast.success(`Complaint ${created.id} submitted`, {
-      description: 'Our operations team will review it within 24 hours.',
-    })
-    closeRaise()
+  const onSubmit = async (values) => {
+    setIsSubmitting(true)
+    try {
+      const payload = {
+        bookingId: isMongoObjectId(values.bookingId) ? values.bookingId : undefined,
+        category: values.category,
+        priority: values.priority,
+        subject: values.subject.trim(),
+        description: values.description.trim(),
+        evidence,
+      }
+      const created = await complaintService.submitComplaint(payload)
+      setComplaints((prev) => [created, ...prev])
+      toast.success(`Complaint ${created.id} submitted`, {
+        description: 'Our operations team will review it within 24 hours.',
+      })
+      closeRaise()
+    } catch (err) {
+      toast.error(err.message || 'Failed to submit complaint')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const columns = [
@@ -355,7 +353,7 @@ export function ComplaintsPage() {
           tabs={STATUS_TABS.map((s) => ({
             id: s,
             label: s,
-            count: s === 'All' ? mine.length : mine.filter((c) => c.status === s).length,
+            count: s === 'All' ? complaints.length : complaints.filter((c) => c.status === s).length,
           }))}
           active={status}
           onChange={setStatus}
@@ -363,7 +361,17 @@ export function ComplaintsPage() {
         />
       </div>
 
-      {mine.length === 0 ? (
+      {isLoading ? (
+        <TableSkeleton rows={5} cols={5} />
+      ) : error ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState
+            title="Failed to load complaints"
+            description={error}
+            onRetry={fetchComplaints}
+          />
+        </div>
+      ) : complaints.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={ShieldAlert}
@@ -414,15 +422,15 @@ export function ComplaintsPage() {
         open={raiseOpen}
         onClose={closeRaise}
         title="Raise a complaint"
-        subtitle="Tell us what went wrong ” our operations desk reviews every case."
+        subtitle="Tell us what went wrong — our operations desk reviews every case."
         size="lg"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={closeRaise}>
+            <Button variant="ghost" onClick={closeRaise} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" form="raise-complaint-form">
-              Submit complaint
+            <Button type="submit" form="raise-complaint-form" disabled={isSubmitting}>
+              {isSubmitting ? 'Submitting…' : 'Submit complaint'}
             </Button>
           </div>
         }
@@ -430,10 +438,10 @@ export function ComplaintsPage() {
         <form id="raise-complaint-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
           <FormField label="Related booking" htmlFor="cp-booking" error={errors.bookingId?.message}>
             <Select id="cp-booking" error={errors.bookingId?.message} {...register('bookingId')}>
-              <option value="">General ” not linked to a booking</option>
+              <option value="">General — not linked to a booking</option>
               {myBookings.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.id} · {b.service} · {formatDate(b.date)}
+                <option key={b._id || b.id} value={b._id || b.id}>
+                  {b.bookingNumber || b.id} · {b.serviceName || b.service} · {formatDate(b.date)}
                 </option>
               ))}
             </Select>

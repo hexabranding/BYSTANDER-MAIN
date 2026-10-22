@@ -42,3 +42,10 @@ export { default as reviewService } from './reviewService.js'
 
 export * from './financeService.js'
 export { default as financeService } from './financeService.js'
+
+export * from './documentService.js'
+export { default as documentService } from './documentService.js'
+
+export * from './socket.js'
+export { default as socketService } from './socket.js'
+

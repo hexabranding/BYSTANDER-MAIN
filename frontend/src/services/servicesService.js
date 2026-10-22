@@ -197,6 +197,8 @@ export const fetchPublicServiceById = async (idOrSlug, options = {}) => {
 export const servicesService = {
   fetchPublicServices,
   fetchPublicServiceById,
+  getServices: fetchPublicServices,
+  getServiceById: fetchPublicServiceById,
 }
 
 export default servicesService

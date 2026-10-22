@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MessageSquare, Star, ThumbsUp } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -11,22 +11,39 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState, CardSkeleton } from '@/components/common/States'
+import { reviewService } from '@/services/reviewService'
 
 export function ReviewsPage() {
   useDocumentTitle('My reviews')
 
   const { user } = useAuth()
-  const { reviews, caregivers, bookings } = useData()
+  const { caregivers, bookings } = useData()
+  const [realReviews, setRealReviews] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [query, setQuery] = useState('')
   const [ratingFilter, setRatingFilter] = useState('All')
 
-  const customerId = user?.id || 'cu-201'
+  const fetchReviews = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await reviewService.getMyReviews()
+      setRealReviews(res.reviews || [])
+    } catch (err) {
+      setError(err?.message || 'Unable to load reviews from server')
+      setRealReviews([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const mine = useMemo(
-    () => reviews.filter((r) => r.customerId === customerId),
-    [reviews, customerId],
-  )
+  useEffect(() => {
+    fetchReviews()
+  }, [fetchReviews])
+
+  const mine = useMemo(() => realReviews || [], [realReviews])
 
   const avg = mine.length ? mine.reduce((sum, r) => sum + r.rating, 0) / mine.length : 0
 
@@ -34,12 +51,31 @@ export function ReviewsPage() {
     ? Math.round((mine.filter((r) => r.rating >= 4).length / mine.length) * 100)
     : 0
 
+  const completedBookingsCount = useMemo(() => {
+    const currentUserId = user?.id || user?._id
+    if (!currentUserId || !bookings?.length) return mine.length
+    const count = bookings.filter(
+      (b) =>
+        (b.customerId === currentUserId ||
+          b.customer === currentUserId ||
+          b.customer?._id === currentUserId) &&
+        (b.status === 'Completed' || b.status === 'completed'),
+    ).length
+    return Math.max(count, mine.length)
+  }, [bookings, user, mine.length])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return mine.filter((r) => {
-      const caregiver = caregivers.find((c) => c.id === r.caregiverId)
+      const caregiverName =
+        r.caregiverUser?.fullName ||
+        r.caregiver?.fullName ||
+        caregivers?.find((c) => c.id === (r.caregiverId || r.caregiver?._id || r.caregiver))?.name ||
+        ''
+      const bookingLabel =
+        r.booking?.serviceName || r.booking?._id || r.bookingId || ''
       const matchesQuery =
-        !q || [caregiver?.name, r.comment, r.bookingId].join(' ').toLowerCase().includes(q)
+        !q || [caregiverName, r.comment, bookingLabel].join(' ').toLowerCase().includes(q)
       const matchesRating = ratingFilter === 'All' || r.rating === Number(ratingFilter)
       return matchesQuery && matchesRating
     })
@@ -76,7 +112,7 @@ export function ReviewsPage() {
         />
         <StatCard
           label="Bookings reviewed"
-          value={`${mine.length} / ${bookings.filter((b) => b.customerId === customerId && b.status === 'Completed').length}`}
+          value={`${mine.length} / ${completedBookingsCount}`}
           icon={MessageSquare}
           tone="primary"
           hint="Completed visits rated"
@@ -106,24 +142,58 @@ export function ReviewsPage() {
         </select>
       </div>
 
-      {filtered.length ? (
+      {loading ? (
+        <CardSkeleton count={3} />
+      ) : error ? (
+        <Card>
+          <ErrorState
+            title="Failed to load your reviews"
+            description={error}
+            onRetry={fetchReviews}
+          />
+        </Card>
+      ) : filtered.length ? (
         <div className="space-y-4">
           {filtered.map((review) => {
-            const caregiver = caregivers.find((c) => c.id === review.caregiverId)
-            const booking = bookings.find((b) => b.id === review.bookingId)
+            const caregiver = caregivers?.find(
+              (c) => c.id === (review.caregiverId || review.caregiver?._id || review.caregiver),
+            )
+            const caregiverName =
+              review.caregiverUser?.fullName ||
+              review.caregiver?.user?.fullName ||
+              caregiver?.name ||
+              'CareMate caretaker'
+            const caregiverPhoto =
+              review.caregiverUser?.avatar ||
+              review.caregiver?.avatar ||
+              caregiver?.photo
+
+            const booking = bookings?.find(
+              (b) => b.id === (review.booking?._id || review.bookingId || review.booking),
+            )
+            const targetBookingId =
+              review.booking?._id || review.booking?.id || review.bookingId || review.booking
+            const bookingTitle =
+              review.booking?.serviceName ||
+              booking?.serviceName ||
+              (targetBookingId ? `Booking #${String(targetBookingId).slice(-6)}` : 'Booking')
+
+            const targetCaregiverId =
+              review.caregiver?._id || review.caregiver?.id || review.caregiverId
+
             return (
-              <Card key={review.id}>
+              <Card key={review._id || review.id}>
                 <CardBody className="space-y-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <Avatar src={caregiver?.photo} name={caregiver?.name || 'Caretaker'} size="md" />
+                      <Avatar src={caregiverPhoto} name={caregiverName} size="md" />
                       <div>
                         <p className="font-display text-sm font-bold text-ink">
-                          {caregiver?.name || 'CareMate caretaker'}
+                          {caregiverName}
                         </p>
                         <p className="text-xs text-muted">
-                          {review.bookingId || booking?.id || 'Booking'} ·{' '}
-                          {formatDate(review.date || review.at, { long: true })}
+                          {bookingTitle} ·{' '}
+                          {formatDate(review.createdAt || review.date || review.at, { long: true })}
                         </p>
                       </div>
                     </div>
@@ -137,24 +207,24 @@ export function ReviewsPage() {
                   {review.reply ? (
                     <div className="rounded-xl border border-primary-200 bg-mint-50 p-4">
                       <p className="text-[11px] font-bold uppercase tracking-wider text-primary-700">
-                        {caregiver?.name || 'Caretaker'} replied
+                        {caregiverName} replied
                       </p>
                       <p className="mt-1.5 text-sm leading-relaxed text-primary-900/90">{review.reply}</p>
                     </div>
                   ) : null}
 
                   <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-                    {booking ? (
+                    {targetBookingId ? (
                       <Button
                         variant="outline"
                         size="sm"
-                        to={`/customer/bookings/${booking.id}`}
+                        to={`/customer/bookings/${targetBookingId}`}
                       >
                         View booking
                       </Button>
                     ) : null}
-                    {caregiver ? (
-                      <Button variant="ghost" size="sm" to={`/caregivers/${caregiver.id}`}>
+                    {targetCaregiverId ? (
+                      <Button variant="ghost" size="sm" to={`/caregivers/${targetCaregiverId}`}>
                         View caretaker profile
                       </Button>
                     ) : null}

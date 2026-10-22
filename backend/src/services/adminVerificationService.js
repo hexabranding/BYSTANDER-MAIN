@@ -10,9 +10,17 @@ import User from '../models/User.js';
 const sanitizeDocumentMetadata = (doc) => {
   if (!doc) return null;
   const d = doc.toObject ? doc.toObject() : { ...doc };
+  if (!d.fileUrl && d.fileData && typeof d.fileData === 'string') {
+    d.fileUrl = d.fileData;
+  }
+  if (!d.fileUrl && d.fileKey && typeof d.fileKey === 'string') {
+    d.fileUrl = d.fileKey;
+  }
   delete d.fileKey;
   return d;
 };
+
+
 
 /**
  * List caregiver applications awaiting verification or filtered by status.

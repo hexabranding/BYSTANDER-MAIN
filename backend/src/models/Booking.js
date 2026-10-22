@@ -115,7 +115,12 @@ const bookingSchema = new mongoose.Schema(
       },
       careSetting: {
         type: String,
-        enum: ['Home Care', 'Hospital Care'],
+        enum: ['Home Care', 'Hospital Care', 'Home', 'Hospital'],
+        set: (v) => {
+          if (v === 'Home') return 'Home Care';
+          if (v === 'Hospital') return 'Hospital Care';
+          return v;
+        },
         default: 'Home Care',
         required: true,
       },

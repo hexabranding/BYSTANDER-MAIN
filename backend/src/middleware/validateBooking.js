@@ -124,8 +124,12 @@ export const validateCreateBooking = (req, res, next) => {
     if (!location.city || typeof location.city !== 'string' || location.city.trim().length < 2) {
       errors.push('location.city is required');
     }
-    if (location.careSetting && !ALLOWED_CARE_SETTINGS.includes(location.careSetting)) {
-      errors.push(`location.careSetting must be one of: ${ALLOWED_CARE_SETTINGS.join(', ')}`);
+    if (location.careSetting) {
+      if (location.careSetting === 'Home') location.careSetting = 'Home Care';
+      if (location.careSetting === 'Hospital') location.careSetting = 'Hospital Care';
+      if (!ALLOWED_CARE_SETTINGS.includes(location.careSetting)) {
+        errors.push(`location.careSetting must be one of: ${ALLOWED_CARE_SETTINGS.join(', ')}`);
+      }
     }
   }
 

@@ -13,6 +13,13 @@ const router = express.Router();
 router.post('/', authenticate, validateCreateReview, reviewController.createReview);
 
 /**
+ * @route   GET /api/reviews/my
+ * @desc    Retrieve reviews submitted by the authenticated customer
+ * @access  Private (Customer)
+ */
+router.get('/my', authenticate, reviewController.getMyReviews);
+
+/**
  * @route   GET /api/reviews/caregiver/:caregiverId
  * @desc    Retrieve public reviews for a caregiver profile
  * @access  Public

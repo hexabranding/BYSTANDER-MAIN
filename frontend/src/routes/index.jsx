@@ -4,6 +4,7 @@ import { PublicLayout } from '@/layouts/PublicLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { ProtectedRoute } from '@/components/common/ProtectedRoute'
+import { CaregiverVerifiedRoute } from '@/components/common/CaregiverVerifiedRoute'
 import { CUSTOMER_NAV, CAREGIVER_NAV, ADMIN_NAV } from '@/routes/nav'
 
 import { HomePage } from '@/pages/public/HomePage'
@@ -122,15 +123,73 @@ export function AppRoutes() {
       >
         <Route index element={<Navigate to="/caregiver/dashboard" replace />} />
         <Route path="dashboard" element={<CaregiverDashboard />} />
-        <Route path="jobs" element={<JobsPage />} />
-        <Route path="jobs/:id" element={<JobDetailsPage />} />
-        <Route path="bookings" element={<CaregiverBookings />} />
-        <Route path="bookings/:id" element={<JobDetailsPage />} />
-        <Route path="schedule" element={<SchedulePage />} />
-        <Route path="earnings" element={<EarningsPage />} />
-        <Route path="reviews" element={<ReviewsPage />} />
-        <Route path="messages" element={<CaregiverMessages />} />
         <Route path="documents" element={<DocumentsPage />} />
+
+        {/* Sections locked until Admin approves caregiver verification */}
+        <Route
+          path="jobs"
+          element={
+            <CaregiverVerifiedRoute>
+              <JobsPage />
+            </CaregiverVerifiedRoute>
+          }
+        />
+        <Route
+          path="jobs/:id"
+          element={
+            <CaregiverVerifiedRoute>
+              <JobDetailsPage />
+            </CaregiverVerifiedRoute>
+          }
+        />
+        <Route
+          path="bookings"
+          element={
+            <CaregiverVerifiedRoute>
+              <CaregiverBookings />
+            </CaregiverVerifiedRoute>
+          }
+        />
+        <Route
+          path="bookings/:id"
+          element={
+            <CaregiverVerifiedRoute>
+              <JobDetailsPage />
+            </CaregiverVerifiedRoute>
+          }
+        />
+        <Route
+          path="schedule"
+          element={
+            <CaregiverVerifiedRoute>
+              <SchedulePage />
+            </CaregiverVerifiedRoute>
+          }
+        />
+        <Route
+          path="earnings"
+          element={
+            <CaregiverVerifiedRoute>
+              <EarningsPage />
+            </CaregiverVerifiedRoute>
+          }
+        />
+        <Route
+          path="reviews"
+          element={
+            <CaregiverVerifiedRoute>
+              <ReviewsPage />
+            </CaregiverVerifiedRoute>
+          }
+        />
+        <Route
+          path="messages"
+          element={
+            <CaregiverVerifiedRoute>
+              <CaregiverMessages />
+            </CaregiverVerifiedRoute>
+          }
+        />
         <Route path="profile" element={<CaregiverProfile />} />
       </Route>
 

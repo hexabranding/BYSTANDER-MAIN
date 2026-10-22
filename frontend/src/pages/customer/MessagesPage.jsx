@@ -14,7 +14,19 @@ import { Button } from '@/components/common/Button'
 import { Chip } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
 import { Input } from '@/components/forms/FormField'
-import { bookingService, messageService, isMongoObjectId } from '@/services'
+import {
+  bookingService,
+  messageService,
+  isMongoObjectId,
+  adaptMessage,
+  initSocketConnection,
+  joinBookingRoom,
+  leaveBookingRoom,
+  emitTyping,
+  onNewMessage,
+  onTyping,
+  onMessagesRead,
+} from '@/services'
 
 const lastOf = (c) => (c.messages && c.messages.length > 0 ? c.messages[c.messages.length - 1] : null)
 
@@ -32,9 +44,11 @@ export function MessagesPage() {
   const [apiThreads, setApiThreads] = useState([])
   const [threadMessages, setThreadMessages] = useState({})
   const [unreadMap, setUnreadMap] = useState({})
+  const [partnerTyping, setPartnerTyping] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search)
   const threadRef = useRef(null)
+  const typingTimeoutRef = useRef(null)
 
   // 1. Fetch real bookings and unread counts for customer
   const loadCustomerThreads = useCallback(async () => {
@@ -55,15 +69,39 @@ export function MessagesPage() {
 
       const realThreads = (bookingsRes.bookings || []).map((b) => {
         const canSend = b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress'
+
+        // 1. Resolve authoritative caregiver name
+        const rawCaregiverName =
+          b.caregiverName ||
+          b.caregiver?.user?.fullName ||
+          b.caregiver?.fullName ||
+          b.caregiverUser?.fullName ||
+          (typeof b.caregiver === 'object' && b.caregiver?.name) ||
+          'Caregiver'
+        const caregiverName = rawCaregiverName
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ')
+
+        // 2. Resolve service and role labels
+        const serviceTitle =
+          b.serviceName ||
+          (typeof b.service === 'string' ? b.service : b.service?.name) ||
+          'Care Service'
+        const roleLabel = '(Caregiver)'
+        const role = `${roleLabel} · ${serviceTitle}`
+
         return {
           id: b.id,
           bookingId: b.id,
           bookingRef: b.ref,
           bookingStatus: b.status,
           audience: ['customer'],
-          name: b.caregiver?.name || 'Assigned Caretaker',
-          role: `${b.service?.name || 'Care Service'} · ${b.status}`,
-          avatar: b.caregiver?.avatar || '',
+          name: caregiverName,
+          roleLabel,
+          serviceTitle,
+          role,
+          avatar: b.caregiver?.avatar || b.caregiver?.user?.avatar || b.caregiverUser?.avatar || '',
           unread: unreadMapping[b.id] || 0,
           canSend,
           messages: [],
@@ -158,6 +196,73 @@ export function MessagesPage() {
     }
   }, [activeId, user])
 
+  // Socket room joining and event handling
+  useEffect(() => {
+    initSocketConnection()
+
+    const unsubMsg = onNewMessage((rawMsg) => {
+      const adapted = adaptMessage(rawMsg, user?._id || user?.id)
+      const bId = adapted.bookingId
+
+      setThreadMessages((prev) => {
+        const existing = prev[bId] || []
+        if (existing.some((m) => (m._id || m.id) === (adapted._id || adapted.id))) {
+          return prev
+        }
+        return {
+          ...prev,
+          [bId]: [...existing, adapted],
+        }
+      })
+
+      // If active conversation received this message and it's from the other participant, mark as read
+      if (bId === activeId && adapted.from !== 'me') {
+        messageService.markMessagesAsRead(bId).catch(() => {})
+      } else if (bId !== activeId) {
+        setUnreadMap((prev) => ({
+          ...prev,
+          [bId]: (prev[bId] || 0) + 1,
+        }))
+      }
+    })
+
+    const unsubTyping = onTyping((data) => {
+      if (data.bookingId === activeId && String(data.userId) !== String(user?._id || user?.id)) {
+        setPartnerTyping(Boolean(data.isTyping))
+      }
+    })
+
+    const unsubRead = onMessagesRead((data) => {
+      if (data.bookingId === activeId) {
+        setThreadMessages((prev) => {
+          const msgs = prev[activeId] || []
+          return {
+            ...prev,
+            [activeId]: msgs.map((m) => ({ ...m, read: true })),
+          }
+        })
+      }
+    })
+
+    return () => {
+      unsubMsg()
+      unsubTyping()
+      unsubRead()
+    }
+  }, [user, activeId])
+
+  useEffect(() => {
+    if (activeId && isMongoObjectId(activeId)) {
+      joinBookingRoom(activeId)
+    }
+    setPartnerTyping(false)
+    return () => {
+      if (activeId && isMongoObjectId(activeId)) {
+        leaveBookingRoom(activeId)
+      }
+    }
+  }, [activeId])
+
   // Auto-scroll to bottom of active thread
   const activeMessages = useMemo(() => {
     if (!active) return []
@@ -191,10 +296,28 @@ export function MessagesPage() {
     }
   }
 
+  const handleDraftChange = (e) => {
+    const val = e.target.value
+    setDraft(val)
+
+    if (active && isMongoObjectId(active.id)) {
+      emitTyping(active.id, true)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        emitTyping(active.id, false)
+      }, 1500)
+    }
+  }
+
   const handleSend = async (event) => {
     event.preventDefault()
     const text = draft.trim()
     if (!text || !active) return
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    if (active && isMongoObjectId(active.id)) {
+      emitTyping(active.id, false)
+    }
 
     // Precondition check: only active bookings permit messaging
     if (active.canSend === false) {
@@ -208,10 +331,16 @@ export function MessagesPage() {
     try {
       if (isMongoObjectId(active.id)) {
         const createdMsg = await messageService.sendMessage(active.id, text, user?._id || user?.id)
-        setThreadMessages((prev) => ({
-          ...prev,
-          [active.id]: [...(prev[active.id] || []), createdMsg],
-        }))
+        setThreadMessages((prev) => {
+          const current = prev[active.id] || []
+          if (current.some((m) => (m._id || m.id) === (createdMsg._id || createdMsg.id))) {
+            return prev
+          }
+          return {
+            ...prev,
+            [active.id]: [...current, createdMsg],
+          }
+        })
         setDraft('')
 
         if (createdMsg.isFlagged) {
@@ -236,15 +365,15 @@ export function MessagesPage() {
   if (!mine.length) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Messages" subtitle="Chat with your caretakers and the CareMate support desk." />
+        <PageHeader title="Messages" subtitle="Chat with your caretakers and the Bystander support desk." />
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={MessageSquare}
             title="No conversations yet"
             description="Once a caretaker is assigned to your booking, your chats will appear here."
             action={
-              <Button to="/customer/book-caregiver" icon={MessageSquare}>
-                Book a caretaker
+              <Button to="/customer/caregivers" icon={MessageSquare}>
+                Find a caretaker
               </Button>
             }
           />
@@ -257,7 +386,7 @@ export function MessagesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Messages"
-        subtitle="Chat with your caretakers and the CareMate support desk."
+        subtitle="Chat with your caretakers and the Bystander support desk."
         meta={filtered.length ? <Chip>{`${filtered.length} conversations`}</Chip> : null}
       />
 
@@ -298,7 +427,16 @@ export function MessagesPage() {
                           {last ? relativeTime(last.at) : ''}
                         </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-muted">{c.role}</span>
+                      <span className="mt-0.5 block truncate text-xs text-muted">
+                        {c.roleLabel ? (
+                          <>
+                            <span className="font-semibold text-primary-700">{c.roleLabel}</span>
+                            {c.serviceTitle ? ` · ${c.serviceTitle}` : ''}
+                          </>
+                        ) : (
+                          c.role
+                        )}
+                      </span>
                       <span className="mt-1 flex items-center gap-2">
                         <span
                           className={cn(
@@ -350,7 +488,17 @@ export function MessagesPage() {
                 <Avatar src={active.avatar} name={active.name} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-display text-sm font-bold text-ink">{active.name}</p>
-                  <p className="truncate text-xs text-muted">{active.role}</p>
+                  <p className="truncate text-xs text-muted">
+                    {active.roleLabel ? (
+                      <>
+                        <span className="font-semibold text-primary-700">{active.roleLabel}</span>
+                        {active.serviceTitle ? ` · ${active.serviceTitle}` : ''}
+                        {active.bookingStatus ? ` · ${active.bookingStatus}` : ''}
+                      </>
+                    ) : (
+                      active.role
+                    )}
+                  </p>
                 </div>
                 {active.bookingRef ? <Chip className="shrink-0">{active.bookingRef}</Chip> : null}
               </div>
@@ -403,10 +551,21 @@ export function MessagesPage() {
                 )}
               </div>
 
+              {partnerTyping ? (
+                <div className="flex items-center gap-2 border-t border-line bg-mint-50/70 px-4 py-1.5 text-xs font-medium text-primary-700">
+                  <span className="flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-600" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-600 delay-150" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-600 delay-300" />
+                  </span>
+                  <span>{active.name.split(' ')[0]} is typing…</span>
+                </div>
+              ) : null}
+
               <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line bg-white px-4 py-3">
                 <Input
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={handleDraftChange}
                   placeholder={
                     active.canSend === false
                       ? 'Messaging is closed for this booking'

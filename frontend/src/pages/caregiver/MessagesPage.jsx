@@ -14,7 +14,19 @@ import { SearchBar } from '@/components/common/SearchBar'
 import { Avatar } from '@/components/common/Avatar'
 import { Chip } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
-import { bookingService, messageService, isMongoObjectId } from '@/services'
+import {
+  bookingService,
+  messageService,
+  isMongoObjectId,
+  adaptMessage,
+  initSocketConnection,
+  joinBookingRoom,
+  leaveBookingRoom,
+  emitTyping,
+  onNewMessage,
+  onTyping,
+  onMessagesRead,
+} from '@/services'
 
 export function MessagesPage() {
   useDocumentTitle('Messages')
@@ -30,7 +42,9 @@ export function MessagesPage() {
   const [apiThreads, setApiThreads] = useState([])
   const [threadMessages, setThreadMessages] = useState({})
   const [unreadMap, setUnreadMap] = useState({})
+  const [partnerTyping, setPartnerTyping] = useState(false)
   const threadRef = useRef(null)
+  const typingTimeoutRef = useRef(null)
 
   // 1. Load caregiver booking threads and unread counts
   const loadCaregiverThreads = useCallback(async () => {
@@ -51,14 +65,37 @@ export function MessagesPage() {
 
       const realThreads = (bookingsRes.bookings || []).map((b) => {
         const canSend = b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress'
+
+        // 1. Resolve authoritative customer name
+        const rawCustName =
+          b.customerName ||
+          b.customer?.fullName ||
+          b.customer?.name ||
+          (typeof b.customer === 'object' && b.customer?.fullName) ||
+          'Customer'
+        const custName = rawCustName
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ')
+
+        // 2. Resolve service and role labels
+        const serviceTitle =
+          b.serviceName ||
+          (typeof b.service === 'string' ? b.service : b.service?.name) ||
+          'Care Service'
+        const roleLabel = '(Customer)'
+        const role = `${roleLabel} · ${serviceTitle}`
+
         return {
           id: b.id,
           bookingId: b.id,
           bookingRef: b.ref,
           bookingStatus: b.status,
           audience: ['caregiver'],
-          name: b.customer?.name || 'Customer',
-          role: `${b.service?.name || 'Care Engagement'} · ${b.status}`,
+          name: custName,
+          roleLabel,
+          serviceTitle,
+          role,
           avatar: b.customer?.avatar || '',
           unread: unreadMapping[b.id] || 0,
           canSend,
@@ -141,6 +178,72 @@ export function MessagesPage() {
     }
   }, [activeId, user, active?.id, active?.unread, localMarkRead])
 
+  // Socket room joining and event handling
+  useEffect(() => {
+    initSocketConnection()
+
+    const unsubMsg = onNewMessage((rawMsg) => {
+      const adapted = adaptMessage(rawMsg, user?._id || user?.id)
+      const bId = adapted.bookingId
+
+      setThreadMessages((prev) => {
+        const existing = prev[bId] || []
+        if (existing.some((m) => (m._id || m.id) === (adapted._id || adapted.id))) {
+          return prev
+        }
+        return {
+          ...prev,
+          [bId]: [...existing, adapted],
+        }
+      })
+
+      if (bId === activeId && adapted.from !== 'me') {
+        messageService.markMessagesAsRead(bId).catch(() => {})
+      } else if (bId !== activeId) {
+        setUnreadMap((prev) => ({
+          ...prev,
+          [bId]: (prev[bId] || 0) + 1,
+        }))
+      }
+    })
+
+    const unsubTyping = onTyping((data) => {
+      if (data.bookingId === activeId && String(data.userId) !== String(user?._id || user?.id)) {
+        setPartnerTyping(Boolean(data.isTyping))
+      }
+    })
+
+    const unsubRead = onMessagesRead((data) => {
+      if (data.bookingId === activeId) {
+        setThreadMessages((prev) => {
+          const msgs = prev[activeId] || []
+          return {
+            ...prev,
+            [activeId]: msgs.map((m) => ({ ...m, read: true })),
+          }
+        })
+      }
+    })
+
+    return () => {
+      unsubMsg()
+      unsubTyping()
+      unsubRead()
+    }
+  }, [user, activeId])
+
+  useEffect(() => {
+    if (activeId && isMongoObjectId(activeId)) {
+      joinBookingRoom(activeId)
+    }
+    setPartnerTyping(false)
+    return () => {
+      if (activeId && isMongoObjectId(activeId)) {
+        leaveBookingRoom(activeId)
+      }
+    }
+  }, [activeId])
+
   const activeMessages = useMemo(() => {
     if (!active) return []
     return threadMessages[active.id] || active.messages || []
@@ -156,9 +259,27 @@ export function MessagesPage() {
     setShowThread(true)
   }
 
+  const handleDraftChange = (e) => {
+    const val = e.target.value
+    setDraft(val)
+
+    if (active && isMongoObjectId(active.id)) {
+      emitTyping(active.id, true)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        emitTyping(active.id, false)
+      }, 1500)
+    }
+  }
+
   const handleSend = async () => {
     const text = draft.trim()
     if (!text || !active) return
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    if (active && isMongoObjectId(active.id)) {
+      emitTyping(active.id, false)
+    }
 
     if (active.canSend === false) {
       toast.error(
@@ -171,10 +292,16 @@ export function MessagesPage() {
     try {
       if (isMongoObjectId(active.id)) {
         const createdMsg = await messageService.sendMessage(active.id, text, user?._id || user?.id)
-        setThreadMessages((prev) => ({
-          ...prev,
-          [active.id]: [...(prev[active.id] || []), createdMsg],
-        }))
+        setThreadMessages((prev) => {
+          const current = prev[active.id] || []
+          if (current.some((m) => (m._id || m.id) === (createdMsg._id || createdMsg.id))) {
+            return prev
+          }
+          return {
+            ...prev,
+            [active.id]: [...current, createdMsg],
+          }
+        })
         setDraft('')
 
         if (createdMsg.isFlagged) {
@@ -250,7 +377,16 @@ export function MessagesPage() {
                             {last ? relativeTime(last.at) : ''}
                           </span>
                         </div>
-                        <p className="truncate text-xs text-muted">{c.role}</p>
+                        <p className="truncate text-xs text-muted">
+                          {c.roleLabel ? (
+                            <>
+                              <span className="font-semibold text-primary-700">{c.roleLabel}</span>
+                              {c.serviceTitle ? ` · ${c.serviceTitle}` : ''}
+                            </>
+                          ) : (
+                            c.role
+                          )}
+                        </p>
                         <div className="mt-1 flex items-center justify-between gap-2">
                           <p className="truncate text-xs text-faint">{last?.text || 'No messages yet'}</p>
                           {unreadCount ? (
@@ -286,7 +422,17 @@ export function MessagesPage() {
                     <Avatar src={active.avatar} name={active.name} size="sm" />
                     <div className="min-w-0">
                       <p className="truncate font-display text-sm font-bold text-ink">{active.name}</p>
-                      <p className="truncate text-xs text-muted">{active.role}</p>
+                      <p className="truncate text-xs text-muted">
+                        {active.roleLabel ? (
+                          <>
+                            <span className="font-semibold text-primary-700">{active.roleLabel}</span>
+                            {active.serviceTitle ? ` · ${active.serviceTitle}` : ''}
+                            {active.bookingStatus ? ` · ${active.bookingStatus}` : ''}
+                          </>
+                        ) : (
+                          active.role
+                        )}
+                      </p>
                     </div>
                     {active.bookingRef ? (
                       <Chip className="hidden sm:inline-flex" selected>
@@ -339,11 +485,22 @@ export function MessagesPage() {
                   )}
                 </div>
 
+                {partnerTyping ? (
+                  <div className="flex items-center gap-2 border-t border-line bg-mint-50/70 px-4 py-1.5 text-xs font-medium text-primary-700 sm:px-5">
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-600" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-600 delay-150" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-600 delay-300" />
+                    </span>
+                    <span>{active.name.split(' ')[0]} is typing…</span>
+                  </div>
+                ) : null}
+
                 <div className="flex items-center gap-2 border-t border-line px-4 py-3 sm:px-5">
                   <input
                     type="text"
                     value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
+                    onChange={handleDraftChange}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()

@@ -1,7 +1,9 @@
 import { NavLink } from 'react-router-dom'
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, Lock } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/utils/cn'
 import { Logo } from '@/components/common/Logo'
+import { useAuth } from '@/context/AuthContext'
 
 function resolveBadge(item, values) {
   const raw = item.badge
@@ -13,6 +15,11 @@ function resolveBadge(item, values) {
 
 export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer, logoSize = 'md' }) {
   const largeLogo = logoSize === 'lg'
+  const { user } = useAuth()
+  const isUnverifiedCaregiver =
+    user?.role === 'caregiver' &&
+    !(user?.verified === true || String(user?.verificationStatus || '').toLowerCase() === 'verified')
+
   return (
     <aside
       className={cn(
@@ -42,24 +49,48 @@ export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer,
               {group.items.map((item) => {
                 const badge = resolveBadge(item, values)
                 const Icon = item.icon
+                const isLocked =
+                  isUnverifiedCaregiver &&
+                  item.to !== '/caregiver/dashboard' &&
+                  item.to !== '/caregiver/documents'
+
                 return (
                   <li key={item.to}>
                     <NavLink
                       to={item.to}
-                      title={collapsed ? item.label : undefined}
+                      title={collapsed ? (isLocked ? `${item.label} (Locked · Verification Required)` : item.label) : undefined}
+                      onClick={(e) => {
+                        if (isLocked) {
+                          e.preventDefault()
+                          toast.error(`Verification required: "${item.label}" is locked until admin approves your documents.`)
+                        }
+                      }}
                       className={({ isActive }) =>
                         cn(
                           'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
                           collapsed && 'justify-center px-0',
-                          isActive
-                            ? 'bg-primary-700 text-white shadow-[0_10px_22px_-14px_rgba(15,118,110,1)]'
-                            : 'text-muted hover:bg-slate-100 hover:text-ink',
+                          isLocked
+                            ? 'cursor-not-allowed text-faint opacity-65 hover:bg-transparent'
+                            : isActive
+                              ? 'bg-primary-700 text-white shadow-[0_10px_22px_-14px_rgba(15,118,110,1)]'
+                              : 'text-muted hover:bg-slate-100 hover:text-ink',
                         )
                       }
                     >
                       <Icon className="h-[18px] w-[18px] shrink-0" />
                       {!collapsed ? <span className="flex-1 truncate">{item.label}</span> : null}
-                      {badge ? (
+                      {isLocked ? (
+                        !collapsed ? (
+                          <span className="ml-auto inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                            <Lock className="h-2.5 w-2.5" />
+                            Locked
+                          </span>
+                        ) : (
+                          <span className="absolute right-1 top-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-amber-100 text-amber-700">
+                            <Lock className="h-2 w-2" />
+                          </span>
+                        )
+                      ) : badge ? (
                         <span
                           className={cn(
                             'grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-bold',
@@ -100,6 +131,11 @@ export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer,
 
 export function MobileSidebar({ open, onClose, nav, values = {}, header, footer, logoSize = 'md' }) {
   const largeLogo = logoSize === 'lg'
+  const { user } = useAuth()
+  const isUnverifiedCaregiver =
+    user?.role === 'caregiver' &&
+    !(user?.verified === true || String(user?.verificationStatus || '').toLowerCase() === 'verified')
+
   return (
     <>
       <div
@@ -143,21 +179,42 @@ export function MobileSidebar({ open, onClose, nav, values = {}, header, footer,
                 {group.items.map((item) => {
                   const badge = resolveBadge(item, values)
                   const Icon = item.icon
+                  const isLocked =
+                    isUnverifiedCaregiver &&
+                    item.to !== '/caregiver/dashboard' &&
+                    item.to !== '/caregiver/documents'
+
                   return (
                     <li key={item.to}>
                       <NavLink
                         to={item.to}
-                        onClick={onClose}
+                        onClick={(e) => {
+                          if (isLocked) {
+                            e.preventDefault()
+                            toast.error(`Verification required: "${item.label}" is locked until admin approves your documents.`)
+                            return
+                          }
+                          onClose()
+                        }}
                         className={({ isActive }) =>
                           cn(
                             'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
-                            isActive ? 'bg-primary-700 text-white' : 'text-muted hover:bg-slate-100 hover:text-ink',
+                            isLocked
+                              ? 'cursor-not-allowed text-faint opacity-65'
+                              : isActive
+                                ? 'bg-primary-700 text-white'
+                                : 'text-muted hover:bg-slate-100 hover:text-ink',
                           )
                         }
                       >
                         <Icon className="h-[18px] w-[18px] shrink-0" />
                         <span className="flex-1 truncate">{item.label}</span>
-                        {badge ? (
+                        {isLocked ? (
+                          <span className="ml-auto inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                            <Lock className="h-2.5 w-2.5" />
+                            Locked
+                          </span>
+                        ) : badge ? (
                           <span
                             className={cn(
                               'grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-bold',

@@ -880,3 +880,152 @@ test('Step 13E - 14: concurrent reviews across independent workers guarantee rat
     await replSet.stop();
   }
 });
+
+// -----------------------------------------------------------------------------
+// Test 15: Customer Ownership & Scoping for GET /api/reviews/my
+// -----------------------------------------------------------------------------
+test('Step 13E - 15: getMyCustomerReviews enforces authenticated customer and scopes queries strictly by user._id', async () => {
+  // A. Unauthenticated / missing user throws 401
+  await assert.rejects(
+    async () => {
+      await reviewService.getMyCustomerReviews(null);
+    },
+    (err) => {
+      assert.equal(err.statusCode, 401);
+      assert.match(err.message, /authenticated customer identifier required/i);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    async () => {
+      await reviewService.getMyCustomerReviews({ _id: 'invalid-id' });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 401);
+      return true;
+    },
+  );
+
+  // B. Customer querying reviews: verify query filter and populate options
+  const customerId = new mongoose.Types.ObjectId();
+  const mockCustomer = { _id: customerId, role: 'customer' };
+
+  let capturedFilter = null;
+  let capturedSort = null;
+  let capturedSkip = null;
+  let capturedLimit = null;
+  const capturedPopulates = [];
+
+  const originalFind = Review.find;
+  const originalCount = Review.countDocuments;
+
+  Review.find = (filter) => {
+    capturedFilter = filter;
+    const queryObj = {
+      sort(s) {
+        capturedSort = s;
+        return queryObj;
+      },
+      skip(sk) {
+        capturedSkip = sk;
+        return queryObj;
+      },
+      limit(l) {
+        capturedLimit = l;
+        return queryObj;
+      },
+      populate(path, select) {
+        capturedPopulates.push({ path, select });
+        return queryObj;
+      },
+      then(resolve) {
+        resolve([
+          {
+            _id: new mongoose.Types.ObjectId(),
+            customer: customerId,
+            rating: 5,
+            comment: 'Wonderful caregiver!',
+          },
+        ]);
+      },
+    };
+    return queryObj;
+  };
+
+  Review.countDocuments = async (filter) => {
+    assert.deepEqual(filter, { customer: customerId });
+    return 1;
+  };
+
+  try {
+    const res = await reviewService.getMyCustomerReviews(mockCustomer, { page: 2, limit: 5 });
+    assert.deepEqual(capturedFilter, { customer: customerId }, 'Must filter strictly by user._id');
+    assert.deepEqual(capturedSort, { createdAt: -1 }, 'Must sort newest first');
+    assert.equal(capturedSkip, 5, 'Skip must be (page - 1) * limit');
+    assert.equal(capturedLimit, 5, 'Limit must be respected');
+    assert.equal(res.reviews.length, 1);
+    assert.equal(res.pagination.total, 1);
+    assert.equal(res.pagination.page, 2);
+    assert.equal(res.pagination.limit, 5);
+    assert.ok(
+      capturedPopulates.some((p) => p.path === 'caregiver'),
+      'Must populate caregiver profile',
+    );
+    assert.ok(
+      capturedPopulates.some((p) => p.path === 'booking'),
+      'Must populate booking engagement',
+    );
+  } finally {
+    Review.find = originalFind;
+    Review.countDocuments = originalCount;
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Test 16: Controller Mapping & Error Propagation for getMyReviews
+// -----------------------------------------------------------------------------
+test('Step 13E - 16: reviewController.getMyReviews maps successful result and propagates errors', async () => {
+  const { reviewController } = await import('../src/controllers/reviewController.js');
+
+  // A. Success mapping
+  const mockReviews = [{ _id: 'rev-1', rating: 5, comment: 'Great' }];
+  const mockPagination = { total: 1, page: 1, limit: 10, pages: 1 };
+  const originalGet = reviewService.reviewService.getMyCustomerReviews;
+
+  reviewService.reviewService.getMyCustomerReviews = async (user, query) => {
+    assert.equal(user.role, 'customer');
+    return { reviews: mockReviews, pagination: mockPagination };
+  };
+
+  try {
+    const { req, res, next, getNextCalled } = createMockReqRes({
+      user: { _id: new mongoose.Types.ObjectId(), role: 'customer' },
+      query: { page: '1' },
+    });
+
+    await reviewController.getMyReviews(req, res, next);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.jsonData.success, true);
+    assert.deepEqual(res.jsonData.reviews, mockReviews);
+    assert.deepEqual(res.jsonData.pagination, mockPagination);
+    assert.equal(getNextCalled(), false);
+
+    // B. Error propagation to Express next()
+    const testErr = new Error('Database query failure');
+    reviewService.reviewService.getMyCustomerReviews = async () => {
+      throw testErr;
+    };
+
+    const { req: errReq, res: errRes, next: errNext, getNextCalled: errNextCalled, getNextError } = createMockReqRes({
+      user: { _id: new mongoose.Types.ObjectId(), role: 'customer' },
+    });
+
+    await reviewController.getMyReviews(errReq, errRes, errNext);
+    assert.equal(errNextCalled(), true);
+    assert.equal(getNextError(), testErr);
+  } finally {
+    reviewService.reviewService.getMyCustomerReviews = originalGet;
+  }
+});
+

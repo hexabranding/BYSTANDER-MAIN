@@ -63,7 +63,7 @@ const TRUST_ITEMS = [
   {
     icon: EyeOff,
     title: 'Masked contact until you book',
-    body: 'Messaging and calls run through CareMate, so personal numbers stay private. Your address is shared only with the caretaker assigned to your shift.',
+    body: 'Messaging and calls run through Bystander, so personal numbers stay private. Your address is shared only with the caretaker assigned to your shift.',
   },
 ]
 
@@ -196,7 +196,7 @@ export function HomePage() {
               </motion.span>
 
               <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-primary-700">
-                CareMate · Never alone
+                Bystander · Never alone
               </p>
 
               <h1 className="mt-2 font-display text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-[3.75rem]">
@@ -447,7 +447,7 @@ export function HomePage() {
       </Section>
 
       {/* ---------------- featured caregivers ---------------- */}
-      <Section tone="canvas" divider="both">
+      {/* <Section tone="canvas" divider="both">
         <Container>
           <motion.div {...reveal}>
             <SectionHeading
@@ -474,7 +474,7 @@ export function HomePage() {
             ))}
           </div>
         </Container>
-      </Section>
+      </Section> */}
 
       {/* ---------------- trust & safety ---------------- */}
       <Section
@@ -510,7 +510,7 @@ export function HomePage() {
                 </span>
               </h2>
               <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
-                Letting a stranger into a hospital room or a home is a serious decision. CareMate documents every
+                Letting a stranger into a hospital room or a home is a serious decision. Bystander documents every
                 step — verification, payment, communication and emergency response — so families never have to take
                 anyone on trust alone.
               </p>
@@ -802,7 +802,7 @@ export function HomePage() {
               Care starts with one conversation
             </h2>
             <p className="mt-2.5 text-sm leading-relaxed text-primary-800/80 sm:text-base">
-              Browse verified caretakers near you, or join CareMate as a caretaker and get paid for work you are
+              Browse verified caretakers near you, or join Bystander as a caretaker and get paid for work you are
               already qualified to do.
             </p>
           </div>

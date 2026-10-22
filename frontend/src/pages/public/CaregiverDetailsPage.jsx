@@ -147,23 +147,23 @@ export function CaregiverDetailsPage() {
     rating: profileRating,
     reviewCount,
     hourlyRate,
-    services,
-    languages,
-    city,
-    area,
-    distanceKm,
-    availability,
-    verified,
-    careSettings,
-    bio,
-    joinedOn,
-    trustScore,
-    responseRate,
-    completedJobs,
-    repeatClients,
-    badges,
-    specialities,
-    weekAvailability,
+    services = [],
+    languages = [],
+    city = '',
+    area = '',
+    distanceKm = 2.5,
+    availability = 'Available Now',
+    verified = false,
+    careSettings = [],
+    bio = '',
+    joinedOn = new Date().toISOString(),
+    trustScore = 95,
+    responseRate = 96,
+    completedJobs = 0,
+    repeatClients = 0,
+    badges = [],
+    specialities = [],
+    weekAvailability = [],
   } = caregiver
 
   const caregiverReviews = (reviews ?? []).filter((r) => r.caregiverId === caregiverId)
@@ -175,7 +175,7 @@ export function CaregiverDetailsPage() {
 
   const handleBook = () => {
     if (isLoggedIn && user?.role === 'customer') {
-      navigate('/customer/book-caregiver')
+      navigate(`/customer/book-caregiver?caregiver=${caregiverId}`)
       return
     }
     if (isLoggedIn) {
@@ -290,7 +290,7 @@ export function CaregiverDetailsPage() {
             </Card>
 
             <Card>
-              <CardHeader title="About" subtitle={`Joined CareMate on ${formatDate(joinedOn, { long: true })}`} icon={Sparkles} />
+              <CardHeader title="About" subtitle={`Joined Bystander on ${formatDate(joinedOn, { long: true })}`} icon={Sparkles} />
               <CardBody>
                 <p className="text-sm leading-relaxed text-ink-soft">{bio}</p>
 
@@ -310,7 +310,7 @@ export function CaregiverDetailsPage() {
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-faint">Specialities</h3>
                     <ul className="mt-2.5 space-y-2">
-                      {specialities.map((spec) => (
+                      {(specialities || []).map((spec) => (
                         <li key={spec} className="flex items-start gap-2 text-sm text-ink-soft">
                           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-400" />
                           {spec}
@@ -460,7 +460,7 @@ export function CaregiverDetailsPage() {
 
                 <p className="flex items-start gap-2 text-xs leading-relaxed text-muted">
                   <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-600" />
-                  Identity, registration and address documents verified by the CareMate operations team.
+                  Identity, registration and address documents verified by the Bystander operations team.
                 </p>
               </CardBody>
             </Card>
@@ -498,8 +498,8 @@ export function CaregiverDetailsPage() {
                 <h2 className="font-display text-lg font-bold text-ink">Ratings &amp; reviews</h2>
                 <p className="text-sm text-muted">
                   {caregiverReviews.length
-                    ? `${caregiverReviews.length} review${caregiverReviews.length === 1 ? '' : 's'} from verified CareMate bookings`
-                    : 'Reviews appear after a completed CareMate booking'}
+                    ? `${caregiverReviews.length} review${caregiverReviews.length === 1 ? '' : 's'} from verified Bystander bookings`
+                    : 'Reviews appear after a completed Bystander booking'}
                 </p>
               </div>
             </div>
@@ -565,7 +565,7 @@ export function CaregiverDetailsPage() {
             },
             {
               icon: Globe,
-              title: `${joinYears(joinedOn)} on CareMate`,
+              title: `${joinYears(joinedOn)} on Bystander`,
               body: `Registered since ${formatDate(joinedOn, { long: true })} with a stable record.`,
             },
             {

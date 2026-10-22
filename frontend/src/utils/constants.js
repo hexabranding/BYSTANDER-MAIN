@@ -46,6 +46,7 @@ export const STATUS_STYLES = {
   refundedPartial: 'bg-warning-50 text-warning-700 ring-warning-400/50',
   dismissed: 'bg-slate-100 text-slate-600 ring-slate-400/40',
   'action-taken': 'bg-accent-50 text-accent-600 ring-accent-500/40',
+  'not-uploaded': 'bg-slate-100 text-slate-600 ring-slate-400/40',
 }
 
 export const STATUS_DOT = {
@@ -53,6 +54,8 @@ export const STATUS_DOT = {
   'under-review': 'bg-warning-400',
   reviewing: 'bg-warning-400',
   verified: 'bg-success-500',
+  'not-uploaded': 'bg-slate-400',
+
   approved: 'bg-success-500',
   confirmed: 'bg-accent-400',
   active: 'bg-success-500',

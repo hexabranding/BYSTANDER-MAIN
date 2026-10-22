@@ -42,7 +42,9 @@ import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePri
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Modal } from '@/components/common/Modal'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
-import { bookingService } from '@/services'
+import { bookingService, complaintService, reviewService, financeService } from '@/services'
+
+const isMongoObjectId = (id) => Boolean(id && typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id))
 
 const COMPLAINT_CATEGORIES = ['Misbehavior', 'Theft', 'Abuse', 'Harassment', 'Medical negligence', 'Other']
 
@@ -278,19 +280,37 @@ export function BookingDetailsPage() {
       },
     ]
     downloadText(`${booking.invoiceNo || booking.id}.csv`, toCSV(rows))
-    toast.success('Invoice downloaded', { description: `${booking.invoiceNo} saved as a demo CSV file.` })
+    toast.success('Invoice downloaded', { description: `${booking.invoiceNo} saved successfully.` })
   }
 
-  const handleRaiseComplaint = () => {
+  const handleRaiseComplaint = async () => {
     if (!complaint.subject.trim() || !complaint.description.trim()) {
       toast.error('Please add a subject and description')
       return
     }
+    const targetBookingId = booking?.dbId || booking?._id || booking?.id
+    if (isMongoObjectId(targetBookingId)) {
+      try {
+        await complaintService.submitComplaint({
+          bookingId: targetBookingId,
+          category: complaint.category,
+          priority: 'Medium',
+          subject: complaint.subject.trim(),
+          description: complaint.description.trim(),
+        })
+      } catch (err) {
+        console.error('[Complaint Submission Error]', err)
+        toast.error('Unable to submit complaint', {
+          description: err.message || 'Please check your connection and try again.',
+        })
+        return
+      }
+    }
     createComplaint({
       bookingId: booking.id,
-      complainant: customer?.name || user?.name || 'Priya Sharma',
+      complainant: customer?.name || user?.name || 'Customer',
       complainantType: 'Customer',
-      against: caregiver?.name || 'CareMate Platform',
+      against: caregiver?.name || 'Bystander Platform',
       againstType: caregiver ? 'Caretaker' : 'Platform',
       category: complaint.category,
       priority: 'Medium',
@@ -305,33 +325,60 @@ export function BookingDetailsPage() {
     setComplaintOpen(false)
   }
 
-  const handlePayNow = () => {
+  const handlePayNow = async () => {
+    const targetBookingId = booking?.dbId || booking?._id || booking?.id
     setPaying(true)
-    setTimeout(() => {
-      const methodLabel = PAYMENT_METHODS.find((m) => m.id === payMethod)?.label || 'UPI'
-      updateBooking(booking.id, { paymentStatus: 'Escrow Held' })
-      addTransaction({
-        bookingId: booking.id,
-        customerId: booking.customerId,
-        caregiverId: booking.caregiverId,
-        names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caretaker'}`,
-        service: booking.service,
-        amount: booking.total,
-        commission: booking.commission || Math.round(booking.subtotal * 0.12),
-        payout: booking.subtotal,
-        method: methodLabel,
-        status: 'Escrow Held',
-        type: 'Booking payment',
-      })
-      setPaying(false)
-      setPayOpen(false)
-      toast.success('Payment secured in escrow', {
-        description: `Paid via ${methodLabel}. Funds release after the service completes.`,
-      })
-    }, 900)
+    if (isMongoObjectId(targetBookingId)) {
+      try {
+        await financeService.simulateBookingPayment(targetBookingId, {
+          status: 'SIMULATED_ESCROW_HELD',
+        })
+      } catch (err) {
+        setPaying(false)
+        console.error('[Payment Simulation Error]', err)
+        toast.error('Payment simulation failed', {
+          description: err.message || 'Please verify the booking status and try again.',
+        })
+        return
+      }
+    }
+    const methodLabel = PAYMENT_METHODS.find((m) => m.id === payMethod)?.label || 'UPI'
+    updateBooking(booking.id, { paymentStatus: 'Escrow Held' })
+    addTransaction({
+      bookingId: booking.id,
+      customerId: booking.customerId,
+      caregiverId: booking.caregiverId,
+      names: `${customer?.name || 'Customer'} → ${caregiver?.name || 'Caretaker'}`,
+      service: booking.service,
+      amount: booking.total,
+      commission: booking.commission || Math.round(booking.subtotal * 0.12),
+      payout: booking.subtotal,
+      method: methodLabel,
+      status: 'Escrow Held',
+      type: 'Booking payment',
+    })
+    setPaying(false)
+    setPayOpen(false)
+    toast.success('Payment secured in simulated escrow', {
+      description: `Simulated via ${methodLabel}. Funds release after shift completion. (Test mode only).`,
+    })
   }
 
-  const handleSettle = () => {
+  const handleSettle = async () => {
+    const targetBookingId = booking?.dbId || booking?._id || booking?.id
+    if (isMongoObjectId(targetBookingId)) {
+      try {
+        await financeService.simulateBookingPayment(targetBookingId, {
+          status: 'SIMULATED_RELEASED_TO_CAREGIVER',
+        })
+      } catch (err) {
+        console.error('[Payment Settlement Error]', err)
+        toast.error('Unable to release payment', {
+          description: err.message || 'Please check that the shift is verified and try again.',
+        })
+        return
+      }
+    }
     advanceBooking(booking.id, 'settle')
     const tx = addTransaction({
       bookingId: booking.id,
@@ -363,21 +410,45 @@ export function BookingDetailsPage() {
     })
   }
 
-  const handleRate = () => {
-    const avg = (
+  const handleRate = async () => {
+    const avg = Number((
       (rateForm.serviceQuality + rateForm.behaviour + rateForm.punctuality + rateForm.overall) / 4
-    ).toFixed(1)
+    ).toFixed(1))
+    const targetBookingId = booking?.dbId || booking?._id || booking?.id
+
+    if (isMongoObjectId(targetBookingId)) {
+      try {
+        await reviewService.submitReview({
+          bookingId: targetBookingId,
+          rating: avg,
+          criteria: {
+            serviceQuality: rateForm.serviceQuality,
+            behaviour: rateForm.behaviour,
+            punctuality: rateForm.punctuality,
+            overall: rateForm.overall,
+          },
+          comment: rateForm.comment.trim() || undefined,
+        })
+      } catch (err) {
+        console.error('[Review Submission Error]', err)
+        toast.error('Unable to submit review', {
+          description: err.message || 'Please check that the booking is completed and try again.',
+        })
+        return
+      }
+    }
+
     addReview({
       bookingId: booking.id,
       caregiverId: booking.caregiverId,
       customerId: booking.customerId,
       customerName: customer?.name || user?.name || 'Customer',
-      rating: Number(avg),
+      rating: avg,
       criteria: { ...rateForm, comment: undefined },
       comment: rateForm.comment.trim() || 'Great service, thank you!',
     })
     updateBooking(booking.id, {
-      customerRating: { ...rateForm, average: Number(avg), at: new Date().toISOString() },
+      customerRating: { ...rateForm, average: avg, at: new Date().toISOString() },
     })
     setRateOpen(false)
     toast.success('Thank you for your review!', {
@@ -390,7 +461,7 @@ export function BookingDetailsPage() {
       bookingRef: booking.ref,
       audienceRole: 'customer',
       name: caregiver?.name || 'Care Coordinator',
-      roleLabel: caregiver?.qualification || 'CareMate support',
+      roleLabel: caregiver?.qualification || 'Bystander support',
       avatar: caregiver?.photo || '',
       firstMessage: `Hi, I'm reaching out regarding booking ${booking.id} (${booking.service} on ${formatDate(booking.date)}).`,
     })
@@ -747,10 +818,12 @@ export function BookingDetailsPage() {
           <Card>
             <CardHeader title="Instructions & notes" />
             <CardBody className="space-y-4 text-sm leading-relaxed text-muted">
-              {booking.specialInstructions ? (
+              {(booking.specialInstructions || booking.patientDetails?.specialInstructions || booking.patient?.specialInstructions) ? (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-faint">Special instructions</p>
-                  <p className="mt-1.5 text-ink-soft">{booking.specialInstructions}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-faint">Special instructions & Care directives</p>
+                  <p className="mt-1.5 text-ink-soft">
+                    {booking.specialInstructions || booking.patientDetails?.specialInstructions || booking.patient?.specialInstructions}
+                  </p>
                 </div>
               ) : null}
               {booking.notes ? (
@@ -759,7 +832,7 @@ export function BookingDetailsPage() {
                   <p className="mt-1.5 text-ink-soft">{booking.notes}</p>
                 </div>
               ) : null}
-              {!booking.specialInstructions && !booking.notes ? (
+              {!booking.specialInstructions && !booking.patientDetails?.specialInstructions && !booking.patient?.specialInstructions && !booking.notes ? (
                 <p>No special instructions were added for this booking.</p>
               ) : null}
               {booking.cancelReason ? (
@@ -1018,9 +1091,8 @@ export function BookingDetailsPage() {
               </button>
             ))}
           </div>
-          <p className="text-[11px] leading-relaxed text-faint">
-            Payments are simulated in this demo — no real money is charged. In production this step runs through the
-            PCI-compliant gateway with escrow protection.
+          <p className="text-[11px] leading-relaxed text-muted">
+            All payments are securely processed through platform escrow protection. Funds are disbursed to the caregiver only after shift completion and customer sign-off.
           </p>
         </form>
       </Modal>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Heart, LayoutGrid, List, SearchX, SlidersHorizontal, UserRound } from 'lucide-react'
+import { Heart, LayoutGrid, List, SearchX, SlidersHorizontal } from 'lucide-react'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
@@ -138,11 +138,6 @@ export function CaregiversPage() {
       <PageHeader
         title="Caretakers"
         subtitle="Browse verified caretakers, shortlist your favourites and book in minutes."
-        action={
-          <Button to="/customer/book-caregiver" icon={UserRound}>
-            Book a caretaker
-          </Button>
-        }
         meta={
           <>
             <Chip>{`Shortlisted · ${shortlisted.size}`}</Chip>
@@ -271,7 +266,10 @@ export function CaregiversPage() {
                   key={cg.id}
                   caregiver={cg}
                   view="grid"
-                  onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
+                  onBook={(targetCg) => {
+                    const id = targetCg?._id || targetCg?.id || cg._id || cg.id
+                    navigate(`/customer/book-caregiver?caregiver=${id}`)
+                  }}
                   actionLabel="View profile"
                 />
               ))}
@@ -283,7 +281,10 @@ export function CaregiversPage() {
                   key={cg.id}
                   caregiver={cg}
                   view="list"
-                  onBook={() => navigate(`/customer/book-caregiver?caregiver=${cg.id}`)}
+                  onBook={(targetCg) => {
+                    const id = targetCg?._id || targetCg?.id || cg._id || cg.id
+                    navigate(`/customer/book-caregiver?caregiver=${id}`)
+                  }}
                   actionLabel="View profile"
                 />
               ))}

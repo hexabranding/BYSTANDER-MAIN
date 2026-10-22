@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -25,11 +25,12 @@ import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { PageHeader } from '@/components/common/PageHeader'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState } from '@/components/common/States'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { BookingTimeline } from '@/components/common/TimelinePrice'
 import { CheckInOutModal } from '@/components/booking/CheckInOutModal'
 import { RatingModal } from '@/components/booking/RatingModal'
+import { bookingService, adaptBookingToJob, isMongoObjectId } from '@/services'
 
 const CUSTOMER_CRITERIA = [
   { key: 'cooperation', label: 'Cooperation' },
@@ -45,16 +46,80 @@ export function JobDetailsPage() {
   const { jobs, bookings, caregivers, acceptJob, rejectJob, advanceBooking, updateBooking } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
-  const caregiver = caregivers.find((c) => c.id === myId) || caregivers[0]
+  const caregiver = caregivers?.find((c) => c.id === myId) || caregivers?.[0]
 
-  const job = useMemo(() => jobs.find((j) => j.id === id || j.bookingId === id), [jobs, id])
-  const booking = useMemo(() => bookings.find((b) => b.id === id), [bookings, id])
+  const [realBooking, setRealBooking] = useState(null)
+  const [loading, setLoading] = useState(Boolean(id && isMongoObjectId(id)))
+  const [error, setError] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
-  useDocumentTitle(job ? `Job ${job.id}` : booking ? `Booking ${booking.id}` : 'Job details')
+  const fetchRealBooking = useCallback(async () => {
+    if (!id || !isMongoObjectId(id)) return
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await bookingService.getBookingById(id)
+      setRealBooking(data)
+    } catch (err) {
+      setError(err.message || 'Unable to load shift details')
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => {
+    fetchRealBooking()
+  }, [fetchRealBooking])
+
+  const job = useMemo(() => {
+    if (realBooking) return adaptBookingToJob(realBooking)
+    return jobs?.find((j) => j.id === id || j.bookingId === id)
+  }, [realBooking, jobs, id])
+
+  const booking = useMemo(() => {
+    if (realBooking) return realBooking
+    return bookings?.find((b) => b.id === id)
+  }, [realBooking, bookings, id])
+
+  useDocumentTitle(job ? `Job ${job.displayId || job.id}` : booking ? `Booking ${booking.ref || booking.id}` : 'Job details')
 
   const [dialog, setDialog] = useState(null)
   const [checkFlow, setCheckFlow] = useState(null)
   const [rateOpen, setRateOpen] = useState(false)
+
+  if (loading && !job && !booking) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Job details" subtitle="Loading shift information from server…" />
+        <div className="grid gap-6 lg:grid-cols-2">
+          {[1, 2, 3, 4].map((n) => (
+            <Card key={n} className="animate-pulse">
+              <CardBody className="space-y-4">
+                <div className="h-6 w-1/3 rounded bg-slate-200" />
+                <div className="h-4 w-2/3 rounded bg-slate-100" />
+                <div className="h-4 w-1/2 rounded bg-slate-100" />
+              </CardBody>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !job && !booking) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Job details" subtitle="Unable to load the requested shift." />
+        <Card>
+          <ErrorState
+            title="Failed to load shift"
+            description={error}
+            onRetry={fetchRealBooking}
+          />
+        </Card>
+      </div>
+    )
+  }
 
   if (!job && !booking) {
     return (
@@ -76,16 +141,37 @@ export function JobDetailsPage() {
     )
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!dialog || !job) return
-    if (dialog === 'accept') {
-      acceptJob(job.id, caregiver?.id)
-      toast.success('Job accepted — added to your schedule')
-    } else {
-      rejectJob(job.id)
-      toast.info('Job declined')
+    setActionLoading(true)
+    try {
+      if (dialog === 'accept') {
+        if (isMongoObjectId(job.id)) {
+          const updated = await bookingService.acceptBooking(job.id)
+          setRealBooking(updated)
+        }
+        if (acceptJob) acceptJob(job.id, caregiver?.id)
+        toast.success('Job accepted — added to your schedule', {
+          description: `${job.service} on ${formatDate(job.date, { long: true })} is confirmed.`,
+        })
+      } else {
+        if (isMongoObjectId(job.id)) {
+          const updated = await bookingService.rejectBooking(job.id, 'Declined by caretaker')
+          setRealBooking(updated)
+        }
+        if (rejectJob) rejectJob(job.id)
+        toast.info('Job declined', {
+          description: `${job.service} has been declined.`,
+        })
+      }
+    } catch (err) {
+      toast.error(dialog === 'accept' ? 'Failed to accept job' : 'Failed to decline job', {
+        description: err.message || 'Server rejected the request.',
+      })
+    } finally {
+      setActionLoading(false)
+      setDialog(null)
     }
-    setDialog(null)
   }
 
   const handleCheckConfirm = (payload) => {
@@ -112,6 +198,7 @@ export function JobDetailsPage() {
 
   if (job) {
     const net = job.payment - Math.round(job.payment * PLATFORM_COMMISSION)
+
 
     return (
       <div className="space-y-6">
@@ -253,7 +340,7 @@ export function JobDetailsPage() {
               ? `${job.service} on ${formatDate(job.date, { long: true })} at ${job.shift}. The shift is added to your schedule immediately.`
               : 'This shift will be released to other verified caretakers. This cannot be undone.'
           }
-          confirmLabel={dialog === 'accept' ? 'Accept job' : 'Decline job'}
+          confirmLabel={dialog === 'accept' ? (actionLoading ? 'Accepting…' : 'Accept job') : (actionLoading ? 'Declining…' : 'Decline job')}
         />
       </div>
     )

@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { BadgeCheck, Check, Eye, FileCheck2, History, Info, RefreshCw, SearchX, ShieldCheck, XCircle } from 'lucide-react'
+import {
+  BadgeCheck,
+  Check,
+  Download,
+  ExternalLink,
+  Eye,
+  FileCheck2,
+  FileText,
+  History,
+  Info,
+  RefreshCw,
+  SearchX,
+  XCircle,
+} from 'lucide-react'
 import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
@@ -20,67 +33,147 @@ import { adminService, isMongoObjectId } from '@/services'
 
 const FILTERS = ['All', 'Pending', 'Under Review', 'Verified', 'Rejected']
 
-const maskName = (name = '') =>
-  name
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => `${part[0]}${'•'.repeat(Math.max(part.length - 1, 2))}`)
-    .join(' ')
+const DOC_REJECT_PRESETS = [
+  'Document is blurry or unreadable',
+  'Document has expired',
+  'Name does not match application',
+  'Invalid or unaccepted document format',
+  'Missing official seal or required pages',
+]
+
+const APP_REJECT_PRESETS = [
+  'Incomplete verification documents',
+  'Credentials could not be verified',
+  'Does not meet platform requirements',
+  'Applicant requested withdrawal',
+]
+
+function DocumentVisualFallback({ record, doc }) {
+  const fileName = doc.file || doc.fileName || `${doc.type || 'Document'}.pdf`
+  return (
+    <div className="rounded-xl border border-line bg-slate-50 p-6 text-center">
+      <FileText className="mx-auto h-12 w-12 text-primary-600" />
+      <p className="mt-2 font-display text-sm font-bold text-ink">{doc.type}</p>
+      <p className="text-xs text-muted">{record?.name || 'Applicant'} · Document proof</p>
+      <div className="mt-3 inline-block rounded-full bg-slate-200/80 px-3 py-1 font-mono text-xs font-semibold text-slate-800">
+        {fileName}
+      </div>
+    </div>
+  )
+}
 
 function DocumentPreview({ record, doc }) {
-  const last4 = String(record.regNo || '').replace(/\D/g, '').slice(-4) || '0000'
+  const [imgError, setImgError] = useState(false)
+  const fileName = doc.file || doc.fileName || ''
+  const isImage = Boolean(
+    doc.fileUrl &&
+      !imgError &&
+      (doc.fileUrl.startsWith('data:image') ||
+        /\.(png|jpe?g|svg|webp|gif|bmp)($|\?)/i.test(doc.fileUrl) ||
+        /\.(png|jpe?g|svg|webp|gif|bmp)($|\?)/i.test(fileName))
+  )
+  const isPdf = Boolean(
+    doc.fileUrl &&
+      (doc.fileUrl.startsWith('data:application/pdf') ||
+        /\.pdf($|\?)/i.test(doc.fileUrl) ||
+        /\.pdf($|\?)/i.test(fileName))
+  )
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-line bg-slate-50 p-5">
         <div className="flex items-start justify-between gap-3 border-b border-dashed border-line-strong pb-3">
           <div className="min-w-0">
-            <p className="font-display text-sm font-bold text-ink">{doc.type}</p>
-            <p className="mt-0.5 text-xs text-faint">Reference copy · redacted for admin review</p>
+            <p className="font-display text-base font-bold text-ink">{doc.type}</p>
+            <p className="mt-0.5 text-xs text-muted">Original verification proof submitted by applicant</p>
           </div>
-          <span className="shrink-0 rounded-full bg-warning-50 px-2 py-0.5 text-[11px] font-bold text-warning-700 ring-1 ring-inset ring-warning-400/50">
-            MASKED
-          </span>
+          <StatusBadge status={doc.status} size="sm" />
         </div>
 
-        <dl className="mt-4 space-y-2.5 text-sm">
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-muted">Issued to</dt>
-            <dd className="font-semibold text-ink">{maskName(record.name)}</dd>
+        <dl className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div className="rounded-lg bg-white p-3 border border-line">
+            <dt className="text-xs text-muted font-medium">Issued to / Applicant</dt>
+            <dd className="font-bold text-ink mt-0.5">{record.name}</dd>
           </div>
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-muted">Document number</dt>
-            <dd className="font-semibold tabular-nums tracking-wide text-ink">XXXX XXXX {last4}</dd>
+          <div className="rounded-lg bg-white p-3 border border-line">
+            <dt className="text-xs text-muted font-medium">Registration / Reference</dt>
+            <dd className="font-bold font-mono text-ink mt-0.5">{record.regNo || 'VER-' + String(doc.id).slice(-6)}</dd>
           </div>
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-muted">Uploaded on</dt>
-            <dd className="font-semibold text-ink">{formatDate(doc.uploadedOn)}</dd>
+          <div className="rounded-lg bg-white p-3 border border-line">
+            <dt className="text-xs text-muted font-medium">Uploaded on</dt>
+            <dd className="font-semibold text-ink mt-0.5">{formatDate(doc.uploadedOn)}</dd>
           </div>
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-muted">File</dt>
-            <dd className="max-w-[60%] truncate font-semibold text-ink">{doc.file}</dd>
+          <div className="rounded-lg bg-white p-3 border border-line">
+            <dt className="text-xs text-muted font-medium">File name</dt>
+            <dd className="truncate font-semibold font-mono text-xs text-ink mt-0.5">{fileName}</dd>
           </div>
         </dl>
 
-        <div className="mt-4 space-y-2.5 rounded-lg bg-white p-4 ring-1 ring-line">
-          <div className="h-3 w-2/3 rounded-sm bg-slate-300" />
-          <div className="h-3.5 w-full rounded-sm bg-slate-800" />
-          <div className="h-3 w-5/6 rounded-sm bg-slate-300" />
-          <div className="flex items-center gap-2">
-            <div className="h-14 w-12 rounded-sm bg-slate-300" />
-            <div className="flex-1 space-y-2">
-              <div className="h-3 w-full rounded-sm bg-slate-800" />
-              <div className="h-3 w-4/5 rounded-sm bg-slate-300" />
-            </div>
+        {doc.feedback && (
+          <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3.5 py-2.5 text-xs text-amber-900">
+            <span className="font-bold">Reviewer Feedback: </span>
+            {doc.feedback}
           </div>
-          <div className="h-3 w-1/2 rounded-sm bg-slate-300" />
+        )}
+
+        {/* Visual Document Viewer */}
+        <div className="mt-5">
+          {isImage ? (
+            <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-line bg-slate-50/80 px-4 py-2.5 text-xs text-muted">
+                <span className="flex items-center gap-1.5 font-semibold text-ink">
+                  <FileCheck2 className="h-4 w-4 text-primary-600" />
+                  Uploaded Document
+                </span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs text-muted truncate max-w-[220px]">
+                    {fileName}
+                  </span>
+                  {doc.fileUrl && (
+                    <a
+                      href={doc.fileUrl}
+                      download={fileName || `${doc.type}.jpeg`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 font-semibold text-primary-600 hover:text-primary-800 hover:underline"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  )}
+                </div>
+              </div>
+              <div className="flex min-h-[280px] max-h-[560px] items-center justify-center overflow-auto p-4 bg-slate-50/40">
+                <img
+                  src={doc.fileUrl}
+                  alt={doc.type}
+                  onError={() => setImgError(true)}
+                  className="max-h-[520px] w-auto max-w-full rounded-lg object-contain shadow-sm border border-slate-200/80"
+                />
+              </div>
+            </div>
+          ) : isPdf && doc.fileUrl && (doc.fileUrl.startsWith('data:') || doc.fileUrl.startsWith('http') || doc.fileUrl.startsWith('/')) ? (
+            <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-line bg-slate-50/80 px-4 py-2.5 text-xs text-muted">
+                <span className="flex items-center gap-1.5 font-semibold text-ink">
+                  <FileCheck2 className="h-4 w-4 text-primary-600" />
+                  PDF Document Reader
+                </span>
+                <span className="font-mono text-xs text-muted truncate max-w-[220px]">
+                  {fileName}
+                </span>
+              </div>
+              <iframe
+                src={doc.fileUrl}
+                title={doc.type}
+                className="h-[460px] w-full rounded-b-xl border-0 bg-white"
+              />
+            </div>
+          ) : (
+            <DocumentVisualFallback record={record} doc={doc} />
+          )}
         </div>
       </div>
-
-      <p className="flex items-start gap-2 rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" />
-        Only masked metadata is shown in the admin console. Unredacted files stay encrypted — request compliance
-        approval if you need the full document.
-      </p>
     </div>
   )
 }
@@ -174,7 +267,13 @@ function DetailPanel({
                 >
                   Approve
                 </Button>
-                <Button size="xs" variant="dangerGhost" onClick={() => onRejectDoc(doc)}>
+                <Button
+                  size="xs"
+                  variant="dangerGhost"
+                  icon={XCircle}
+                  onClick={() => onRejectDoc(doc)}
+                  disabled={doc.status === 'Rejected'}
+                >
                   Reject
                 </Button>
               </div>
@@ -231,30 +330,30 @@ export function VerificationsPage() {
   const [selectedId, setSelectedId] = useState(null)
   const [isDesktop, setIsDesktop] = useState(true)
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
-  const [reasonPrompt, setReasonPrompt] = useState(null)
-  const [reason, setReason] = useState('')
-  const [reasonError, setReasonError] = useState('')
+  const [rejectModal, setRejectModal] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [isRejecting, setIsRejecting] = useState(false)
   const [confirmPrompt, setConfirmPrompt] = useState(null)
   const [previewDoc, setPreviewDoc] = useState(null)
 
   const debouncedQuery = useDebouncedValue(query)
 
-  const fetchVerifications = useCallback(async () => {
-    setLoading(true)
+  const fetchVerifications = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
     setError(null)
     try {
       const res = await adminService.getVerifications()
       setRealVerifications(res.verifications || [])
     } catch (err) {
       setError(err.message || 'Unable to load caregiver verification queue')
-      setRealVerifications(null)
+      if (showLoading) setRealVerifications(null)
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchVerifications()
+    fetchVerifications(true)
   }, [fetchVerifications])
 
   const verifications = useMemo(() => {
@@ -302,7 +401,13 @@ export function VerificationsPage() {
     }
   }, [filtered, selectedId])
 
-  const record = filtered.length ? verifications.find((v) => v.id === selectedId) || null : null
+  const record = useMemo(() => {
+    if (selectedId) {
+      const match = verifications.find((v) => v.id === selectedId)
+      if (match) return match
+    }
+    return filtered[0] || null
+  }, [verifications, selectedId, filtered])
 
   const select = (id) => {
     setSelectedId(id)
@@ -310,31 +415,136 @@ export function VerificationsPage() {
   }
 
   const openRejectApplication = () => {
-    setReason('')
-    setReasonError('')
-    setReasonPrompt({ kind: 'application' })
+    setRejectReason(APP_REJECT_PRESETS[0])
+    setRejectModal({ kind: 'application' })
   }
 
   const openRejectDocument = (doc) => {
-    setReason('')
-    setReasonError('')
-    setReasonPrompt({ kind: 'document', doc })
+    setRejectReason(DOC_REJECT_PRESETS[0])
+    setRejectModal({ kind: 'document', doc })
   }
 
-  const submitReason = () => {
-    const value = reason.trim()
-    if (value.length < 8) {
-      setReasonError('Give a clear reason of at least 8 characters — it is sent to the applicant.')
-      return
+  const executeReject = async () => {
+    if (!rejectModal || !record) return
+
+    const isDoc = rejectModal.kind === 'document'
+    const targetDoc = rejectModal.doc
+    const fallbackReason = isDoc
+      ? 'Document rejected during review. Please upload a clear and valid replacement.'
+      : 'Application rejected during administrative review.'
+    const finalReason = rejectReason.trim() || fallbackReason
+
+    setIsRejecting(true)
+
+    try {
+      if (isDoc && targetDoc) {
+        // Optimistic in-memory update for the document
+        setRealVerifications((prev) => {
+          if (!prev) return prev
+          return prev.map((v) => {
+            if (v.id !== record.id) return v
+            return {
+              ...v,
+              documents: (v.documents || []).map((d) =>
+                d.id === targetDoc.id
+                  ? {
+                      ...d,
+                      status: 'Rejected',
+                      verificationStatus: 'rejected',
+                      feedback: finalReason,
+                      reviewerNotes: finalReason,
+                      reviewedAt: new Date().toISOString(),
+                      reviewedBy: 'Admin',
+                    }
+                  : d,
+              ),
+              history: [
+                {
+                  at: new Date().toISOString(),
+                  action: `${targetDoc.type} marked Rejected: ${finalReason}`,
+                  by: 'Admin',
+                },
+                ...(v.history || []),
+              ],
+            }
+          })
+        })
+
+        // Also update previewDoc if preview modal is open
+        if (previewDoc && previewDoc.id === targetDoc.id) {
+          setPreviewDoc((prev) => ({
+            ...prev,
+            status: 'Rejected',
+            verificationStatus: 'rejected',
+            feedback: finalReason,
+            reviewerNotes: finalReason,
+            reviewedAt: new Date().toISOString(),
+            reviewedBy: 'Admin',
+          }))
+        }
+
+        if (isMongoObjectId(targetDoc.id)) {
+          await adminService.updateDocumentStatus(targetDoc.id, {
+            status: 'rejected',
+            notes: finalReason,
+          })
+        } else {
+          updateDocument(record.id, targetDoc.id, { status: 'Rejected', feedback: finalReason })
+        }
+
+        toast.success(`${targetDoc.type} rejected`, {
+          description: finalReason,
+        })
+      } else {
+        // Optimistic in-memory update for the caregiver application
+        setRealVerifications((prev) => {
+          if (!prev) return prev
+          return prev.map((v) => {
+            if (v.id !== record.id) return v
+            return {
+              ...v,
+              status: 'Rejected',
+              verificationStatus: 'rejected',
+              history: [
+                {
+                  at: new Date().toISOString(),
+                  action: `Application rejected: ${finalReason}`,
+                  by: 'Admin',
+                },
+                ...(v.history || []),
+              ],
+            }
+          })
+        })
+
+        if (isMongoObjectId(record.id)) {
+          await adminService.updateCaregiverVerificationStatus(record.id, {
+            status: 'rejected',
+            reason: finalReason,
+          })
+        } else {
+          setVerificationStatus(record.id, 'Rejected', finalReason)
+        }
+
+        toast.success(`${record.name}'s application rejected`, {
+          description: finalReason,
+        })
+
+        if (filter !== 'All' && filter !== 'Rejected') {
+          setFilter('Rejected')
+        }
+      }
+
+      // Smooth background refresh without showing loading skeleton
+      fetchVerifications(false)
+      setRejectModal(null)
+    } catch (err) {
+      toast.error('Failed to reject', {
+        description: err.message || 'An error occurred while updating status',
+      })
+    } finally {
+      setIsRejecting(false)
     }
-    if (reasonPrompt?.kind === 'application') {
-      setConfirmPrompt({ kind: 'rejectApplication', reason: value })
-    } else if (reasonPrompt?.doc) {
-      setConfirmPrompt({ kind: 'rejectDocument', doc: reasonPrompt.doc, reason: value })
-    }
-    setReasonPrompt(null)
-    setReason('')
-    setReasonError('')
   }
 
   const runConfirm = async () => {
@@ -343,6 +553,28 @@ export function VerificationsPage() {
     if (!action || !record) return
 
     if (action.kind === 'approveApplication') {
+      // Optimistic update
+      setRealVerifications((prev) => {
+        if (!prev) return prev
+        return prev.map((v) => {
+          if (v.id !== record.id) return v
+          return {
+            ...v,
+            status: 'Verified',
+            verificationStatus: 'verified',
+            overallScore: 90,
+            history: [
+              {
+                at: new Date().toISOString(),
+                action: 'Application approved — profile marked Verified',
+                by: 'Admin',
+              },
+              ...(v.history || []),
+            ],
+          }
+        })
+      })
+
       if (isMongoObjectId(record.id)) {
         try {
           await adminService.updateCaregiverVerificationStatus(record.id, {
@@ -353,9 +585,10 @@ export function VerificationsPage() {
           toast.success(`${record.name} approved`, {
             description: 'Profile marked Verified and visible in customer search.',
           })
-          await fetchVerifications()
+          fetchVerifications(false)
         } catch (err) {
           toast.error('Failed to approve application', { description: err.message })
+          fetchVerifications(false)
         }
       } else {
         setVerificationStatus(record.id, 'Verified', 'Application approved — profile marked Verified')
@@ -363,53 +596,67 @@ export function VerificationsPage() {
           description: 'Profile marked Verified and visible in customer search.',
         })
       }
-    } else if (action.kind === 'rejectApplication') {
-      if (isMongoObjectId(record.id)) {
-        try {
-          await adminService.updateCaregiverVerificationStatus(record.id, {
-            status: 'rejected',
-            reason: action.reason,
-          })
-          toast.error(`${record.name}'s application rejected`, { description: action.reason })
-          await fetchVerifications()
-        } catch (err) {
-          toast.error('Failed to reject application', { description: err.message })
-        }
-      } else {
-        setVerificationStatus(record.id, 'Rejected', action.reason)
-        toast.error(`${record.name}'s application rejected`, { description: action.reason })
-      }
     } else if (action.kind === 'approveDocument') {
-      if (isMongoObjectId(action.doc.id)) {
+      const doc = action.doc
+      // Optimistic update
+      setRealVerifications((prev) => {
+        if (!prev) return prev
+        return prev.map((v) => {
+          if (v.id !== record.id) return v
+          return {
+            ...v,
+            documents: (v.documents || []).map((d) =>
+              d.id === doc.id
+                ? {
+                    ...d,
+                    status: 'Verified',
+                    verificationStatus: 'verified',
+                    feedback: 'Approved by admin',
+                    reviewerNotes: 'Approved by admin',
+                    reviewedAt: new Date().toISOString(),
+                    reviewedBy: 'Admin',
+                  }
+                : d,
+            ),
+            history: [
+              {
+                at: new Date().toISOString(),
+                action: `${doc.type} marked Verified: Approved by admin`,
+                by: 'Admin',
+              },
+              ...(v.history || []),
+            ],
+          }
+        })
+      })
+
+      if (previewDoc && previewDoc.id === doc.id) {
+        setPreviewDoc((prev) => ({
+          ...prev,
+          status: 'Verified',
+          verificationStatus: 'verified',
+          feedback: 'Approved by admin',
+          reviewerNotes: 'Approved by admin',
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: 'Admin',
+        }))
+      }
+
+      if (isMongoObjectId(doc.id)) {
         try {
-          await adminService.updateDocumentStatus(action.doc.id, {
+          await adminService.updateDocumentStatus(doc.id, {
             status: 'verified',
             notes: 'Approved by admin',
           })
-          toast.success(`${action.doc.type} approved`)
-          await fetchVerifications()
+          toast.success(`${doc.type} approved`)
+          fetchVerifications(false)
         } catch (err) {
           toast.error('Failed to approve document', { description: err.message })
+          fetchVerifications(false)
         }
       } else {
-        updateDocument(record.id, action.doc.id, { status: 'Verified', feedback: 'Approved by admin' })
-        toast.success(`${action.doc.type} approved`)
-      }
-    } else if (action.kind === 'rejectDocument') {
-      if (isMongoObjectId(action.doc.id)) {
-        try {
-          await adminService.updateDocumentStatus(action.doc.id, {
-            status: 'rejected',
-            notes: action.reason,
-          })
-          toast.error(`${action.doc.type} rejected`, { description: action.reason })
-          await fetchVerifications()
-        } catch (err) {
-          toast.error('Failed to reject document', { description: err.message })
-        }
-      } else {
-        updateDocument(record.id, action.doc.id, { status: 'Rejected', feedback: action.reason })
-        toast.error(`${action.doc.type} rejected`, { description: action.reason })
+        updateDocument(record.id, doc.id, { status: 'Verified', feedback: 'Approved by admin' })
+        toast.success(`${doc.type} approved`)
       }
     }
   }
@@ -431,21 +678,11 @@ export function VerificationsPage() {
     dialogTitle = 'Approve this application?'
     dialogMessage = `${record?.name} will be marked Verified, appear in customer search and can accept paid bookings right away.`
     dialogLabel = 'Approve application'
-  } else if (confirmPrompt?.kind === 'rejectApplication') {
-    dialogTone = 'danger'
-    dialogTitle = 'Reject this application?'
-    dialogMessage = `Reason: “${confirmPrompt.reason}” — this is shared with ${record?.name} and their profile stays unverified.`
-    dialogLabel = 'Reject application'
   } else if (confirmPrompt?.kind === 'approveDocument') {
     dialogTone = 'primary'
     dialogTitle = 'Approve this document?'
     dialogMessage = `${confirmPrompt.doc?.type} will be marked Verified with the note “Approved by admin”.`
     dialogLabel = 'Approve document'
-  } else if (confirmPrompt?.kind === 'rejectDocument') {
-    dialogTone = 'danger'
-    dialogTitle = 'Reject this document?'
-    dialogMessage = `Reason: “${confirmPrompt.reason}” — ${confirmPrompt.doc?.type} is sent back to ${record?.name} for a fresh upload.`
-    dialogLabel = 'Reject document'
   }
 
   const detailProps = record
@@ -523,12 +760,12 @@ export function VerificationsPage() {
               <div className="space-y-3 p-1">
                 <CardSkeleton count={2} />
               </div>
-            ) : error && allVerifications.length === 0 ? (
+            ) : error && verifications.length === 0 ? (
               <div className="rounded-card border border-line bg-white p-4 shadow-card">
                 <ErrorState
                   title="Failed to load verifications"
                   description={error}
-                  onRetry={fetchVerifications}
+                  onRetry={() => fetchVerifications(true)}
                 />
               </div>
             ) : filtered.length ? (
@@ -621,48 +858,89 @@ export function VerificationsPage() {
         {record && detailProps ? <DetailPanel {...detailProps} /> : null}
       </Modal>
 
+      {/* Unified Reject Modal with quick presets */}
       <Modal
-        open={Boolean(reasonPrompt)}
-        onClose={() => {
-          setReasonPrompt(null)
-          setReason('')
-          setReasonError('')
-        }}
-        title="Reason for rejection"
-        subtitle="Required — this is shared with the applicant."
-        size="sm"
+        open={Boolean(rejectModal)}
+        onClose={() => !isRejecting && setRejectModal(null)}
+        title={
+          rejectModal?.kind === 'application'
+            ? `Reject Application: ${record?.name || 'Applicant'}`
+            : `Reject Document: ${rejectModal?.doc?.type || 'Document'}`
+        }
+        subtitle={
+          rejectModal?.kind === 'application'
+            ? 'This will mark the application as Rejected and notify the applicant.'
+            : 'Mark this document as Rejected and request a replacement from the applicant.'
+        }
+        size="md"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="ghost"
-              onClick={() => {
-                setReasonPrompt(null)
-                setReason('')
-                setReasonError('')
-              }}
+              onClick={() => setRejectModal(null)}
+              disabled={isRejecting}
             >
               Cancel
             </Button>
-            <Button variant="danger" onClick={submitReason}>
-              Continue
+            <Button
+              variant="danger"
+              icon={XCircle}
+              onClick={executeReject}
+              disabled={isRejecting}
+            >
+              {isRejecting
+                ? 'Rejecting...'
+                : rejectModal?.kind === 'application'
+                  ? 'Reject Application'
+                  : 'Reject Document'}
             </Button>
           </div>
         }
       >
-        <Textarea
-          rows={4}
-          value={reason}
-          onChange={(e) => {
-            setReason(e.target.value)
-            setReasonError('')
-          }}
-          placeholder="e.g. Police clearance certificate was issued more than 12 months ago. Please upload a current copy."
-          error={reasonError}
-          aria-label="Reason for rejection"
-        />
-        <p className="mt-3 text-xs leading-relaxed text-muted">
-          Be specific — the applicant sees this note next to the rejected document or application.
-        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Quick reasons
+            </label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(rejectModal?.kind === 'application' ? APP_REJECT_PRESETS : DOC_REJECT_PRESETS).map((preset) => {
+                const isSelected = rejectReason === preset
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setRejectReason(preset)}
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs font-medium transition cursor-pointer',
+                      isSelected
+                        ? 'bg-rose-100 text-rose-800 ring-1 ring-rose-400 font-semibold'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+                    )}
+                  >
+                    {preset}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Rejection notes for applicant
+            </label>
+            <Textarea
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Select a reason above or type specific instructions..."
+              className="mt-1.5"
+              aria-label="Reason for rejection"
+            />
+            <p className="mt-2 text-xs text-muted">
+              The applicant will see this explanation so they can upload a corrected document.
+            </p>
+          </div>
+        </div>
       </Modal>
 
       <ConfirmationDialog
@@ -679,13 +957,50 @@ export function VerificationsPage() {
         open={Boolean(previewDoc)}
         onClose={() => setPreviewDoc(null)}
         title={previewDoc ? previewDoc.type : 'Document preview'}
-        subtitle={record ? `${record.name} · masked copy` : ''}
+        subtitle={record ? `${record.name} · Official document verification dossier` : ''}
         size="lg"
         footer={
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setPreviewDoc(null)}>
-              Close
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+            <div className="flex items-center gap-2">
+              <StatusBadge status={previewDoc?.status} size="sm" />
+              {previewDoc?.fileUrl && (
+                <a
+                  href={previewDoc.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:text-primary-800 hover:underline"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open in New Tab
+                </a>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="dangerGhost"
+                size="sm"
+                icon={XCircle}
+                onClick={() => openRejectDocument(previewDoc)}
+                disabled={previewDoc?.status === 'Rejected'}
+              >
+                Reject Document
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Check}
+                onClick={() => {
+                  const doc = previewDoc
+                  setConfirmPrompt({ kind: 'approveDocument', doc })
+                }}
+                disabled={previewDoc?.status === 'Verified'}
+              >
+                Approve Document
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPreviewDoc(null)}>
+                Close
+              </Button>
+            </div>
           </div>
         }
       >

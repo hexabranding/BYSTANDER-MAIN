@@ -445,9 +445,55 @@ export const getAdminCaregiverReviews = async (caregiverId) => {
   return reviews;
 };
 
+/**
+ * Retrieve personal reviews authored by the authenticated customer.
+ * Enforces ownership: only returns reviews where customer equals user._id.
+ *
+ * @param {Object} user - Authenticated user { _id, role }
+ * @param {Object} [query={}] - Optional { page, limit }
+ * @returns {Promise<{ reviews: Array, pagination: Object }>}
+ */
+export const getMyCustomerReviews = async (user, query = {}) => {
+  const customerId = user?._id || user?.id;
+  if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {
+    const err = new Error('Authenticated customer identifier required');
+    err.statusCode = 401;
+    err.name = 'UnauthorizedError';
+    throw err;
+  }
+
+  const page = Math.max(1, parseInt(query.page, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(query.limit, 10) || 10));
+  const skip = (page - 1) * limit;
+
+  const filter = { customer: customerId };
+
+  const [reviews, total] = await Promise.all([
+    Review.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('caregiver', 'qualification experienceYears city area rating avatar hourlyRate')
+      .populate('caregiverUser', 'fullName email avatar')
+      .populate('booking', 'serviceName date scheduledDate timeSlot durationHours totalAmount status'),
+    Review.countDocuments(filter),
+  ]);
+
+  return {
+    reviews,
+    pagination: {
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit) || 1,
+    },
+  };
+};
+
 export const reviewService = {
   createReview,
   getCaregiverReviews,
+  getMyCustomerReviews,
   addCaregiverReply,
   getAdminRatings,
   getAdminCaregiverReviews,
@@ -458,3 +504,4 @@ export const reviewService = {
 };
 
 export default reviewService;
+

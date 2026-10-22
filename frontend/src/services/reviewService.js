@@ -58,10 +58,26 @@ export const replyToReview = async (reviewId, reply) => {
   return response?.data || response
 }
 
+/**
+ * Retrieves reviews written by the currently authenticated customer.
+ * @param {Object} [query={}] - Optional pagination { page, limit }
+ * @returns {Promise<{ reviews: Array, pagination: Object }>}
+ */
+export const getMyReviews = async (query = {}) => {
+  const response = await apiClient.get('/reviews/my', { params: query })
+  const data = response?.data || response
+  return {
+    reviews: data?.reviews || [],
+    pagination: data?.pagination || { total: 0, page: 1, limit: 10, pages: 1 },
+  }
+}
+
 export const reviewService = {
   submitReview,
   getCaregiverReviews,
+  getMyReviews,
   replyToReview,
 }
 
 export default reviewService
+

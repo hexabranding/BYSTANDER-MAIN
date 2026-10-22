@@ -69,10 +69,10 @@ export const normalizeUser = (user, profile = {}) => {
   let formattedAddress = '';
   if (prof.defaultAddress) {
     formattedAddress = [
-      prof.defaultAddress.addressLine1,
-      prof.defaultAddress.addressLine2,
+      prof.defaultAddress.addressLine || prof.defaultAddress.addressLine1,
+      prof.defaultAddress.area || prof.defaultAddress.addressLine2,
       prof.defaultAddress.city,
-      prof.defaultAddress.postalCode,
+      prof.defaultAddress.pincode || prof.defaultAddress.postalCode,
     ]
       .filter(Boolean)
       .join(', ');
@@ -85,10 +85,11 @@ export const normalizeUser = (user, profile = {}) => {
   if (prof.patients && Array.isArray(prof.patients) && prof.patients.length > 0) {
     const firstPatient = prof.patients[0];
     patientInfo = {
-      name: firstPatient.fullName || '',
+      name: firstPatient.name || firstPatient.fullName || '',
       age: firstPatient.age || 0,
+      gender: firstPatient.gender || 'Other',
       relation: firstPatient.relation || '',
-      condition: firstPatient.diagnosis || firstPatient.notes || '',
+      condition: firstPatient.condition || firstPatient.diagnosis || firstPatient.notes || '',
     };
   } else if (prof.patientInfo) {
     patientInfo = prof.patientInfo;
@@ -105,7 +106,7 @@ export const normalizeUser = (user, profile = {}) => {
     avatar: user.avatar || prof.avatar || '',
     status: user.status || 'active',
     city: prof.city || prof.defaultAddress?.city || '',
-    area: prof.area || '',
+    area: prof.area || prof.defaultAddress?.area || '',
     address: formattedAddress,
     patientInfo,
     caregiverId: isCaregiver ? String(prof._id || user._id) : undefined,
@@ -192,39 +193,101 @@ export const registerCustomer = async (payload) => {
     }
 
     // Follow-up: Dispatch Customer Profile update if address or patient fields were filled
-    const hasAddress = Boolean(payload.address || payload.city || payload.area || payload.pincode);
-    const hasPatient = Boolean(payload.patientInfo?.name || payload.patientName);
+    const addressLine = typeof (payload.address || payload.addressLine) === 'string'
+      ? (payload.address || payload.addressLine).trim()
+      : '';
+    const city = typeof payload.city === 'string' ? payload.city.trim() : '';
+    const area = typeof payload.area === 'string' ? payload.area.trim() : '';
+    const pincode = typeof (payload.pincode || payload.postalCode) === 'string'
+      ? (payload.pincode || payload.postalCode).trim()
+      : '';
+
+    const hasAddress = Boolean(addressLine || city || area || pincode);
+
+    const pInfo = payload.patientInfo || {};
+    const patientName = typeof (pInfo.name || pInfo.fullName || payload.patientName) === 'string'
+      ? (pInfo.name || pInfo.fullName || payload.patientName).trim()
+      : '';
+    const hasPatient = Boolean(patientName);
+
+    let finalProfile = profile;
+    let profileSyncError = null;
 
     if (hasAddress || hasPatient) {
       try {
         const profilePatch = {};
         if (hasAddress) {
-          profilePatch.defaultAddress = {
-            addressLine1: payload.address || '',
-            addressLine2: payload.area || '',
-            city: payload.city || 'Mumbai',
-            state: 'Maharashtra',
-            postalCode: payload.pincode || '',
-          };
+          const defaultAddress = {};
+          if (addressLine) defaultAddress.addressLine = addressLine;
+          if (city) defaultAddress.city = city;
+          if (area) defaultAddress.area = area;
+          if (pincode) defaultAddress.pincode = pincode;
+          profilePatch.defaultAddress = defaultAddress;
         }
+
         if (hasPatient) {
-          const pInfo = payload.patientInfo || {};
-          profilePatch.patients = [
-            {
-              fullName: pInfo.name || payload.patientName || '',
-              age: Number(pInfo.age || payload.patientAge || 0),
-              relation: pInfo.relation || payload.patientRelation || 'Other',
-              diagnosis: pInfo.condition || payload.patientCondition || '',
-            },
-          ];
+          const patientRecord = {
+            name: patientName,
+          };
+
+          const rawAge = pInfo.age !== undefined && pInfo.age !== '' ? pInfo.age : payload.patientAge;
+          if (rawAge !== undefined && rawAge !== null && rawAge !== '') {
+            const numAge = Number(rawAge);
+            if (!isNaN(numAge) && numAge >= 0 && numAge <= 130) {
+              patientRecord.age = numAge;
+            }
+          }
+
+          const rawGender = pInfo.gender || payload.patientGender;
+          if (rawGender && ['Male', 'Female', 'Other'].includes(rawGender)) {
+            patientRecord.gender = rawGender;
+          }
+
+          const rawRelation = typeof (pInfo.relation || payload.patientRelation) === 'string'
+            ? (pInfo.relation || payload.patientRelation).trim()
+            : '';
+          if (rawRelation) {
+            patientRecord.relation = rawRelation;
+          }
+
+          const rawCondition = typeof (pInfo.condition || pInfo.diagnosis || payload.patientCondition) === 'string'
+            ? (pInfo.condition || pInfo.diagnosis || payload.patientCondition).trim()
+            : '';
+          if (rawCondition) {
+            patientRecord.condition = rawCondition;
+          }
+
+          const rawNotes = typeof (pInfo.medicalNotes || payload.medicalNotes) === 'string'
+            ? (pInfo.medicalNotes || payload.medicalNotes).trim()
+            : '';
+          if (rawNotes) {
+            patientRecord.medicalNotes = rawNotes;
+          }
+
+          profilePatch.patients = [patientRecord];
         }
-        await apiClient.patch('/customer/profile', profilePatch);
+
+        const patchRes = await apiClient.patch('/customer/profile', profilePatch);
+        finalProfile = patchRes?.data || patchRes || profile;
       } catch (profileErr) {
         console.warn('[Profile Sync] Customer profile secondary fields pending update:', profileErr.message);
+        profileSyncError = profileErr;
       }
     }
 
-    const normalized = normalizeUser(user, profile);
+    const normalized = normalizeUser(user, finalProfile);
+
+    if (profileSyncError) {
+      return {
+        ok: true,
+        partial: true,
+        user: normalized,
+        token,
+        warning: `Account registered, but profile details could not be saved: ${profileSyncError.message}`,
+        message: `Account registered, but profile details could not be saved: ${profileSyncError.message}`,
+      };
+    }
+
     return {
       ok: true,
       user: normalized,
@@ -262,6 +325,16 @@ export const registerCaregiver = async (payload) => {
     return { ok: false, message: 'Password must be at least 8 characters long.' };
   }
 
+  const normalizedCareSettings = Array.isArray(payload.careSettings)
+    ? Array.from(
+        new Set(
+          payload.careSettings
+            .map((s) => (s === 'Home' ? 'Home Care' : s === 'Hospital' ? 'Hospital Care' : s))
+            .filter((s) => ['Home Care', 'Hospital Care'].includes(s)),
+        ),
+      )
+    : undefined;
+
   try {
     const response = await apiClient.post('/auth/register/caregiver', {
       fullName,
@@ -270,6 +343,15 @@ export const registerCaregiver = async (payload) => {
       password,
       qualification,
       hourlyRate,
+      nursingRegNo: payload.nursingRegNo || undefined,
+      experienceYears: Number(payload.experience || payload.experienceYears || 0),
+      city: payload.city || undefined,
+      area: payload.area || undefined,
+      languages: payload.languages || undefined,
+      careSettings: normalizedCareSettings,
+      bio: payload.bio || undefined,
+      documents: payload.documents || undefined,
+      docs: payload.docs || undefined,
     });
 
     const { user, profile, token } = response.data || {};
@@ -282,10 +364,11 @@ export const registerCaregiver = async (payload) => {
       const caregiverPatch = {};
       if (payload.bio) caregiverPatch.bio = payload.bio;
       if (Array.isArray(payload.languages) && payload.languages.length) caregiverPatch.languages = payload.languages;
-      if (Array.isArray(payload.careSettings) && payload.careSettings.length) caregiverPatch.careSettings = payload.careSettings;
+      if (Array.isArray(normalizedCareSettings) && normalizedCareSettings.length) caregiverPatch.careSettings = normalizedCareSettings;
       if (payload.experience || payload.experienceYears) caregiverPatch.experienceYears = Number(payload.experience || payload.experienceYears);
       if (payload.city) caregiverPatch.city = payload.city;
       if (payload.area) caregiverPatch.area = payload.area;
+      if (payload.nursingRegNo) caregiverPatch.nursingRegNo = payload.nursingRegNo;
 
       if (Object.keys(caregiverPatch).length > 0) {
         await apiClient.patch('/caregiver/profile', caregiverPatch);
@@ -293,6 +376,35 @@ export const registerCaregiver = async (payload) => {
     } catch (profileErr) {
       console.warn('[Profile Sync] Caregiver profile secondary fields pending update:', profileErr.message);
     }
+
+    // Post-registration document uploads: explicitly ensure each uploaded file is saved
+    if (payload.docs || payload.documents) {
+      const docKeyMap = {
+        identityDoc: 'identity',
+        nursingCertificate: 'nursing_registration',
+        nursingStudentId: 'college_id',
+        addressProof: 'address_proof',
+        policeClearance: 'police_clearance',
+        bankProof: 'bank_verification',
+      };
+      const entries = payload.docs ? Object.entries(payload.docs) : [];
+      for (const [key, f] of entries) {
+        if (!f) continue;
+        const documentType = docKeyMap[key] || key;
+        try {
+          await apiClient.post('/caregiver/documents', {
+            documentType,
+            fileName: f.name || f.fileName || `${documentType}.pdf`,
+            fileSize: f.size || f.fileSize || 1024,
+            mimeType: f.type || f.mimeType || 'application/pdf',
+            fileData: f.fileData || f.preview || null,
+          });
+        } catch (uploadErr) {
+          console.warn(`[Document Upload] Could not upload ${documentType}:`, uploadErr.message);
+        }
+      }
+    }
+
 
     const normalized = normalizeUser(user, profile);
     return {

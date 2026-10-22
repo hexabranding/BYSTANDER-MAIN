@@ -19,7 +19,7 @@ import { Button } from '@/components/common/Button'
 import { Chip } from '@/components/common/Tabs'
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { RatingModal } from '@/components/booking/RatingModal'
-import { bookingService, reviewService, isMongoObjectId } from '@/services'
+import { bookingService, reviewService, financeService, isMongoObjectId } from '@/services'
 
 const STATUS_TABS = ['All', 'Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled']
 const PHASES = ['All', 'Current', 'Upcoming', 'Previous']
@@ -118,7 +118,21 @@ export function BookingsPage() {
   const canPay = (b) => b.paymentStatus === 'Pending' && b.status !== 'Cancelled'
   const canRate = (b) => b.status === 'Completed' && !b.customerRating && Boolean(b.caregiverId)
 
-  const handlePay = (b) => {
+  const handlePay = async (b) => {
+    const targetBookingId = b.dbId || b.id
+    if (isMongoObjectId(targetBookingId)) {
+      try {
+        await financeService.simulateBookingPayment(targetBookingId, {
+          status: 'SIMULATED_ESCROW_HELD',
+        })
+      } catch (err) {
+        console.error('[Payment Simulation Error]', err)
+        toast.error('Payment simulation failed', {
+          description: err.message || 'Please verify the booking status and try again.',
+        })
+        return
+      }
+    }
     updateBooking(b.id, { paymentStatus: 'Escrow Held' })
     const tx = addTransaction({
       bookingId: b.id,
@@ -127,10 +141,10 @@ export function BookingsPage() {
       caregiverId: b.caregiverId,
       amount: b.total,
       status: 'Escrow Held',
-      method: 'UPI (demo)',
+      method: 'UPI / Net Banking',
     })
-    toast.success('Payment secured in escrow', {
-      description: `${formatCurrency(b.total)} held for ${b.id}. Tx ${tx.id}.`,
+    toast.success('Payment secured in simulated escrow', {
+      description: `${formatCurrency(b.total)} held in simulated escrow for ${b.id}. Tx ${tx.id}.`,
     })
   }
 
@@ -175,7 +189,7 @@ export function BookingsPage() {
       bookingRef: b.ref,
       audienceRole: 'customer',
       name: cg?.name || 'Care Coordinator',
-      roleLabel: cg?.qualification || 'CareMate support',
+      roleLabel: cg?.qualification || 'Bystander support',
       avatar: cg?.photo || '',
       firstMessage: `Hi, I'm reaching out regarding booking ${b.id} (${b.service} on ${formatDate(b.date)}).`,
     })
@@ -271,7 +285,7 @@ export function BookingsPage() {
         title="My bookings"
         subtitle="Track every care visit — from request to completion."
         action={
-          <Button to="/customer/book-caregiver" icon={Plus}>
+          <Button to="/customer/caregivers" icon={Plus}>
             New booking
           </Button>
         }
@@ -337,8 +351,8 @@ export function BookingsPage() {
                   Clear filters
                 </Button>
               ) : (
-                <Button to="/customer/book-caregiver" icon={CalendarDays}>
-                  Book a caretaker
+                <Button to="/customer/caregivers" icon={CalendarDays}>
+                  Find a caretaker
                 </Button>
               )
             }

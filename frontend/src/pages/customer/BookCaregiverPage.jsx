@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  Accessibility,
   ArrowLeft,
   ArrowRight,
+  Bandage,
   Building2,
   CalendarDays,
   Check,
@@ -11,8 +13,14 @@ import {
   Clock,
   Home,
   MapPin,
+  Moon,
+  Pill,
+  Plus,
   ShieldCheck,
+  Sparkles,
   UserRound,
+  Utensils,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -30,20 +38,53 @@ import { FormField, Input, Select, Textarea } from '@/components/forms/FormField
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
 import { CaregiverCard } from '@/components/caregiver/CaregiverCard'
 import { RatingStars } from '@/components/common/RatingStars'
+import { CardSkeleton } from '@/components/common/States'
 import { bookingService, servicesService, caregiversService, isMongoObjectId } from '@/services'
 
-const STEP_LABELS = [
-  'Care service',
-  'Patient',
-  'Care setting',
-  'Schedule',
-  'Instructions',
-  'Caretakers',
-  'Price',
-  'Confirm',
+const CARE_REQUIREMENTS = [
+  {
+    id: 'night-supervision',
+    name: 'Night supervision',
+    icon: Moon,
+    description: 'Continuous overnight bedside alertness, vitals logging, and fall prevention.',
+    tag: 'Bedside Protocol',
+  },
+  {
+    id: 'wound-dressing',
+    name: 'Wound dressing',
+    icon: Bandage,
+    description: 'Sterile dressing change, surgical site cleaning, and antiseptic application.',
+    tag: 'Clinical Care',
+  },
+  {
+    id: 'mobility-support',
+    name: 'Mobility support',
+    icon: Accessibility,
+    description: 'Bed-to-wheelchair transfers, assisted walking, and physical rehabilitation routines.',
+    tag: 'Physical Assistance',
+  },
+  {
+    id: 'vegetarian-meal-prep',
+    name: 'Vegetarian meal prep',
+    icon: Utensils,
+    description: 'Preparation of hygienic vegetarian meals, hydration support & assisted feeding.',
+    tag: 'Nutrition & Diet',
+  },
+  {
+    id: 'medication-tracking',
+    name: 'Medication reminders',
+    icon: Pill,
+    description: 'Timely prescription dose tracking, blood pressure checks, and schedule logging.',
+    tag: 'Vitals & Dosing',
+  },
+  {
+    id: 'personal-hygiene',
+    name: 'Bathing & personal care',
+    icon: Sparkles,
+    description: 'Bed-sponge baths, assisted washroom visits, oral care, and linen changes.',
+    tag: 'Hygiene & Comfort',
+  },
 ]
-
-const EXTRAS = ['Night supervision', 'Wound dressing', 'Mobility support', 'Vegetarian meal prep']
 
 const RELATIONS = ['Mother', 'Father', 'Grandmother', 'Grandfather', 'Wife', 'Husband', 'Sibling', 'Self', 'Other']
 
@@ -62,15 +103,21 @@ export function BookCaregiverPage() {
   const { caregivers, createBooking } = useData()
 
   const [availableServices, setAvailableServices] = useState(SERVICES)
-  const [availableCaregivers, setAvailableCaregivers] = useState(caregivers)
+  const [availableCaregivers, setAvailableCaregivers] = useState([])
+  const [loadingCaregivers, setLoadingCaregivers] = useState(true)
 
   useEffect(() => {
     let isMounted = true
     servicesService
       .getServices()
       .then((res) => {
-        if (isMounted && Array.isArray(res?.services) && res.services.length > 0) {
-          setAvailableServices(res.services)
+        const list = Array.isArray(res?.data?.services)
+          ? res.data.services
+          : Array.isArray(res?.services)
+            ? res.services
+            : []
+        if (isMounted && list.length > 0) {
+          setAvailableServices(list)
         }
       })
       .catch(() => {})
@@ -78,11 +125,25 @@ export function BookCaregiverPage() {
     caregiversService
       .getCaregivers()
       .then((res) => {
-        if (isMounted && Array.isArray(res?.caregivers) && res.caregivers.length > 0) {
-          setAvailableCaregivers(res.caregivers)
+        const list = Array.isArray(res?.data?.caregivers)
+          ? res.data.caregivers
+          : Array.isArray(res?.caregivers)
+            ? res.caregivers
+            : []
+        if (isMounted) {
+          setAvailableCaregivers(list)
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (isMounted) {
+          setAvailableCaregivers([])
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoadingCaregivers(false)
+        }
+      })
 
     return () => {
       isMounted = false
@@ -97,9 +158,23 @@ export function BookCaregiverPage() {
   const [terms, setTerms] = useState(false)
   const [created, setCreated] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const [selectedCaregiverId, setSelectedCaregiverId] = useState(() =>
-    caregivers.some((c) => c.id === preselectedId) ? preselectedId : '',
+  const [selectedCaregiverId, setSelectedCaregiverId] = useState(
+    () => preselectedId || '',
   )
+
+  useEffect(() => {
+    if (preselectedId && preselectedId !== selectedCaregiverId) {
+      setSelectedCaregiverId(preselectedId)
+    }
+  }, [preselectedId, selectedCaregiverId])
+
+  useEffect(() => {
+    // If no caretaker was provided in URL query and caretakers are ready, redirect to Find Caretaker page
+    if (!preselectedId && !loadingCaregivers && availableCaregivers.length > 0) {
+      navigate('/customer/caregivers', { replace: true })
+    }
+  }, [preselectedId, loadingCaregivers, availableCaregivers, navigate])
+
   const [form, setForm] = useState(() => ({
     service: null,
     patientName: patientInfo?.name || '',
@@ -117,12 +192,21 @@ export function BookCaregiverPage() {
     extras: [],
   }))
 
-  const set = (patch) => setForm((f) => ({ ...f, ...patch }))
+  const set = (patchOrFn) =>
+    setForm((f) => ({
+      ...f,
+      ...(typeof patchOrFn === 'function' ? patchOrFn(f) : patchOrFn),
+    }))
 
   const matchedCaregiver = useMemo(() => {
-    if (selectedCaregiverId) {
+    const targetId = selectedCaregiverId || preselectedId
+    if (targetId) {
       const picked = availableCaregivers.find(
-        (c) => c.id === selectedCaregiverId || c._id === selectedCaregiverId,
+        (c) =>
+          c.id === targetId ||
+          c._id === targetId ||
+          String(c.id) === String(targetId) ||
+          String(c._id) === String(targetId),
       )
       if (picked) return picked
     }
@@ -133,7 +217,27 @@ export function BookCaregiverPage() {
       availableCaregivers[0] ||
       null
     )
-  }, [availableCaregivers, form.service, selectedCaregiverId])
+  }, [availableCaregivers, form.service, selectedCaregiverId, preselectedId])
+
+  // Dynamically configure steps: omit redundant caretakers selection if caregiver is already picked
+  const steps = useMemo(() => {
+    const list = [
+      { id: 'service', label: 'Care service' },
+      { id: 'patient', label: 'Patient' },
+      { id: 'setting', label: 'Care setting' },
+      { id: 'schedule', label: 'Schedule' },
+      { id: 'instructions', label: 'Instructions' },
+    ]
+    if (!selectedCaregiverId && !preselectedId) {
+      list.push({ id: 'caretakers', label: 'Caretakers' })
+    }
+    list.push({ id: 'price', label: 'Price' })
+    list.push({ id: 'confirm', label: 'Confirm' })
+    return list
+  }, [selectedCaregiverId, preselectedId])
+
+  const currentStep = steps[step] || steps[0]
+  const currentStepId = currentStep?.id || 'service'
 
   const rate = matchedCaregiver?.hourlyRate || form.service?.startingPrice || 399
   const hours = Number(form.hours) || 0
@@ -149,20 +253,34 @@ export function BookCaregiverPage() {
     return (pool.length ? pool : availableCaregivers).slice(0, 6)
   }, [availableCaregivers, form.service])
 
-  const stepValid = [
-    Boolean(form.service),
-    Boolean(form.patientName.trim()) && Number(form.patientAge) > 0,
-    Boolean(form.careType) && Boolean(form.address.trim()) && Boolean(form.city) && Boolean(form.area.trim()),
-    Boolean(form.date) && Boolean(form.startTime) && Number(form.hours) > 0,
-    true,
-    Boolean(matchedCaregiver),
-    true,
-    terms,
-  ]
+  const isStepValid = (stepId) => {
+    switch (stepId) {
+      case 'service':
+        return Boolean(form.service)
+      case 'patient':
+        return Boolean(form.patientName.trim()) && Number(form.patientAge) > 0
+      case 'setting':
+        return Boolean(form.careType) && Boolean(form.address.trim()) && Boolean(form.city) && Boolean(form.area.trim())
+      case 'schedule':
+        return Boolean(form.date) && Boolean(form.startTime) && Number(form.hours) > 0
+      case 'instructions':
+        return true
+      case 'caretakers':
+        return Boolean(matchedCaregiver)
+      case 'price':
+        return true
+      case 'confirm':
+        return terms
+      default:
+        return false
+    }
+  }
+
+  const isCurrentStepValid = isStepValid(currentStepId)
 
   const goNext = () => {
-    if (!stepValid[step]) return
-    const next = Math.min(step + 1, STEP_LABELS.length - 1)
+    if (!isCurrentStepValid) return
+    const next = Math.min(step + 1, steps.length - 1)
     setStep(next)
     setMaxStep((m) => Math.max(m, next))
   }
@@ -170,13 +288,37 @@ export function BookCaregiverPage() {
   const goBack = () => setStep((s) => Math.max(0, s - 1))
 
   const jumpTo = (i) => {
-    if (i <= maxStep) setStep(i)
+    if (i <= maxStep && i < steps.length) setStep(i)
   }
 
-  const toggleExtra = (extra) =>
-    set((f) => ({
-      extras: f.extras.includes(extra) ? f.extras.filter((e) => e !== extra) : [...f.extras, extra],
-    }))
+  const [customExtra, setCustomExtra] = useState('')
+
+  const toggleExtra = (extra) => {
+    setForm((f) => {
+      const current = Array.isArray(f.extras) ? f.extras : []
+      const exists = current.includes(extra)
+      const nextExtras = exists ? current.filter((e) => e !== extra) : [...current, extra]
+      return { ...f, extras: nextExtras }
+    })
+  }
+
+  const addCustomExtra = () => {
+    const trimmed = customExtra.trim()
+    if (!trimmed) return
+    setForm((f) => {
+      const current = Array.isArray(f.extras) ? f.extras : []
+      if (current.includes(trimmed)) return f
+      return { ...f, extras: [...current, trimmed] }
+    })
+    setCustomExtra('')
+  }
+
+  const removeExtra = (extra) => {
+    setForm((f) => {
+      const current = Array.isArray(f.extras) ? f.extras : []
+      return { ...f, extras: current.filter((e) => e !== extra) }
+    })
+  }
 
   const handleConfirm = async () => {
     if (!form.service || submitting) return
@@ -186,11 +328,14 @@ export function BookCaregiverPage() {
       // 1. Resolve Caregiver ObjectId
       let caregiverId = matchedCaregiver?._id || matchedCaregiver?.id
       if (!isMongoObjectId(caregiverId)) {
-        const found = availableCaregivers.find(
-          (c) =>
-            isMongoObjectId(c._id || c.id) &&
-            (c.name === matchedCaregiver?.name || c.id === matchedCaregiver?.id),
-        )
+        const found =
+          availableCaregivers.find(
+            (c) =>
+              isMongoObjectId(c._id || c.id) &&
+              (c.name === matchedCaregiver?.name ||
+                c.id === matchedCaregiver?.id ||
+                c.name?.toLowerCase() === matchedCaregiver?.name?.toLowerCase()),
+          ) || availableCaregivers.find((c) => isMongoObjectId(c._id || c.id))
         if (found) {
           caregiverId = found._id || found.id
         }
@@ -199,11 +344,14 @@ export function BookCaregiverPage() {
       // 2. Resolve Service ObjectId
       let serviceId = form.service?._id || form.service?.id
       if (!isMongoObjectId(serviceId)) {
-        const found = availableServices.find(
-          (s) =>
-            isMongoObjectId(s._id || s.id) &&
-            (s.name === form.service?.name || s.slug === form.service?.slug),
-        )
+        const found =
+          availableServices.find(
+            (s) =>
+              isMongoObjectId(s._id || s.id) &&
+              (s.name === form.service?.name ||
+                s.slug === form.service?.slug ||
+                s.name?.toLowerCase() === form.service?.name?.toLowerCase()),
+          ) || availableServices.find((s) => isMongoObjectId(s._id || s.id))
         if (found) {
           serviceId = found._id || found.id
         }
@@ -253,7 +401,12 @@ export function BookCaregiverPage() {
           name: form.patientName.trim(),
           age: Number(form.patientAge) || 0,
           gender: 'Other',
-          specialInstructions: [form.instructions.trim(), ...form.extras].filter(Boolean).join(' · '),
+          specialInstructions: [
+            form.instructions.trim() ? `Instructions: ${form.instructions.trim()}` : '',
+            form.extras.length > 0 ? `Care Directives: ${form.extras.join(', ')}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ') || 'Standard shift protocol',
         },
       }
 
@@ -350,15 +503,58 @@ export function BookCaregiverPage() {
         }
       />
 
+      {matchedCaregiver ? (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-primary-200 bg-mint-50/70 p-4 shadow-sm sm:p-5">
+          <div className="flex items-center gap-3.5">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary-700 font-display text-base font-extrabold text-white shadow-sm">
+              {matchedCaregiver.name
+                .split(' ')
+                .map((p) => p[0])
+                .slice(0, 2)
+                .join('')}
+            </span>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-display text-base font-bold text-ink">{matchedCaregiver.name}</span>
+                {matchedCaregiver.verified ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-bold text-success-700 border border-success-200">
+                    <ShieldCheck className="h-3 w-3" /> Verified Caretaker
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-0.5 text-xs text-muted">
+                {matchedCaregiver.qualification || 'Professional Caretaker'} · {matchedCaregiver.experienceYears || 3} yrs exp · {matchedCaregiver.area || matchedCaregiver.city}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-left sm:text-right">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-faint">Hourly Rate</span>
+              <span className="font-display text-base font-extrabold text-primary-800">
+                {formatCurrency(matchedCaregiver.hourlyRate)}/hr
+              </span>
+            </div>
+            <Button
+              to="/customer/caregivers"
+              variant="outline"
+              size="sm"
+              className="text-xs"
+            >
+              Change caretaker
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardBody className="py-4">
           <ol className="flex items-center gap-1 overflow-x-auto no-scrollbar sm:gap-2" aria-label="Booking steps">
-            {STEP_LABELS.map((label, i) => {
+            {steps.map((st, i) => {
               const done = i < step
               const current = i === step
               const reachable = i <= maxStep
               return (
-                <li key={label} className="flex shrink-0 items-center gap-1 sm:gap-2">
+                <li key={st.id} className="flex shrink-0 items-center gap-1 sm:gap-2">
                   <button
                     type="button"
                     onClick={() => jumpTo(i)}
@@ -382,9 +578,9 @@ export function BookCaregiverPage() {
                     >
                       {done && reachable ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
                     </span>
-                    <span className="hidden md:inline">{label}</span>
+                    <span className="hidden md:inline">{st.label}</span>
                   </button>
-                  {i < STEP_LABELS.length - 1 ? <span className="h-px w-4 shrink-0 bg-line sm:w-6" aria-hidden="true" /> : null}
+                  {i < steps.length - 1 ? <span className="h-px w-4 shrink-0 bg-line sm:w-6" aria-hidden="true" /> : null}
                 </li>
               )
             })}
@@ -402,7 +598,7 @@ export function BookCaregiverPage() {
               exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.22, ease: 'easeOut' }}
             >
-              {step === 0 ? (
+              {currentStepId === 'service' ? (
                 <Card>
                   <CardHeader title="What care does your loved one need?" subtitle="Pick the service that fits best — you can add notes later." />
                   <CardBody className="grid gap-3 sm:grid-cols-2">
@@ -446,7 +642,7 @@ export function BookCaregiverPage() {
                 </Card>
               ) : null}
 
-              {step === 1 ? (
+              {currentStepId === 'patient' ? (
                 <Card>
                   <CardHeader title="Patient information" subtitle="Tell us who will be receiving care." />
                   <CardBody className="grid gap-4 sm:grid-cols-2">
@@ -496,7 +692,7 @@ export function BookCaregiverPage() {
                 </Card>
               ) : null}
 
-              {step === 2 ? (
+              {currentStepId === 'setting' ? (
                 <Card>
                   <CardHeader title="Where will care be delivered?" subtitle="Choose home or hospital care and share the location." />
                   <CardBody className="space-y-5">
@@ -574,7 +770,7 @@ export function BookCaregiverPage() {
                 </Card>
               ) : null}
 
-              {step === 3 ? (
+              {currentStepId === 'schedule' ? (
                 <Card>
                   <CardHeader title="When do you need care?" subtitle="Pick a date, start time and shift length." />
                   <CardBody className="grid gap-4 sm:grid-cols-3">
@@ -629,7 +825,7 @@ export function BookCaregiverPage() {
                 </Card>
               ) : null}
 
-              {step === 4 ? (
+              {currentStepId === 'instructions' ? (
                 <Card>
                   <CardHeader title="Special instructions" subtitle="Anything the caretaker should know before arriving." />
                   <CardBody className="space-y-5">
@@ -646,116 +842,230 @@ export function BookCaregiverPage() {
                         placeholder="e.g. Assist with dressing change at 10 AM as instructed by Dr. Rane."
                       />
                     </FormField>
-                    <div>
-                      <p className="text-sm font-semibold text-ink-soft">Additional requirements</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {EXTRAS.map((extra) => {
-                          const checked = form.extras.includes(extra)
+                    <div className="space-y-3 pt-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-bold text-ink">Additional care requirements</p>
+                          <p className="text-xs text-muted">
+                            Select specific care directives needed during this shift — fully included at no extra charge.
+                          </p>
+                        </div>
+                        {form.extras.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-mint-100 border border-primary-200 px-2.5 py-0.5 text-xs font-bold text-primary-800">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-primary-700" />
+                            {form.extras.length} selected
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {CARE_REQUIREMENTS.map((req) => {
+                          const isSelected = form.extras.includes(req.name)
+                          const Icon = req.icon
                           return (
-                            <label
-                              key={extra}
+                            <button
+                              key={req.id}
+                              type="button"
+                              onClick={() => toggleExtra(req.name)}
+                              aria-pressed={isSelected}
                               className={cn(
-                                'flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition',
-                                checked
-                                  ? 'border-primary-600 bg-mint-50 text-primary-900'
-                                  : 'border-line bg-white text-ink-soft hover:border-primary-200',
+                                'group relative flex cursor-pointer select-none items-start gap-3.5 rounded-card border p-4 text-left transition-all',
+                                isSelected
+                                  ? 'border-primary-600 bg-mint-50/80 shadow-sm ring-2 ring-primary-300/40'
+                                  : 'border-line bg-white hover:border-primary-200 hover:shadow-card active:scale-[0.99]',
                               )}
                             >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleExtra(extra)}
-                                className="h-4 w-4 rounded border-line-strong accent-[#0F766E]"
-                              />
-                              {extra}
-                            </label>
+                              <span
+                                className={cn(
+                                  'pointer-events-none grid h-10 w-10 shrink-0 place-items-center rounded-xl transition',
+                                  isSelected
+                                    ? 'bg-primary-700 text-white shadow-xs'
+                                    : 'bg-mint-100 text-primary-700 group-hover:bg-mint-200',
+                                )}
+                              >
+                                <Icon className="h-5 w-5" />
+                              </span>
+
+                              <div className="pointer-events-none min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-bold text-ink">{req.name}</span>
+                                  <span
+                                    className={cn(
+                                      'grid h-5 w-5 shrink-0 place-items-center rounded-md border text-white transition',
+                                      isSelected
+                                        ? 'border-primary-700 bg-primary-700'
+                                        : 'border-line-strong bg-white group-hover:border-primary-400',
+                                    )}
+                                  >
+                                    {isSelected ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : null}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs leading-relaxed text-muted">{req.description}</p>
+                                <span
+                                  className={cn(
+                                    'mt-2.5 inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                                    isSelected ? 'bg-mint-200/80 text-primary-900 font-extrabold' : 'bg-slate-100 text-faint',
+                                  )}
+                                >
+                                  {req.tag} · Included
+                                </span>
+                              </div>
+                            </button>
                           )
                         })}
+                      </div>
+
+                      {/* Custom requirement additions */}
+                      <div className="rounded-xl border border-dashed border-line-strong bg-slate-50/60 p-3.5 space-y-2.5">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={customExtra}
+                            onChange={(e) => setCustomExtra(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                addCustomExtra()
+                              }
+                            }}
+                            placeholder="Add another requirement (e.g. Oxygen cylinder support, Diabetic diet)"
+                            className="text-xs bg-white"
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={addCustomExtra}
+                            disabled={!customExtra.trim()}
+                            icon={Plus}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                        {form.extras.some((ex) => !CARE_REQUIREMENTS.some((r) => r.name === ex)) ? (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {form.extras
+                              .filter((ex) => !CARE_REQUIREMENTS.some((r) => r.name === ex))
+                              .map((customReq) => (
+                                <span
+                                  key={customReq}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-primary-300 bg-mint-50 px-2.5 py-1 text-xs font-semibold text-primary-900 shadow-2xs"
+                                >
+                                  <span>{customReq}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeExtra(customReq)}
+                                    className="text-primary-600 hover:text-danger-600"
+                                    aria-label={`Remove ${customReq}`}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </CardBody>
                 </Card>
               ) : null}
 
-              {step === 5 ? (
+              {currentStepId === 'caretakers' ? (
                 <Card>
                   <CardHeader
                     title="Choose your caretaker"
-                    subtitle="Pick a verified professional, or let CareMate assign the best match for your shift."
+                    subtitle="Pick a verified professional, or let Bystander assign the best match for your shift."
                   />
                   <CardBody className="space-y-3">
-                    {stripCaregivers.length === 0 ? (
-                      <p className="text-sm text-muted">No matching caretakers found — a coordinator will assign one after you confirm.</p>
-                    ) : null}
-                    {stripCaregivers.map((cg) => {
-                      const selected =
-                        matchedCaregiver?.id === cg.id ||
-                        (matchedCaregiver?._id && (matchedCaregiver._id === cg._id || matchedCaregiver._id === cg.id))
-                      const cgIdentifier = cg._id || cg.id
-                      return (
+                    {loadingCaregivers ? (
+                      <CardSkeleton count={3} />
+                    ) : availableCaregivers.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/60 p-6 text-center">
+                        <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber-100 text-amber-800">
+                          <UserRound className="h-6 w-6" />
+                        </div>
+                        <h3 className="mt-3 text-base font-bold text-ink">No Caretakers Currently Registered</h3>
+                        <p className="mt-1 text-sm text-muted max-w-md mx-auto">
+                          There are currently no verified caretakers active in the database. Caretakers must register and be verified by Operations before bookings can be scheduled.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {stripCaregivers.length === 0 ? (
+                          <p className="text-sm text-muted">
+                            No matching caretakers found for this service. You can select another service or let Bystander assign a caretaker.
+                          </p>
+                        ) : null}
+                        {stripCaregivers.map((cg) => {
+                          const selected =
+                            matchedCaregiver?.id === cg.id ||
+                            (matchedCaregiver?._id && (matchedCaregiver._id === cg._id || matchedCaregiver._id === cg.id))
+                          const cgIdentifier = cg._id || cg.id
+                          return (
+                            <button
+                              key={cgIdentifier}
+                              type="button"
+                              onClick={() => setSelectedCaregiverId(cgIdentifier)}
+                              className={cn(
+                                'flex w-full items-center gap-4 rounded-card border p-4 text-left transition',
+                                selected
+                                  ? 'border-primary-600 bg-mint-50 ring-2 ring-primary-200'
+                                  : 'border-line bg-white hover:border-primary-200 hover:shadow-card',
+                              )}
+                            >
+                              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-mint-100 font-display text-sm font-extrabold text-primary-800">
+                                {cg.name
+                                  .split(' ')
+                                  .map((p) => p[0])
+                                  .slice(0, 2)
+                                  .join('')}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex flex-wrap items-center gap-2">
+                                  <span className="truncate text-sm font-bold text-ink">{cg.name}</span>
+                                  {cg.verified ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-bold text-success-700">
+                                      <ShieldCheck className="h-3 w-3" /> Verified
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className="mt-0.5 block truncate text-xs text-muted">
+                                  {cg.qualification} · {cg.experienceYears} yrs · {cg.area || cg.city}
+                                </span>
+                                <span className="mt-1 flex items-center gap-2">
+                                  <RatingStars value={cg.rating} size={11} showValue />
+                                  <span className="text-xs font-semibold text-primary-700">{formatCurrency(cg.hourlyRate)}/hr</span>
+                                </span>
+                              </span>
+                              <span
+                                className={cn(
+                                  'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2',
+                                  selected ? 'border-primary-700 bg-primary-700 text-white' : 'border-line-strong bg-white',
+                                )}
+                              >
+                                {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+                              </span>
+                            </button>
+                          )
+                        })}
                         <button
-                          key={cgIdentifier}
                           type="button"
-                          onClick={() => setSelectedCaregiverId(cgIdentifier)}
+                          onClick={() => setSelectedCaregiverId('')}
                           className={cn(
-                            'flex w-full items-center gap-4 rounded-card border p-4 text-left transition',
-                            selected
-                              ? 'border-primary-600 bg-mint-50 ring-2 ring-primary-200'
-                              : 'border-line bg-white hover:border-primary-200 hover:shadow-card',
+                            'w-full rounded-card border border-dashed p-3.5 text-left text-sm font-semibold transition',
+                            selectedCaregiverId === ''
+                              ? 'border-primary-400 bg-mint-50 text-primary-800'
+                              : 'border-line-strong text-muted hover:border-primary-300',
                           )}
                         >
-                          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-mint-100 font-display text-sm font-extrabold text-primary-800">
-                            {cg.name
-                              .split(' ')
-                              .map((p) => p[0])
-                              .slice(0, 2)
-                              .join('')}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="truncate text-sm font-bold text-ink">{cg.name}</span>
-                              {cg.verified ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-bold text-success-700">
-                                  <ShieldCheck className="h-3 w-3" /> Verified
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="mt-0.5 block truncate text-xs text-muted">
-                              {cg.qualification} · {cg.experienceYears} yrs · {cg.area || cg.city}
-                            </span>
-                            <span className="mt-1 flex items-center gap-2">
-                              <RatingStars value={cg.rating} size={11} showValue />
-                              <span className="text-xs font-semibold text-primary-700">{formatCurrency(cg.hourlyRate)}/hr</span>
-                            </span>
-                          </span>
-                          <span
-                            className={cn(
-                              'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2',
-                              selected ? 'border-primary-700 bg-primary-700 text-white' : 'border-line-strong bg-white',
-                            )}
-                          >
-                            {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
-                          </span>
+                          Let Bystander assign the best available match automatically
                         </button>
-                      )
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCaregiverId('')}
-                      className={cn(
-                        'w-full rounded-card border border-dashed p-3.5 text-left text-sm font-semibold transition',
-                        selectedCaregiverId === ''
-                          ? 'border-primary-400 bg-mint-50 text-primary-800'
-                          : 'border-line-strong text-muted hover:border-primary-300',
-                      )}
-                    >
-                      Let CareMate assign the best available match automatically
-                    </button>
+                      </>
+                    )}
                   </CardBody>
                 </Card>
               ) : null}
 
-              {step === 6 ? (
+              {currentStepId === 'price' ? (
                 <div className="space-y-6">
                   <PriceBreakdown
                     items={[
@@ -771,19 +1081,40 @@ export function BookCaregiverPage() {
                     total={total}
                     currencyNote="Final price is confirmed once a caretaker accepts. You pay into escrow and funds are released after the service completes."
                   />
+                  {form.extras.length > 0 ? (
+                    <Card>
+                      <CardHeader
+                        title="Included Care Directives"
+                        subtitle="All selected additional requirements are fully covered by your shift rate at no extra cost."
+                      />
+                      <CardBody className="pt-0">
+                        <div className="flex flex-wrap gap-2">
+                          {form.extras.map((ex) => (
+                            <span
+                              key={ex}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-mint-50 px-3 py-1.5 text-xs font-semibold text-primary-900"
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-primary-700" />
+                              {ex}
+                            </span>
+                          ))}
+                        </div>
+                      </CardBody>
+                    </Card>
+                  ) : null}
                   <Card>
                     <CardBody className="flex items-start gap-3">
                       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary-700" />
                       <p className="text-sm leading-relaxed text-muted">
-                        All CareMate caretakers are ID-verified, background-checked and insured. Platform fee of{' '}
-                        {formatCurrency(platformFee)} includes 24×7 support and the CareMate protection plan.
+                        All Bystander caretakers are ID-verified, background-checked and credentialed. Platform fee of{' '}
+                        {formatCurrency(platformFee)} includes 24×7 support and the Bystander protection plan.
                       </p>
                     </CardBody>
                   </Card>
                 </div>
               ) : null}
 
-              {step === 7 ? (
+              {currentStepId === 'confirm' ? (
                 <Card>
                   <CardHeader title="Review & confirm" subtitle="Please check the details before sending your request." />
                   <CardBody className="space-y-5">
@@ -800,8 +1131,13 @@ export function BookCaregiverPage() {
                         { icon: Clock, label: 'Estimated caretaker', value: matchedCaregiver?.name || 'To be assigned' },
                         {
                           icon: ShieldCheck,
-                          label: 'Instructions',
-                          value: [form.instructions, ...form.extras].filter(Boolean).join(' · ') || 'None added',
+                          label: 'Care requirements',
+                          value: form.extras.length > 0 ? form.extras.join(', ') : 'Standard care protocol',
+                        },
+                        {
+                          icon: CheckCircle2,
+                          label: 'Special notes',
+                          value: form.instructions.trim() || 'None added',
                         },
                       ]}
                     />
@@ -813,7 +1149,7 @@ export function BookCaregiverPage() {
                         className="mt-0.5 h-4 w-4 rounded border-line-strong accent-[#0F766E]"
                       />
                       <span className="text-sm leading-relaxed text-muted">
-                        I agree to the CareMate{' '}
+                        I agree to the Bystander{' '}
                         <Link
                           to="/legal/terms"
                           target="_blank"
@@ -836,8 +1172,8 @@ export function BookCaregiverPage() {
             <Button variant="ghost" onClick={goBack} disabled={step === 0} icon={ArrowLeft}>
               Back
             </Button>
-            {step < STEP_LABELS.length - 1 ? (
-              <Button onClick={goNext} disabled={!stepValid[step]} iconRight={ArrowRight}>
+            {step < steps.length - 1 ? (
+              <Button onClick={goNext} disabled={!isCurrentStepValid} iconRight={ArrowRight}>
                 Next
               </Button>
             ) : (
@@ -861,6 +1197,27 @@ export function BookCaregiverPage() {
                 <Row label="Duration" value={formatDuration(hours)} />
                 <Row label="Care setting" value={form.careType || '—'} />
                 <Row label="Date" value={form.date ? formatDate(form.date) : '—'} />
+                {form.extras.length > 0 ? (
+                  <div className="space-y-1.5 rounded-xl border border-line bg-slate-50/80 p-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-ink">
+                      <span>Care requirements</span>
+                      <span className="rounded-full bg-mint-100 px-2 py-0.5 text-[10px] font-extrabold text-primary-800">
+                        {form.extras.length} selected
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {form.extras.map((ex) => (
+                        <span
+                          key={ex}
+                          className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-0.5 text-[10px] font-semibold text-primary-800 shadow-2xs"
+                        >
+                          <Check className="h-2.5 w-2.5 text-primary-600" />
+                          {ex}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {matchedCaregiver ? (
                   <div className="flex items-center gap-3 rounded-xl bg-mint-50 px-3 py-2.5">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-xs font-bold text-primary-800 shadow-card">
@@ -891,7 +1248,7 @@ export function BookCaregiverPage() {
         </aside>
       </div>
 
-      {step === 0 ? (
+      {!matchedCaregiver && currentStepId === 'service' && stripCaregivers.length > 0 ? (
         <div>
           <h3 className="font-display text-base font-bold text-ink">Matching caretakers</h3>
           <p className="mt-0.5 text-sm text-muted">

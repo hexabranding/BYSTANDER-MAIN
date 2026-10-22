@@ -48,8 +48,8 @@ const isNursingQualification = (q) => NURSING_QUALIFICATIONS.includes(q)
 const isNursingStudent = (q) => q === 'Nursing Student (Final Year)'
 
 const CARE_SETTINGS = [
-  { value: 'Home', label: 'Home visits', hint: 'In-home shifts with families' },
-  { value: 'Hospital', label: 'Hospital placement', hint: 'Shifts via partner hospitals' },
+  { value: 'Home Care', label: 'Home visits', hint: 'In-home shifts with families' },
+  { value: 'Hospital Care', label: 'Hospital placement', hint: 'Shifts via partner hospitals' },
 ]
 
 const validateMobile = (value) => {
@@ -223,8 +223,8 @@ export function RegisterCaregiverPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const proceedToOtp = () => {
-    navigate('/verify-otp', { state: { email: pendingEmail.current, next: '/caregiver/dashboard' } })
+  const proceedToDashboard = () => {
+    navigate('/caregiver/dashboard', { replace: true })
   }
 
   const onSubmit = async (values) => {
@@ -236,14 +236,46 @@ export function RegisterCaregiverPage() {
       policeClearance: 'Police clearance',
       bankProof: 'Bank proof',
     }
-    const documentList = Object.entries(values.docs || {})
-      .filter(([, file]) => file)
-      .map(([key, file]) => ({
-        docId: key,
-        type: DOC_LABELS[key] || key,
-        file: { name: file?.name || String(file) },
-        optional: key === 'bankProof',
-      }))
+
+    const serializedDocs = {}
+    for (const [key, file] of Object.entries(values.docs || {})) {
+      if (!file) continue
+      const raw = file.rawFile || file.file
+      let dataUrl = null
+      if (raw && (raw instanceof Blob || (typeof File !== 'undefined' && raw instanceof File))) {
+        try {
+          dataUrl = await new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = () => resolve(null)
+            reader.readAsDataURL(raw)
+          })
+        } catch {
+          dataUrl = null
+        }
+      }
+      if (!dataUrl && typeof file.preview === 'string' && file.preview.startsWith('data:')) {
+        dataUrl = file.preview
+      }
+      if (!dataUrl && typeof file.fileData === 'string' && file.fileData.startsWith('data:')) {
+        dataUrl = file.fileData
+      }
+      serializedDocs[key] = {
+        name: file.name || String(file),
+        size: file.size || 1024,
+        type: file.type || 'application/pdf',
+        fileData: dataUrl,
+      }
+    }
+
+    const documentList = Object.entries(serializedDocs).map(([key, f]) => ({
+      docId: key,
+      type: DOC_LABELS[key] || key,
+      file: { name: f.name, size: f.size, type: f.type },
+      fileData: f.fileData,
+      optional: key === 'bankProof',
+    }))
+
     const payload = {
       fullName: values.fullName.trim(),
       mobile: values.mobile.trim(),
@@ -255,7 +287,7 @@ export function RegisterCaregiverPage() {
       nursingRegNo: values.nursingRegNo?.trim() || '',
       languages: values.languages,
       careSettings: values.careSettings,
-      docs: values.docs,
+      docs: serializedDocs,
       documents: documentList,
       emergencyContact: {
         name: values.emergencyName.trim(),
@@ -269,6 +301,7 @@ export function RegisterCaregiverPage() {
       },
     }
     const result = await registerCaregiver(payload)
+
     if (!result.ok) {
       toast.error(result.message || 'Could not submit your application. Please try again.')
       return
@@ -289,7 +322,7 @@ export function RegisterCaregiverPage() {
     pendingEmail.current = payload.email
     setSubmitted(true)
     toast.success('Application submitted — pending verification')
-    redirectTimer.current = setTimeout(proceedToOtp, 4000)
+    redirectTimer.current = setTimeout(proceedToDashboard, 3000)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -325,12 +358,12 @@ export function RegisterCaregiverPage() {
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-warning-800/90">
             Your account will show <strong>Pending Verification</strong> until an administrator approves your documents.
-            You can still complete OTP verification and explore your dashboard now.
+            You can view your onboarding status and manage verification documents in your caretaker dashboard.
           </p>
         </div>
 
-        <Button size="lg" className="w-full" onClick={proceedToOtp} iconRight={ArrowRight}>
-          Continue to OTP verification
+        <Button size="lg" className="w-full" onClick={proceedToDashboard} iconRight={ArrowRight}>
+          Go to caretaker dashboard
         </Button>
         <p className="text-xs text-muted">Redirecting automatically…</p>
       </div>

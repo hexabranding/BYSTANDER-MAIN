@@ -68,10 +68,40 @@ export const requestCaregiverPayout = async (payload = {}) => {
   return adaptPayout(rawData)
 }
 
+/**
+ * Simulate payment for a booking in test/development environment.
+ * Connects to /api/test/payments/:bookingId/simulate.
+ * @param {string} bookingId - Booking ObjectId
+ * @param {Object} [simulationData={}] - { status }
+ * @returns {Promise<Object>}
+ */
+export const simulateBookingPayment = async (bookingId, simulationData = {}) => {
+  if (!bookingId) {
+    throw new Error('A booking identifier is required for payment simulation')
+  }
+  const response = await apiClient.post(`/test/payments/${bookingId}/simulate`, simulationData)
+  return response?.data || response
+}
+
+/**
+ * Retrieve simulated payment status for a booking.
+ * @param {string} bookingId - Booking ObjectId
+ * @returns {Promise<Object>}
+ */
+export const getSimulatedBookingPayment = async (bookingId) => {
+  if (!bookingId) {
+    throw new Error('A booking identifier is required')
+  }
+  const response = await apiClient.get(`/test/payments/${bookingId}`)
+  return response?.data || response
+}
+
 export const financeService = {
   getCustomerPayments,
   getCaregiverEarnings,
   requestCaregiverPayout,
+  simulateBookingPayment,
+  getSimulatedBookingPayment,
 }
 
 export default financeService

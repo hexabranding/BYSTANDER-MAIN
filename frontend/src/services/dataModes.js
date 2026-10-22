@@ -59,6 +59,9 @@ export const FORBIDDEN_FALLBACK_RESOURCES = new Set([
   'payouts:request',
   'payouts:update_status',
   'commissions:reconcile',
+  'reviews:submit',
+  'reviews:my',
+  'complaints:create',
 ]);
 
 /**

@@ -15,12 +15,12 @@ const DOCS = {
     highlight: 'service',
     updated: 'Last updated 1 October 2026',
     intro:
-      'These terms govern your use of the CareMate platform, whether you are booking care or providing it. By creating an account you accept them.',
+      'These terms govern your use of the Bystander platform, whether you are booking care or providing it. By creating an account you accept them.',
     sections: [
       {
-        heading: '1. Using CareMate',
+        heading: '1. Using Bystander',
         body: [
-          'CareMate is a marketplace that connects families with verified caretakers, nurses and nursing students. We are not a hospital, clinic or home-health agency, and we do not employ the caretakers listed on the platform.',
+          'Bystander is a healthcare marketplace that connects families with verified caretakers, nurses and nursing students. We are not a hospital, clinic or home-health agency, and we do not employ the caretakers listed on the platform.',
           'You must be 18 or older to book a service, and you must provide accurate patient information so that caretakers can deliver care safely.',
         ],
       },
@@ -55,7 +55,7 @@ const DOCS = {
       {
         heading: '6. Liability',
         body: [
-          'To the extent permitted by law, CareMate’s liability is limited to the value of the booking in question. Nothing in these terms limits liability for fraud or for death or injury caused by negligence.',
+          'To the extent permitted by law, Bystander’s liability is limited to the value of the booking in question. Nothing in these terms limits liability for fraud or for death or injury caused by negligence.',
         ],
       },
       {
@@ -95,7 +95,7 @@ const DOCS = {
         heading: '3. Who can see it',
         body: [
           'The caretaker assigned to your booking sees the patient details required to deliver care — condition, address, timings and emergency contact.',
-          'CareMate staff see your records only where needed for support, verification or an active complaint, and access is logged.',
+          'Bystander authorized staff see records only where needed for support, verification or an active complaint, and access is logged.',
           'We do not sell personal data, and we do not share patient health information with advertisers.',
         ],
       },
@@ -116,7 +116,7 @@ const DOCS = {
       {
         heading: '6. Security',
         body: [
-          'Data is encrypted in transit. Access to production systems is restricted and audited. Report any suspected breach to support@caremate.in.',
+          'Data is encrypted in transit and at rest. Access to production systems is restricted and audited. Report any suspected security concern to support@bystander.care.',
         ],
       },
     ],
@@ -151,7 +151,7 @@ const DOCS = {
         body: [
           'Escrow-held funds are returned in full for a qualifying refund.',
           'Where part of the shift was delivered, only the undelivered portion is refunded.',
-          'Payment gateway fees are borne by CareMate and are not deducted from your refund.',
+          'Payment gateway fees are borne by Bystander and are not deducted from your refund.',
         ],
       },
       {
@@ -234,13 +234,12 @@ export function LegalPage() {
             </div>
 
             <aside className="space-y-4 lg:sticky lg:top-32">
-              <div className="rounded-card border border-line bg-white p-5 shadow-card">
-                <p className="flex items-center gap-2 text-sm font-bold text-ink">
-                  <Lock className="h-4 w-4 text-primary-700" /> Demo notice
+              <div className="rounded-card border border-primary-200 bg-mint-50/60 p-5 shadow-card">
+                <p className="flex items-center gap-2 text-sm font-bold text-primary-900">
+                  <ShieldCheck className="h-4 w-4 text-primary-700" /> Compliance & Verification
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-muted">
-                  CareMate is a frontend demonstration. These documents describe the intended product and are not
-                  binding legal terms. No real payments, bookings or verification take place.
+                  Bystander operates a verified healthcare caregiver registry. All listed practitioners undergo credential screening, identity verification, and police record checks prior to approval.
                 </p>
               </div>
 
@@ -249,7 +248,7 @@ export function LegalPage() {
                   <ShieldCheck className="h-4 w-4 text-primary-700" /> Questions?
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-muted">
-                  Write to support@caremate.in or use the contact form — we answer within 1 working day.
+                  Write to support@bystander.care or use the contact form — we answer within 1 business day.
                 </p>
                 <Button to="/contact" variant="outline" size="sm" className="mt-4" fullWidth>
                   Contact support

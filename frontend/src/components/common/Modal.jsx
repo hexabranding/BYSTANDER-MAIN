@@ -27,10 +27,11 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div
-              className="fixed inset-0 bg-[#0B1F2C]/55 backdrop-blur-[2px]"
+              className="fixed inset-0 bg-[#0B1F2C]/50"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
               onClick={onClose}
               aria-hidden="true"
             />
@@ -38,12 +39,12 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
               role="dialog"
               aria-modal="true"
               aria-label={title}
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.98 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+              initial={{ opacity: 0, scale: 0.97, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               className={cn(
-                'relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-raised sm:rounded-2xl',
+                'relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-white shadow-raised sm:rounded-2xl transform-gpu will-change-transform',
                 sizes[size],
               )}
             >

@@ -9,7 +9,9 @@ import {
   validateUpdateDocumentStatus,
   validateUpdateCaregiverVerificationStatus,
 } from '../src/middleware/validateAdminVerification.js';
+import { validateCaregiverDocumentUpload } from '../src/middleware/validateCaregiver.js';
 import * as adminVerificationService from '../src/services/adminVerificationService.js';
+
 
 // Helper to simulate Express req, res, next
 const createMockReqRes = (options = {}) => {
@@ -282,3 +284,55 @@ test('Step 13B - 6: Service layer raises NotFoundError on invalid ObjectId forma
     },
   );
 });
+
+// -----------------------------------------------------------------------------
+// Test 7: Caregiver Document Upload Validation
+// -----------------------------------------------------------------------------
+test('Step 13B - 7: validateCaregiverDocumentUpload rejects invalid documentType, invalid mimeType, and oversize files', () => {
+  // Invalid documentType
+  const { req: invTypeReq, res: invTypeRes, next: invTypeNext } = createMockReqRes({
+    body: { documentType: 'invalid_type', fileName: 'test.pdf' },
+  });
+  validateCaregiverDocumentUpload(invTypeReq, invTypeRes, invTypeNext);
+  assert.equal(invTypeRes.statusCode, 400);
+  assert.equal(invTypeRes.jsonData.error, 'ValidationError');
+
+  // Invalid mimeType
+  const { req: invMimeReq, res: invMimeRes, next: invMimeNext } = createMockReqRes({
+    body: { documentType: 'identity', fileName: 'test.exe', mimeType: 'application/x-msdownload' },
+  });
+  validateCaregiverDocumentUpload(invMimeReq, invMimeRes, invMimeNext);
+  assert.equal(invMimeRes.statusCode, 400);
+  assert.equal(invMimeRes.jsonData.error, 'ValidationError');
+
+  // Oversize fileSize
+  const { req: invSizeReq, res: invSizeRes, next: invSizeNext } = createMockReqRes({
+    body: { documentType: 'identity', fileName: 'test.pdf', fileSize: 15 * 1024 * 1024 },
+  });
+  validateCaregiverDocumentUpload(invSizeReq, invSizeRes, invSizeNext);
+  assert.equal(invSizeRes.statusCode, 400);
+  assert.equal(invSizeRes.jsonData.error, 'ValidationError');
+});
+
+test('Step 13B - 8: validateCaregiverDocumentUpload passes valid document payload and sanitizes fields', () => {
+  const userId = new mongoose.Types.ObjectId();
+  const { req: validReq, res: validRes, next: validNext, getNextCalled } = createMockReqRes({
+    user: { _id: userId, role: 'caregiver' },
+    body: {
+      documentType: 'identity',
+      fileName: 'aadhaar_card.pdf',
+      fileSize: 204800,
+      mimeType: 'application/pdf',
+      fileData: 'data:application/pdf;base64,JVBERi0xLjQK...',
+    },
+  });
+  validateCaregiverDocumentUpload(validReq, validRes, validNext);
+  assert.equal(getNextCalled(), true);
+  assert.ok(validReq.sanitizedDocument);
+  assert.equal(validReq.sanitizedDocument.documentType, 'identity');
+  assert.equal(validReq.sanitizedDocument.fileName, 'aadhaar_card.pdf');
+  assert.equal(validReq.sanitizedDocument.fileSize, 204800);
+  assert.equal(validReq.sanitizedDocument.mimeType, 'application/pdf');
+  assert.equal(validReq.sanitizedDocument.fileKey, 'data:application/pdf;base64,JVBERi0xLjQK...');
+});
+

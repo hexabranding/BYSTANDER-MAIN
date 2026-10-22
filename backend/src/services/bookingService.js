@@ -5,6 +5,7 @@ import {
   calculateTotalHours,
 } from '../utils/bookingDateUtils.js';
 import { safeDispatchNotification } from './notificationService.js';
+import { recordBookingTransaction } from './adminFinanceService.js';
 
 /**
  * Check if the current MongoDB connection supports multi-document ACID transactions.
@@ -133,9 +134,18 @@ export const createBooking = async (customerId, bookingData) => {
   }
 
   // Verify Caregiver offers this specific service
-  const offersService =
-    caregiver.servicesOffered?.some((sId) => String(sId) === String(service._id)) ||
-    caregiver.services?.includes(service.name);
+  const hasConfiguredServices =
+    (Array.isArray(caregiver.servicesOffered) && caregiver.servicesOffered.length > 0) ||
+    (Array.isArray(caregiver.services) && caregiver.services.length > 0);
+
+  const offersService = !hasConfiguredServices
+    ? true
+    : caregiver.servicesOffered?.some((sId) => String(sId) === String(service._id)) ||
+      caregiver.services?.some(
+        (s) =>
+          String(s).toLowerCase().trim() === service.name.toLowerCase().trim() ||
+          String(s).toLowerCase().trim() === (service.slug || '').toLowerCase().trim(),
+      );
 
   if (!offersService) {
     const err = new Error(`Caregiver does not offer the requested service: '${service.name}'`);
@@ -268,6 +278,9 @@ export const createBooking = async (customerId, bookingData) => {
       ],
       { session },
     );
+
+    // Record initial escrow holding in the financial audit ledger within the transaction
+    await recordBookingTransaction(createdBooking, 'escrow_held', { session });
 
     return createdBooking;
   });
@@ -624,6 +637,10 @@ export const cancelBooking = async (user, bookingId, cancellationReason) => {
     throw err;
   }
 
+  await recordBookingTransaction(updatedBooking, 'refunded').catch((txErr) => {
+    console.warn('[Ledger Warning] Could not record refund transaction on cancellation:', txErr.message);
+  });
+
   return updatedBooking.populate([
     { path: 'customer', select: 'fullName email phone' },
     { path: 'service', select: 'name slug category baseHourlyRate' },
@@ -722,6 +739,11 @@ export const rejectBooking = async (user, bookingId, rejectionReason = '') => {
     message: `The caregiver was unable to accept your booking for ${booking.serviceName}.`,
     metadata: { bookingId: String(booking._id), status: 'rejected' },
     idempotencyKey: `booking:rejected:${booking._id}`,
+  });
+
+  // Update ledger status to refunded on rejection
+  await recordBookingTransaction(updated, 'refunded').catch((txErr) => {
+    console.warn('[Ledger Warning] Could not record refund transaction on rejection:', txErr.message);
   });
 
   return updated.populate([

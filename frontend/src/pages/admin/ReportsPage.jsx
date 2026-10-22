@@ -125,10 +125,14 @@ export function ReportsPage() {
         period: values.period,
         format: values.format,
       })
-      if (res && res.report) {
+
+      const reportPayload = res?.report || res?.data?.report || res
+      const csvData = reportPayload?.csvContent || res?.csvContent || res?.data?.csvContent || ''
+
+      if (reportPayload && (reportPayload.title || reportPayload.id)) {
         const report = {
-          ...res.report,
-          csvData: res.csvContent,
+          ...reportPayload,
+          csvData,
         }
         setGenerated((prev) => [report, ...prev])
         toast.success('Report generated', {
@@ -137,27 +141,16 @@ export function ReportsPage() {
         closeCreate()
         return
       }
+
+      throw new Error('Invalid response structure received from report generation service')
     } catch (err) {
-      console.warn('[Report Generation API Warning]', err.message)
+      console.error('[Report Generation Error]', err)
+      toast.error('Report generation failed', {
+        description: err.message || 'Unable to generate operational report from backend.',
+      })
     } finally {
       setIsSubmitting(false)
     }
-
-    const report = {
-      id: uid('RP'),
-      title: values.type,
-      period: values.period,
-      generatedOn: TODAY_ISO,
-      rows: 120 + Math.floor(Math.random() * 900),
-      size: values.format === 'CSV' ? `${180 + Math.floor(Math.random() * 400)} KB` : `1.${1 + Math.floor(Math.random() * 8)} MB`,
-      status: 'Ready',
-      format: values.format,
-    }
-    setGenerated((prev) => [report, ...prev])
-    toast.success('Report generated', {
-      description: `${report.title} · ${report.period} · ${report.format} is ready to download.`,
-    })
-    closeCreate()
   }
 
   const handleDownload = (report) => {

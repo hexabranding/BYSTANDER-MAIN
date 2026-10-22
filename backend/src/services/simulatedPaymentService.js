@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Booking, SimulatedPayment } from '../models/index.js';
+import { recordBookingTransaction } from './adminFinanceService.js';
 
 /**
  * Check if payment simulation is permitted in the current runtime environment.
@@ -83,6 +84,17 @@ export const simulatePayment = async (user, bookingId, simulationData = {}) => {
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
+
+  const ledgerStatusMap = {
+    SIMULATED_ESCROW_PENDING: 'escrow_held',
+    SIMULATED_ESCROW_HELD: 'escrow_held',
+    SIMULATED_RELEASED_TO_CAREGIVER: 'released',
+    SIMULATED_REFUNDED: 'refunded',
+  };
+  const targetLedgerStatus = ledgerStatusMap[requestedStatus] || 'escrow_held';
+  await recordBookingTransaction(booking, targetLedgerStatus).catch((txErr) => {
+    console.warn('[Ledger Warning] Could not record booking transaction from simulated payment:', txErr.message);
+  });
 
   return {
     success: true,

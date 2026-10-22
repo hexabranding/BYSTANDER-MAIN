@@ -673,7 +673,7 @@ export function FraudAlertsPage() {
                     showLabel
                   />
                   <p className="mt-2 text-xs text-muted">
-                    Score is a demo heuristic combining signal frequency, account age and payment history.
+                    Score is an automated risk heuristic combining signal frequency, account age and transaction telemetry.
                   </p>
                 </div>
 
@@ -717,7 +717,7 @@ export function FraudAlertsPage() {
             title={action ? `${action.message.replace(/^./, (c) => c.toUpperCase())} alert ${action.alert.id}?` : 'Confirm'}
             message={
               action
-                ? `The alert status will change to "${action.next}". This is recorded in the demo risk ledger for audit.`
+                ? `The alert status will change to "${action.next}". This is recorded in the platform security audit ledger.`
                 : ''
             }
             confirmLabel={action ? `Set to ${action.next}` : 'Confirm'}

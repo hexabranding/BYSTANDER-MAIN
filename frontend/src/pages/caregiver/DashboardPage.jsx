@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Star,
   Wallet,
+  Lock,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -54,9 +55,17 @@ export function DashboardPage() {
   const { user } = useAuth()
   const { caregivers, jobs, bookings, notifications, earnings, acceptJob, confirmBooking, cancelBooking } = useData()
 
-  const myId = user?.caregiverId || 'cg-101'
-  const caregiver = caregivers.find((c) => c.id === myId) || caregivers[0]
-  const verified = (caregiver?.verificationStatus || 'Pending') === 'Verified'
+  const myId = user?.caregiverId || user?.id || 'cg-101'
+  const caregiver = caregivers.find((c) => c.id === myId || c._id === myId) || {
+    name: user?.name || user?.fullName || 'Caretaker',
+    qualification: user?.qualification || 'Caretaker',
+    experienceYears: user?.experienceYears ?? 0,
+    verificationStatus: user?.verificationStatus || 'pending',
+  }
+  const verified = Boolean(
+    user?.verified === true ||
+    String(user?.verificationStatus || caregiver?.verificationStatus || '').toLowerCase() === 'verified',
+  )
 
   const [acceptTarget, setAcceptTarget] = useState(null)
   const [requestTarget, setRequestTarget] = useState(null)
@@ -160,9 +169,17 @@ export function DashboardPage() {
               Your shifts, earnings and verification status — all in one place.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2.5">
-              <StatusBadge status={caregiver?.verificationStatus || 'Pending'} />
+              <StatusBadge
+                status={
+                  verified
+                    ? 'Verified'
+                    : user?.verificationStatus
+                      ? user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1)
+                      : caregiver?.verificationStatus || 'Pending'
+                }
+              />
               <span className="text-xs text-white/55">
-                {caregiver?.qualification} · {caregiver?.experienceYears} yrs experience
+                {user?.qualification || caregiver?.qualification} · {user?.experienceYears ?? caregiver?.experienceYears ?? 0} yrs experience
               </span>
             </div>
           </div>
@@ -175,8 +192,17 @@ export function DashboardPage() {
             >
               {verified ? 'View documents' : 'Complete verification'}
             </Button>
-            <Button variant="secondary" to="/caregiver/jobs" icon={Briefcase}>
-              Browse jobs
+            <Button
+              variant="secondary"
+              to={verified ? '/caregiver/jobs' : '/caregiver/documents'}
+              icon={verified ? Briefcase : Lock}
+              onClick={(e) => {
+                if (!verified) {
+                  toast.info('Please complete verification documents to unlock job browsing.')
+                }
+              }}
+            >
+              {verified ? 'Browse jobs' : 'Unlock jobs'}
             </Button>
           </div>
         </div>
@@ -269,7 +295,14 @@ export function DashboardPage() {
       <SectionLabel>At a glance</SectionLabel>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Open jobs" value={openJobs.length} icon={ClipboardList} tone="primary" hint="Waiting for your response" delay={0} />
+        <StatCard
+          label="Open jobs"
+          value={verified ? openJobs.length : 0}
+          icon={ClipboardList}
+          tone={verified ? 'primary' : 'muted'}
+          hint={verified ? 'Waiting for your response' : 'Locked until verified'}
+          delay={0}
+        />
         <StatCard label="Accepted jobs" value={acceptedJobs.length} icon={Briefcase} tone="accent" hint="On your schedule" delay={0.05} />
         <StatCard label="Upcoming shifts" value={upcoming.length} icon={CalendarCheck} tone="info" hint="Confirmed & in progress" delay={0.1} />
         <StatCard label="Completed jobs" value={completedJobs.length || caregiver?.completedJobs} icon={CheckCircle2} tone="success" hint="Lifetime on CareMate" delay={0.15} />
@@ -284,8 +317,13 @@ export function DashboardPage() {
             subtitle="This week on CareMate"
             icon={Wallet}
             action={
-              <Button variant="link" size="sm" to="/caregiver/earnings">
-                View earnings
+              <Button
+                variant="link"
+                size="sm"
+                to={verified ? '/caregiver/earnings' : '/caregiver/documents'}
+                icon={verified ? undefined : Lock}
+              >
+                {verified ? 'View earnings' : 'Earnings locked'}
               </Button>
             }
           />
@@ -418,8 +456,13 @@ export function DashboardPage() {
                 title="No upcoming shifts"
                 description="Accept a job request and it will appear here with date and time."
                 action={
-                  <Button variant="primary" size="sm" to="/caregiver/jobs">
-                    Browse jobs
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    to={verified ? '/caregiver/jobs' : '/caregiver/documents'}
+                    icon={verified ? undefined : Lock}
+                  >
+                    {verified ? 'Browse jobs' : 'Unlock jobs'}
                   </Button>
                 }
               />
@@ -433,8 +476,13 @@ export function DashboardPage() {
             subtitle="Updates for your account"
             icon={Bell}
             action={
-              <Button variant="link" size="sm" to="/caregiver/messages">
-                Messages
+              <Button
+                variant="link"
+                size="sm"
+                to={verified ? '/caregiver/messages' : '/caregiver/documents'}
+                icon={verified ? undefined : Lock}
+              >
+                {verified ? 'Messages' : 'Messages locked'}
               </Button>
             }
           />

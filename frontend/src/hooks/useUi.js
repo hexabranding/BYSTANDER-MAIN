@@ -14,7 +14,7 @@ export function useDebouncedValue(value, delay = 300) {
 export function useDocumentTitle(title) {
   useEffect(() => {
     const previous = document.title
-    document.title = title ? `${title} · CareMate` : 'CareMate — Trusted Care, Right When You Need It'
+    document.title = title ? `${title} · Bystander` : 'Bystander — Never Alone | Trusted Caregivers & Hospital Bystanders'
     return () => {
       document.title = previous
     }

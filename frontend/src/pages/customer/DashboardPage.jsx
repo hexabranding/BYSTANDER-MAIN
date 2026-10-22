@@ -120,14 +120,9 @@ export function DashboardPage() {
         title={`${greeting}, ${firstName}`}
         subtitle="Here's what is happening with your care bookings today."
         action={
-          <>
-            <Button to="/customer/caregivers" variant="outline" icon={UserRound}>
-              Browse caretakers
-            </Button>
-            <Button to="/customer/book-caregiver" icon={CalendarClock}>
-              Book a caretaker
-            </Button>
-          </>
+          <Button to="/customer/caregivers" icon={UserRound}>
+            Find a caretaker
+          </Button>
         }
       />
 
@@ -219,8 +214,8 @@ export function DashboardPage() {
                 title="No active booking right now"
                 description="When you book a caretaker, the live status will appear here."
                 action={
-                  <Button to="/customer/book-caregiver" icon={CalendarClock}>
-                    Book a caretaker
+                  <Button to="/customer/caregivers" icon={CalendarClock}>
+                    Find a caretaker
                   </Button>
                 }
               />
@@ -275,8 +270,8 @@ export function DashboardPage() {
                   title="Nothing upcoming"
                   description="Schedule a visit and it will show up here."
                   action={
-                    <Button to="/customer/book-caregiver" variant="secondary" size="sm">
-                      Book now
+                    <Button to="/customer/caregivers" variant="secondary" size="sm">
+                      Find a caretaker
                     </Button>
                   }
                   className="py-10"

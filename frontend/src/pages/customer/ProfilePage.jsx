@@ -69,10 +69,8 @@ export function ProfilePage() {
   useDocumentTitle('My profile')
   const navigate = useNavigate()
   const { user, updateProfile, logout } = useAuth()
-  const { resetDemoData } = useData()
 
   const [signOutOpen, setSignOutOpen] = useState(false)
-  const [resetOpen, setResetOpen] = useState(false)
   const [savingPersonal, setSavingPersonal] = useState(false)
   const [savingPatient, setSavingPatient] = useState(false)
 
@@ -207,18 +205,18 @@ export function ProfilePage() {
 
 
   const onPassword = ({ current, next }) => {
-    // Demo accounts all share the seeded password; a custom one is only kept in
-    // this browser, so accept either rather than locking the user out.
-    const stored = user?.password
-    const ok = stored ? current === stored : current === 'caremate123'
-    if (!ok) {
-      toast.error('Current password is incorrect', {
-        description: 'Demo accounts use the password caremate123.',
+    if (!current || current.length < 6) {
+      toast.error('Current password is required', {
+        description: 'Please enter your current active password.',
       })
       return
     }
+    if (current === next) {
+      toast.error('New password must be different from current password')
+      return
+    }
     updateProfile({ password: next })
-    toast.success('Password changed', { description: 'Use the new password next time you sign in.' })
+    toast.success('Password changed', { description: 'Your security credentials have been updated successfully.' })
     password.reset()
   }
 
@@ -238,13 +236,6 @@ export function ProfilePage() {
     navigate('/login')
   }
 
-  const confirmReset = () => {
-    setResetOpen(false)
-    resetDemoData()
-    toast.success('Demo data reset — reloading seed data…')
-    window.setTimeout(() => window.location.reload(), 700)
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -260,14 +251,31 @@ export function ProfilePage() {
       <Card>
         <CardBody className="flex flex-col gap-5 sm:flex-row sm:items-center">
           <div className="flex flex-col items-center gap-2 sm:items-start">
-            <Avatar src={user?.avatar} name={user?.name || 'CareMate User'} size="xl" verified />
-            <Button variant="ghost" size="xs" icon={Camera} onClick={() => toast.info('Photo upload is simulated in this demo')}>
-              Change photo
-            </Button>
+            <Avatar src={user?.avatar} name={user?.name || user?.fullName || 'Bystander User'} size="xl" verified />
+            <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-50 transition">
+              <Camera className="h-3.5 w-3.5" />
+              <span>Change photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    const reader = new FileReader()
+                    reader.onloadend = () => {
+                      updateProfile({ avatar: reader.result })
+                      toast.success('Profile photo updated')
+                    }
+                    reader.readAsDataURL(file)
+                  }
+                }}
+              />
+            </label>
           </div>
 
           <div className="min-w-0 flex-1 text-center sm:text-left">
-            <h2 className="font-display text-xl font-extrabold text-ink">{user?.name || 'CareMate user'}</h2>
+            <h2 className="font-display text-xl font-extrabold text-ink">{user?.name || user?.fullName || 'Bystander user'}</h2>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-sm text-muted sm:justify-start">
               <span className="inline-flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5 text-faint" /> {user?.email}
@@ -518,7 +526,7 @@ export function ProfilePage() {
       </Card>
 
       <Card as="section" id="notifications">
-        <CardHeader title="Notification preferences" subtitle="Choose what CareMate should notify you about." icon={Bell} />
+        <CardHeader title="Notification preferences" subtitle="Choose what Bystander should notify you about." icon={Bell} />
         <CardBody className="space-y-1">
           {PREF_ITEMS.map((item) => (
             <div key={item.key} className="flex items-start justify-between gap-4 border-b border-line py-3.5 last:border-0 last:pb-0 first:pt-0">
@@ -544,29 +552,17 @@ export function ProfilePage() {
       </Card>
 
       <Card as="section" id="security">
-        <CardHeader title="Security & data" subtitle="Sign out of this device or restore the demo dataset." icon={ShieldCheck} />
+        <CardHeader title="Account security" subtitle="Manage your session security and active devices." icon={ShieldCheck} />
         <CardBody className="space-y-4">
           <div className="flex flex-col gap-3 rounded-xl border border-line px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-bold text-ink">Sign out</p>
+              <p className="text-sm font-bold text-ink">Sign out of this session</p>
               <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                Ends your session on this device. You will need to sign in again to access bookings.
+                Ends your active session on this device. You will need to sign in again to access bookings.
               </p>
             </div>
             <Button variant="dangerGhost" icon={LogOut} onClick={() => setSignOutOpen(true)} className="shrink-0">
               Sign out
-            </Button>
-          </div>
-
-          <div className="flex flex-col gap-3 rounded-xl border border-line px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-ink">Reset demo data</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                Restores seeded bookings, complaints, messages and transactions. This cannot be undone.
-              </p>
-            </div>
-            <Button variant="outline" icon={RefreshCcw} onClick={() => setResetOpen(true)} className="shrink-0">
-              Reset demo data
             </Button>
           </div>
         </CardBody>
@@ -576,21 +572,10 @@ export function ProfilePage() {
         open={signOutOpen}
         onClose={() => setSignOutOpen(false)}
         onConfirm={confirmSignOut}
-        title="Sign out of CareMate?"
+        title="Sign out of Bystander?"
         message="You will be returned to the login screen. Any unsaved changes on this page will be lost."
         confirmLabel="Sign out"
         cancelLabel="Stay signed in"
-        tone="danger"
-      />
-
-      <ConfirmationDialog
-        open={resetOpen}
-        onClose={() => setResetOpen(false)}
-        onConfirm={confirmReset}
-        title="Reset demo data?"
-        message="Bookings, complaints, messages, transactions and notifications will return to their original seeded state. Your profile on this device is kept."
-        confirmLabel="Reset data"
-        cancelLabel="Keep my data"
         tone="danger"
       />
     </div>

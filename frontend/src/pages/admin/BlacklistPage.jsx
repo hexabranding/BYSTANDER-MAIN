@@ -87,7 +87,7 @@ export function BlacklistPage() {
       reviewAfter: values.reviewAfter || 'Permanent',
     })
     toast.success(`${values.name.trim()} added to the blacklist`, {
-      description: 'The entry is logged in the demo audit trail.',
+      description: 'The entry is logged in the platform security audit ledger.',
     })
     closeAdd()
   }
@@ -96,7 +96,7 @@ export function BlacklistPage() {
     if (!selected) return
     removeBlacklist(selected.id)
     toast.success(`${selected.name} removed from the blacklist`, {
-      description: 'Removal is recorded in the demo audit trail.',
+      description: 'Removal is recorded in the platform security audit ledger.',
     })
     setRemoveOpen(false)
     setSelectedId(null)
@@ -167,7 +167,7 @@ export function BlacklistPage() {
       <div className="space-y-6">
         <PageHeader
           title="Blacklist"
-          subtitle="Accounts banned from booking or accepting work on CareMate."
+          subtitle="Accounts banned from booking or accepting work on Bystander."
           action={
             <Button icon={Plus} onClick={() => setAddOpen(true)}>
               Add to blacklist
@@ -201,7 +201,7 @@ export function BlacklistPage() {
     <div className="space-y-6">
       <PageHeader
         title="Blacklist"
-        subtitle="Accounts banned from booking or accepting work on CareMate."
+        subtitle="Accounts banned from booking or accepting work on Bystander."
         action={
           <Button icon={Plus} onClick={() => setAddOpen(true)}>
             Add to blacklist
@@ -273,7 +273,7 @@ export function BlacklistPage() {
       )}
 
       <p className="text-xs leading-relaxed text-muted">
-        Blacklist additions and removals are logged in the demo audit trail with the acting admin and timestamp.
+        Blacklist additions and removals are permanently recorded in the administrative security audit ledger.
       </p>
 
       <Modal
@@ -334,7 +334,7 @@ export function BlacklistPage() {
         title="Remove from blacklist?"
         message={
           selected
-            ? `${selected.name} will be able to ${selected.type === 'Caretaker' ? 'accept jobs again' : 'book services again'} immediately. The removal is written to the demo audit trail.`
+            ? `${selected.name} will be able to ${selected.type === 'Caretaker' ? 'accept jobs again' : 'book services again'} immediately. The action is recorded in the platform security audit ledger.`
             : ''
         }
         confirmLabel="Remove entry"
@@ -366,7 +366,7 @@ function AddModal({ open, onClose, onSubmit, register, errors }) {
       open={open}
       onClose={onClose}
       title="Add to blacklist"
-      subtitle="Bans the account from CareMate until the review date."
+      subtitle="Bans the account from Bystander until the review date."
       size="md"
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -430,7 +430,7 @@ function AddModal({ open, onClose, onSubmit, register, errors }) {
         </FormField>
 
         <p className="rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
-          Blacklist actions are logged in the demo audit trail with your admin name and timestamp.
+          Blacklist actions are permanently recorded in the administrative security audit ledger with your admin attribution.
         </p>
       </form>
     </Modal>

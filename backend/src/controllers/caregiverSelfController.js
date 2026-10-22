@@ -72,3 +72,42 @@ export const updateMyAvailability = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * GET /api/caregiver/documents
+ * Authenticated caregiver retrieves their truthful documents, slots, and verification lifecycle.
+ */
+export const getMyDocuments = async (req, res, next) => {
+  try {
+    const data = await caregiverService.getMyDocuments(req.user._id);
+
+    res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/caregiver/documents
+ * Authenticated caregiver uploads or re-uploads a verification document.
+ */
+export const uploadMyDocument = async (req, res, next) => {
+  try {
+    const doc = await caregiverService.uploadCaregiverDocument(
+      req.user._id,
+      req.sanitizedDocument,
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Document submitted successfully and is now under review',
+      data: doc,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -176,7 +176,15 @@ const caregiverProfileSchema = new mongoose.Schema(
     },
     careSettings: {
       type: [String],
-      enum: ['Home Care', 'Hospital Care'],
+      enum: {
+        values: ['Home Care', 'Hospital Care', 'Home', 'Hospital'],
+        message: '{VALUE} is not a valid care setting',
+      },
+      set: (settings) => {
+        if (!Array.isArray(settings)) return settings;
+        const mapping = { Home: 'Home Care', Hospital: 'Hospital Care' };
+        return settings.map((s) => mapping[s] || s);
+      },
       default: ['Home Care'],
     },
     availabilityStatus: {

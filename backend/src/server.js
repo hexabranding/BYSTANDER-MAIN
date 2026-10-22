@@ -1,3 +1,4 @@
+import http from 'http';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -6,6 +7,7 @@ import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import cookieParser from 'cookie-parser';
 import { connectDB } from './config/db.js';
+import { initSocket } from './socket.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/authRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
@@ -70,7 +72,33 @@ app.use(
   }),
 );
 
-// 4. Health Check Endpoint
+// 4. HTTP Request & Status Code Terminal Logger
+if (process.env.NODE_ENV !== 'test') {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const status = res.statusCode;
+
+      // Color code by HTTP status family: 2xx green, 3xx cyan, 4xx yellow, 5xx red
+      let statusColor = '\x1b[32m'; // Green (2xx)
+      if (status >= 500) statusColor = '\x1b[31m'; // Red (5xx)
+      else if (status >= 400) statusColor = '\x1b[33m'; // Yellow (4xx)
+      else if (status >= 300) statusColor = '\x1b[36m'; // Cyan (3xx)
+
+      const bold = '\x1b[1m';
+      const reset = '\x1b[0m';
+      const dim = '\x1b[2m';
+
+      console.log(
+        `[HTTP] ${bold}${req.method}${reset} ${req.originalUrl || req.url} ${statusColor}${status}${reset} ${dim}(${duration}ms)${reset}`,
+      );
+    });
+    next();
+  });
+}
+
+// 5. Health Check Endpoint
 app.get('/api/health', (req, res) => {
   const dbStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
   const dbStatus = dbStates[mongoose.connection.readyState] || 'unknown';
@@ -134,10 +162,14 @@ export const startServer = async () => {
     // 2. Connect to MongoDB Atlas
     await connectDB();
 
-    const server = app.listen(PORT, () => {
+    const httpServer = http.createServer(app);
+    initSocket(httpServer, CLIENT_URL);
+
+    const server = httpServer.listen(PORT, () => {
       console.log(`[Server] Bystander Express server listening on port ${PORT}`);
       console.log(`[Server] Health check: http://localhost:${PORT}/api/health`);
       console.log(`[Server] CORS origin allowed: ${CLIENT_URL}`);
+      console.log(`[Server] Socket.IO real-time service active`);
     });
 
     server.on('error', (err) => {
@@ -169,6 +201,13 @@ export const startServer = async () => {
 
     process.on('SIGINT', handleShutdown);
     process.on('SIGTERM', handleShutdown);
+
+    // Nodemon graceful restart signal
+    process.once('SIGUSR2', () => {
+      server.close(() => {
+        process.kill(process.pid, 'SIGUSR2');
+      });
+    });
 
     return server;
   } catch (error) {

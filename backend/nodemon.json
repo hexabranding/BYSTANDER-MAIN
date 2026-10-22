@@ -1,0 +1,7 @@
+{
+  "watch": ["src"],
+  "ext": "js,json",
+  "ignore": ["tests/*", "node_modules/*", "*.test.js"],
+  "delay": "1000",
+  "signal": "SIGUSR2"
+}

@@ -233,6 +233,15 @@ export const adaptCaregiver = (raw) => {
       ? raw.languages
       : ['English', 'Hindi'],
     bio: raw.bio || '',
+    specialities:
+      Array.isArray(raw.specialities) && raw.specialities.length > 0
+        ? raw.specialities
+        : Array.isArray(raw.specializations) && raw.specializations.length > 0
+          ? raw.specializations
+          : serviceList.slice(0, 3).length > 0
+            ? serviceList.slice(0, 3)
+            : ['Elder Care', 'Post-Op Care'],
+    joinedOn: raw.joinedOn || raw.createdAt || new Date().toISOString(),
     trustScore: Number(raw.trustScore) || 95,
     responseRate: Number(raw.responseRate) || 96,
     completedJobs: Number(raw.completedJobs) || 0,
@@ -749,6 +758,15 @@ export const adaptVerificationDocument = (doc) => {
   const status = normalizeVerificationStatus(doc.verificationStatus || doc.status)
   const reviewer = doc.reviewedBy?.fullName || doc.reviewedBy || 'Operations Desk'
 
+  const fileUrl =
+    doc.fileUrl ||
+    doc.fileData ||
+    doc.dataUrl ||
+    (typeof doc.fileKey === 'string' &&
+    (doc.fileKey.startsWith('data:') || doc.fileKey.startsWith('http') || doc.fileKey.startsWith('/'))
+      ? doc.fileKey
+      : null)
+
   return {
     id,
     _id: id,
@@ -756,6 +774,7 @@ export const adaptVerificationDocument = (doc) => {
     documentType: docType,
     file: doc.fileName || `${docType}.pdf`,
     fileName: doc.fileName || `${docType}.pdf`,
+    fileUrl,
     uploadedOn: doc.createdAt || doc.uploadedOn || new Date().toISOString(),
     status,
     verificationStatus: (doc.verificationStatus || status).toLowerCase(),
@@ -1333,6 +1352,90 @@ export const adaptCommission = (raw) => {
   }
 }
 
+/**
+ * Adapts a backend Booking document (or adapted booking) to the Caregiver Job representation.
+ * @param {Object} raw - Booking record
+ * @returns {Object} Job representation
+ */
+export const adaptBookingToJob = (raw) => {
+  if (!raw || typeof raw !== 'object') return raw
+
+  const b = adaptBooking(raw)
+  const id = String(b.id || b._id || '')
+  const displayId = b.ref || (isMongoObjectId(id) ? `JOB-${id.slice(-4).toUpperCase()}` : id)
+
+  // Status mapping: Pending -> Open, Confirmed/InProgress/Completed -> Accepted, Rejected/Cancelled -> Declined
+  let status = 'Open'
+  const normStatus = (b.status || '').toLowerCase()
+  if (normStatus === 'pending') {
+    status = 'Open'
+  } else if (['confirmed', 'in progress', 'completed', 'in_progress'].includes(normStatus)) {
+    status = 'Accepted'
+  } else if (['rejected', 'cancelled', 'canceled'].includes(normStatus)) {
+    status = 'Declined'
+  }
+
+  // Derive human-friendly shift string
+  let shift = b.shift
+  if (!shift) {
+    if (b.startDateTime && b.endDateTime) {
+      try {
+        const s = new Date(b.startDateTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+        const e = new Date(b.endDateTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+        shift = `${s} – ${e}`
+      } catch {
+        shift = `${b.startTime || '09:00'} (${b.hours || 6}h)`
+      }
+    } else {
+      shift = `${b.startTime || '09:00'} (${b.hours || 6}h)`
+    }
+  }
+
+  const patientName = b.patient?.name || b.patientDetails?.name || 'Patient'
+  const patientAge = Number(b.patient?.age ?? b.patientDetails?.age ?? 60)
+  const patientRelation = b.patient?.relation || b.patientDetails?.relation || 'Family'
+
+  const requirements =
+    b.requirements ||
+    b.specialInstructions ||
+    b.patient?.specialInstructions ||
+    b.patientDetails?.specialInstructions ||
+    'Standard patient bedside monitoring and compassionate care support.'
+
+  const hours = Number(b.hours || b.totalHours || 6)
+  const payment = Number(b.totalAmount || b.payment || b.subtotal || Math.round(hours * 399))
+
+  return {
+    ...b,
+    id,
+    displayId,
+    bookingId: id,
+    service: b.service || b.serviceName || 'Bedside Care',
+    customerName: b.customerName || (b.customer && (b.customer.fullName || b.customer.name)) || 'Customer',
+    caregiverId: b.caregiverId || '',
+    city: b.city || b.location?.city || 'Mumbai',
+    area: b.area || b.location?.area || 'Bandra West',
+    distanceKm: Number(b.distanceKm || 3.2),
+    date: b.date || (b.startDateTime ? new Date(b.startDateTime).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    shift,
+    hours,
+    payment,
+    careType: b.careType || b.location?.careSetting || 'Home Care',
+    patient: {
+      name: patientName,
+      age: patientAge,
+      relation: patientRelation,
+      gender: b.patient?.gender || b.patientDetails?.gender || 'Other',
+      condition: b.patient?.condition || b.patientDetails?.condition || '',
+    },
+    requirements,
+    urgency: b.urgency || (hours >= 8 ? 'High' : 'Medium'),
+    postedAt: b.postedAt || b.createdAt || new Date().toISOString(),
+    status,
+    rawBooking: b,
+  }
+}
+
 export default {
   isMongoObjectId,
   resolveServiceIcon,
@@ -1341,6 +1444,7 @@ export default {
   adaptService,
   adaptCaregiver,
   adaptBooking,
+  adaptBookingToJob,
   adaptCustomerProfile,
   adaptMessage,
   adaptNotification,
@@ -1362,4 +1466,5 @@ export default {
   adaptPayout,
   adaptCommission,
 }
+
 

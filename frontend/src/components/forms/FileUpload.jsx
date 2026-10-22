@@ -36,8 +36,11 @@ export function FileUpload({
       size: file.size,
       type: file.type,
       preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+      rawFile: file,
+      file,
     })
   }
+
 
   const displayError = error || localError
   const isImage = value?.preview

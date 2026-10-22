@@ -1,4 +1,4 @@
-import { User, CustomerProfile, CaregiverProfile } from '../models/index.js';
+import { User, CustomerProfile, CaregiverProfile, Document, Service } from '../models/index.js';
 import { hashPassword, comparePassword, generateToken, sanitizeUser } from '../utils/auth.js';
 
 /**
@@ -137,6 +137,14 @@ export const registerCaregiver = async (data) => {
   // 4. Create CaregiverProfile with safe rollback
   let profile = null;
   try {
+    let initialServicesOffered = [];
+    let initialServices = services && Array.isArray(services) ? services : [];
+    if (initialServices.length === 0) {
+      const activeCatalog = await Service.find({ isActive: true }).select('_id name');
+      initialServicesOffered = activeCatalog.map((s) => s._id);
+      initialServices = activeCatalog.map((s) => s.name);
+    }
+
     profile = await CaregiverProfile.create({
       user: user._id,
       qualification,
@@ -147,8 +155,18 @@ export const registerCaregiver = async (data) => {
       city: city || 'Mumbai, MH',
       area: area || '',
       hourlyRate: hourlyRate !== undefined ? hourlyRate : 499,
-      services: services && Array.isArray(services) ? services : [],
-      careSettings: careSettings && Array.isArray(careSettings) ? careSettings : ['Home Care'],
+      servicesOffered: initialServicesOffered,
+      services: initialServices,
+      careSettings:
+        careSettings && Array.isArray(careSettings) && careSettings.length
+          ? Array.from(
+              new Set(
+                careSettings
+                  .map((s) => (s === 'Home' ? 'Home Care' : s === 'Hospital' ? 'Hospital Care' : s))
+                  .filter((s) => ['Home Care', 'Hospital Care'].includes(s)),
+              ),
+            )
+          : ['Home Care'],
       // Strict security defaults: never allow client to declare itself verified
       verificationStatus: 'pending',
       trustScore: 50,
@@ -156,11 +174,75 @@ export const registerCaregiver = async (data) => {
       rating: { average: 5.0, count: 0 },
       badges: [],
     });
+
+    // 5. Create Document records if documents were uploaded during application
+    const submittedDocs = data.documents || data.docs;
+
+    if (submittedDocs) {
+      const docKeyMap = {
+        nursingCertificate: 'nursing_registration',
+        nursingStudentId: 'college_id',
+        identityDoc: 'identity',
+        addressProof: 'address_proof',
+        policeClearance: 'police_clearance',
+        bankProof: 'bank_verification',
+      };
+
+      const docItems = Array.isArray(submittedDocs)
+        ? submittedDocs
+        : Object.entries(submittedDocs).map(([key, val]) => ({
+            docId: key,
+            type: docKeyMap[key] || key,
+            file: val,
+          }));
+
+      let createdAny = false;
+      for (const item of docItems) {
+        if (!item || !item.file) continue;
+        const docType = docKeyMap[item.docId] || docKeyMap[item.type] || item.type;
+        const validTypes = [
+          'identity',
+          'address_proof',
+          'nursing_registration',
+          'college_id',
+          'police_clearance',
+          'bank_verification',
+          'other',
+        ];
+        if (validTypes.includes(docType)) {
+          const fObj = item.file || {};
+          const fileName = fObj.name || fObj.fileName || (typeof fObj === 'string' ? fObj : `${docType}.pdf`);
+          const fileData = fObj.fileData || item.fileData || null;
+          const fileKey = fileData && typeof fileData === 'string' && fileData.startsWith('data:')
+            ? fileData
+            : `docs/${user._id}/${docType}_${Date.now()}`;
+
+          await Document.create({
+            user: user._id,
+            caregiverProfile: profile._id,
+            documentType: docType,
+            fileName,
+            fileSize: Number(fObj.size || fObj.fileSize) || 1024,
+            mimeType: fObj.type || fObj.mimeType || 'application/pdf',
+            fileKey,
+            verificationStatus: 'under_review',
+          });
+          createdAny = true;
+        }
+
+      }
+
+      if (createdAny) {
+        profile.verificationStatus = 'under_review';
+        await profile.save();
+      }
+    }
   } catch (profileErr) {
     // Rollback user creation
     await User.findByIdAndDelete(user._id);
     throw profileErr;
   }
+
 
   // 5. Generate token
   const token = generateToken({ id: user._id, role: user.role });

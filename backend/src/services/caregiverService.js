@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { CaregiverProfile, User, Service } from '../models/index.js';
+import { CaregiverProfile, User, Service, Document } from '../models/index.js';
 
 /**
  * Validate that every submitted service ID is a valid ObjectId and references an existing active Service.
@@ -235,6 +235,8 @@ export const getPublicCaregiverProfileById = async (caregiverId) => {
     trustScore: profile.trustScore,
     completedJobs: profile.completedJobs,
     badges: profile.badges,
+    verificationStatus: profile.verificationStatus || 'verified',
+    verified: profile.verificationStatus === 'verified',
     createdAt: profile.createdAt,
   };
 };
@@ -357,6 +359,8 @@ export const getPublicCaregivers = async (query = {}) => {
       trustScore: p.trustScore,
       completedJobs: p.completedJobs,
       badges: p.badges,
+      verificationStatus: p.verificationStatus || 'verified',
+      verified: p.verificationStatus === 'verified',
       createdAt: p.createdAt,
     }));
 
@@ -370,3 +374,253 @@ export const getPublicCaregivers = async (query = {}) => {
     },
   };
 };
+
+/**
+ * Retrieve authenticated caregiver's truthful verification status, completion rate,
+ * required document slots, and audit trail.
+ */
+export const getMyDocuments = async (userId) => {
+  const profile = await CaregiverProfile.findOne({ user: userId });
+  if (!profile) {
+    const err = new Error('Caregiver profile not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const user = await User.findById(userId).select('fullName email phone createdAt');
+
+  // Determine required document types based on caregiver's qualification
+  const isStudent =
+    profile.qualification === 'nursing_student' ||
+    profile.qualification === 'Nursing Student (Final Year)' ||
+    profile.qualification === 'Nursing Student';
+
+  const requiredTypes = [
+    {
+      type: 'identity',
+      label: 'Identity Verification',
+      hint: 'Government-issued photo ID (Aadhaar / Passport / Voter ID)',
+    },
+    isStudent
+      ? {
+          type: 'college_id',
+          label: 'Nursing Student College ID',
+          hint: 'Valid nursing college identity card with current academic year',
+        }
+      : {
+          type: 'nursing_registration',
+          label: 'Nursing Registration Certificate',
+          hint: 'State Nursing Council registration certificate or degree proof',
+        },
+    {
+      type: 'address_proof',
+      label: 'Address Verification',
+      hint: 'Recent utility bill, rent agreement, or bank passbook address page',
+    },
+    {
+      type: 'police_clearance',
+      label: 'Police Clearance Certificate',
+      hint: 'Police clearance certificate issued within the last 12 months',
+    },
+    {
+      type: 'bank_verification',
+      label: 'Bank Verification',
+      hint: 'Cancelled cheque or bank passbook showing account number and IFSC',
+    },
+  ];
+
+  const docs = await Document.find({
+    $or: [
+      { user: userId },
+      { caregiverProfile: profile._id },
+    ],
+  })
+    .sort({ createdAt: -1 })
+    .populate('reviewedBy', 'fullName email');
+
+  // Map latest document per documentType
+  const docsByType = new Map();
+  for (const doc of docs) {
+    if (!docsByType.has(doc.documentType)) {
+      docsByType.set(doc.documentType, doc);
+    }
+  }
+
+  const items = requiredTypes.map((reqDef) => {
+    const existing = docsByType.get(reqDef.type);
+    if (existing) {
+      let statusLabel = 'Pending';
+      if (existing.verificationStatus === 'verified') statusLabel = 'Verified';
+      else if (existing.verificationStatus === 'rejected') statusLabel = 'Rejected';
+      else if (existing.verificationStatus === 'under_review') statusLabel = 'Under Review';
+
+      return {
+        id: String(existing._id),
+        type: reqDef.label,
+        documentType: reqDef.type,
+        file: existing.fileName || `${reqDef.type}.pdf`,
+        fileName: existing.fileName,
+        fileSize: existing.fileSize,
+        mimeType: existing.mimeType,
+        fileUrl: existing.fileKey?.startsWith('data:') ? existing.fileKey : null,
+        status: statusLabel,
+        verificationStatus: existing.verificationStatus,
+        feedback: existing.reviewerNotes || '',
+        reviewerNotes: existing.reviewerNotes || '',
+        reviewedBy: existing.reviewedBy?.fullName || null,
+        reviewedAt: existing.reviewedAt || null,
+        uploadedOn: existing.createdAt ? existing.createdAt.toISOString().slice(0, 10) : null,
+        required: true,
+        hint: reqDef.hint,
+      };
+    }
+    return {
+      id: `missing-${reqDef.type}`,
+      type: reqDef.label,
+      documentType: reqDef.type,
+      file: '',
+      fileName: '',
+      fileSize: 0,
+      mimeType: '',
+      fileUrl: null,
+      status: 'Not uploaded',
+      verificationStatus: 'not_uploaded',
+      feedback: '',
+      reviewerNotes: '',
+      reviewedBy: null,
+      reviewedAt: null,
+      uploadedOn: null,
+      required: true,
+      hint: reqDef.hint,
+    };
+  });
+
+  const verifiedCount = items.filter((d) => d.status === 'Verified').length;
+  const uploadedCount = items.filter((d) => d.status !== 'Not uploaded').length;
+  const totalRequired = requiredTypes.length;
+  const completionPct = Math.round((verifiedCount / totalRequired) * 100);
+
+  // Construct truthful chronological audit history
+  const history = [
+    {
+      at: user?.createdAt ? user.createdAt.toISOString() : profile.createdAt.toISOString(),
+      action: 'Application submitted',
+      by: user?.fullName || 'Caretaker',
+    },
+  ];
+
+  for (const doc of docs) {
+    if (doc.createdAt) {
+      const typeLabel = requiredTypes.find((r) => r.type === doc.documentType)?.label || doc.documentType;
+      history.push({
+        at: doc.createdAt.toISOString(),
+        action: `${typeLabel} uploaded`,
+        by: user?.fullName || 'Caretaker',
+      });
+    }
+    if (doc.reviewedAt) {
+      const typeLabel = requiredTypes.find((r) => r.type === doc.documentType)?.label || doc.documentType;
+      const statusTitle = doc.verificationStatus === 'verified' ? 'Verified' : 'Rejected';
+      history.push({
+        at: doc.reviewedAt.toISOString(),
+        action: `${typeLabel} marked ${statusTitle}${doc.reviewerNotes ? `: ${doc.reviewerNotes}` : ''}`,
+        by: doc.reviewedBy?.fullName || 'Operations Desk',
+      });
+    }
+  }
+
+  if (profile.verificationStatus === 'verified') {
+    history.push({
+      at: profile.updatedAt ? profile.updatedAt.toISOString() : new Date().toISOString(),
+      action: 'Application approved — profile marked Verified',
+      by: 'Operations Desk',
+    });
+  } else if (profile.verificationStatus === 'rejected') {
+    history.push({
+      at: profile.updatedAt ? profile.updatedAt.toISOString() : new Date().toISOString(),
+      action: 'Application rejected by compliance team',
+      by: 'Operations Desk',
+    });
+  }
+
+  // Sort history chronologically
+  history.sort((a, b) => new Date(a.at) - new Date(b.at));
+
+  let overallStatus = 'Pending';
+  if (profile.verificationStatus === 'verified') overallStatus = 'Verified';
+  else if (profile.verificationStatus === 'rejected') overallStatus = 'Rejected';
+  else if (profile.verificationStatus === 'under_review') overallStatus = 'Under Review';
+
+  return {
+    id: `VR-${String(profile._id).toUpperCase()}`,
+    caregiverId: String(profile._id),
+    userId: String(userId),
+    name: user?.fullName || 'Caretaker',
+    regNo: profile.nursingRegNo || '',
+    qualification: profile.qualification || '',
+    submittedOn: user?.createdAt || profile.createdAt,
+    status: overallStatus,
+    verificationStatus: profile.verificationStatus,
+    verified: profile.verificationStatus === 'verified',
+    completionPct,
+    verifiedCount,
+    uploadedCount,
+    totalRequired,
+    documents: items,
+    history,
+  };
+};
+
+/**
+ * Upload or re-upload an individual verification document.
+ * Safely upserts document record in Document collection and updates CaregiverProfile status.
+ */
+export const uploadCaregiverDocument = async (userId, docData) => {
+  const profile = await CaregiverProfile.findOne({ user: userId });
+  if (!profile) {
+    const err = new Error('Caregiver profile not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const { documentType, fileName, fileSize, mimeType, fileKey } = docData;
+
+  let doc = await Document.findOne({
+    user: userId,
+    documentType,
+  });
+
+  if (doc) {
+    doc.fileName = fileName;
+    doc.fileSize = fileSize;
+    doc.mimeType = mimeType;
+    doc.fileKey = fileKey;
+    doc.verificationStatus = 'under_review';
+    doc.reviewerNotes = '';
+    doc.reviewedBy = null;
+    doc.reviewedAt = null;
+    await doc.save();
+  } else {
+    doc = await Document.create({
+      user: userId,
+      caregiverProfile: profile._id,
+      documentType,
+      fileName,
+      fileSize,
+      mimeType,
+      fileKey,
+      verificationStatus: 'under_review',
+    });
+  }
+
+  // If caregiver profile was pending or rejected, transition it to under_review
+  if (profile.verificationStatus === 'pending' || profile.verificationStatus === 'rejected') {
+    profile.verificationStatus = 'under_review';
+    await profile.save();
+  }
+
+  return doc;
+};
+

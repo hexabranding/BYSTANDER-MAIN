@@ -43,6 +43,12 @@ export function VerifyOtpPage() {
   const complete = code.length === OTP_LENGTH
 
   useEffect(() => {
+    if (isLoggedIn) {
+      navigate(next, { replace: true })
+    }
+  }, [isLoggedIn, navigate, next])
+
+  useEffect(() => {
     if (secondsLeft <= 0) return undefined
     const timer = setTimeout(() => setSecondsLeft((value) => value - 1), 1000)
     return () => clearTimeout(timer)

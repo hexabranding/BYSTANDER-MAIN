@@ -274,6 +274,8 @@ export const fetchPublicCaregiverById = async (id, options = {}) => {
 export const caregiversService = {
   fetchPublicCaregivers,
   fetchPublicCaregiverById,
+  getCaregivers: fetchPublicCaregivers,
+  getCaregiverById: fetchPublicCaregiverById,
 }
 
 export default caregiversService

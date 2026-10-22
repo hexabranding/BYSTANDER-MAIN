@@ -4,6 +4,7 @@ import {
   submitReview,
   getCaregiverReviews,
   replyToReview,
+  getMyReviews,
 } from '../src/services/reviewService.js';
 import {
   getAdminMetrics,
@@ -89,6 +90,35 @@ describe('Step 13E — Reviews & Operational Analytics Frontend Services', () =>
               ],
               pagination: { total: 1, page: 1, limit: 10, totalPages: 1 },
             },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // 2b. GET /api/reviews/my — Personal customer reviews
+      if (urlStr.includes('/api/reviews/my') && method === 'GET') {
+        if (urlStr.includes('unauthorized=true')) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              message: 'Authentication token required',
+            }),
+            { status: 401, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            reviews: [
+              {
+                _id: MOCK_REVIEW_ID,
+                rating: 5,
+                comment: 'Superb caregiver attention.',
+                createdAt: '2026-10-20T10:00:00.000Z',
+              },
+            ],
+            pagination: { total: 1, page: 1, limit: 10, pages: 1 },
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
@@ -358,4 +388,28 @@ describe('Step 13E — Reviews & Operational Analytics Frontend Services', () =>
       },
     );
   });
+
+  it('getMyReviews retrieves personal reviews via GET /api/reviews/my', async () => {
+    const res = await getMyReviews({ page: 1, limit: 10 });
+    assert.ok(Array.isArray(res.reviews));
+    assert.equal(res.reviews.length, 1);
+    assert.equal(res.reviews[0]._id, MOCK_REVIEW_ID);
+    assert.equal(res.pagination.total, 1);
+
+    const call = mockFetchCalls.find((c) => c.url.includes('/api/reviews/my'));
+    assert.ok(call, 'Must execute real API call to /api/reviews/my');
+    assert.equal(call.method, 'GET');
+  });
+
+  it('getMyReviews propagates 401 Unauthorized without fake static fallback', async () => {
+    await assert.rejects(
+      async () => getMyReviews({ unauthorized: 'true' }),
+      (err) => {
+        assert.equal(err.status, 401);
+        assert.match(err.message, /Authentication token required/i);
+        return true;
+      },
+    );
+  });
 });
+

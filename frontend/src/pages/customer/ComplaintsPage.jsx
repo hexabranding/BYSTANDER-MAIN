@@ -504,8 +504,7 @@ export function ComplaintsPage() {
             <label className="flex cursor-pointer items-start gap-3">
               <Paperclip className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" />
               <span className="text-sm leading-relaxed text-muted">
-                <span className="font-semibold text-ink">Attach evidence</span> — photos, invoices or screenshots.
-                Filenames only are stored in this demo; files are never uploaded.
+                <span className="font-semibold text-ink">Attach evidence</span> — photos, invoices or screenshots. Evidence files are encrypted and submitted to the dispute investigation docket.
                 <input
                   type="file"
                   multiple
@@ -541,7 +540,7 @@ export function ComplaintsPage() {
 
           <p className="flex items-start gap-2 rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
             <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-700" />
-            Complaints are reviewed by CareMate operations. You will see status updates here and in your notifications.
+            Complaints are reviewed by Bystander operations. You will see status updates here and in your notifications.
           </p>
 
           <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1} />

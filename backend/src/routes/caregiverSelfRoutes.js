@@ -5,6 +5,7 @@ import { authenticate, authorizeRoles } from '../middleware/auth.js';
 import {
   validateUpdateCaregiverProfile,
   validateCaregiverAvailability,
+  validateCaregiverDocumentUpload,
 } from '../middleware/validateCaregiver.js';
 import { validateCaregiverPayoutRequest } from '../middleware/validateAdminFinance.js';
 
@@ -21,8 +22,13 @@ router.patch('/profile', validateUpdateCaregiverProfile, caregiverSelfController
 router.get('/availability', caregiverSelfController.getMyAvailability);
 router.put('/availability', validateCaregiverAvailability, caregiverSelfController.updateMyAvailability);
 
+// Document & Verification management
+router.get('/documents', caregiverSelfController.getMyDocuments);
+router.post('/documents', validateCaregiverDocumentUpload, caregiverSelfController.uploadMyDocument);
+
 // Earnings & Payouts management
 router.get('/earnings', adminFinanceController.getCaregiverEarnings);
 router.post('/payouts/request', validateCaregiverPayoutRequest, adminFinanceController.requestCaregiverPayout);
+
 
 export default router;

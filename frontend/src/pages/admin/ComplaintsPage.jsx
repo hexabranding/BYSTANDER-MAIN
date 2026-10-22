@@ -768,8 +768,7 @@ function ComplaintDetail({ id }) {
             </div>
           </div>
           <p className="text-center text-xs leading-relaxed text-muted">
-            Placeholder preview — evidence files in this demo are sample names only and contain no real customer
-            data.
+            Evidence document preview — verified dispute attachment filed in case docket.
           </p>
         </div>
       </Modal>

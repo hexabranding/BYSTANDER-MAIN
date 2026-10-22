@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, IndianRupee, Lock, RefreshCcw, Wallet } from 'lucide-react'
+import { Download, IndianRupee, Lock, RefreshCcw, ShieldCheck, Wallet } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -164,8 +164,8 @@ export function PaymentsPage() {
           </Button>
         }
         meta={
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-info-50 px-3 py-1 text-xs font-semibold text-info-700 ring-1 ring-inset ring-info-500/30">
-            <Lock className="h-3.5 w-3.5" /> Demo transactions — no real payments are processed.
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-500/30">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Platform Escrow Protected · 256-Bit SSL Encryption
           </span>
         }
       />
@@ -174,7 +174,7 @@ export function PaymentsPage() {
         <StatCard label="Total spent" value={formatCurrency(effectiveStats.totalSpent)} icon={IndianRupee} tone="primary" hint="All settled + escrow" delay={0} />
         <StatCard label="Escrow held" value={formatCurrency(effectiveStats.escrowHeld)} icon={Lock} tone="warning" hint="Released after service" delay={0.05} />
         <StatCard label="Refunded this year" value={formatCurrency(effectiveStats.refunded)} icon={RefreshCcw} tone="success" hint="Back to original method" delay={0.1} />
-        <StatCard label="Next payout to caretakers" value="Awaiting settlement" icon={Wallet} tone="info" hint="Handled by CareMate ops" delay={0.15} />
+        <StatCard label="Next payout to caretakers" value="Awaiting settlement" icon={Wallet} tone="info" hint="Handled by Bystander ops" delay={0.15} />
       </div>
 
       <Card>

@@ -132,6 +132,10 @@ export const validateUpdateCaregiverProfile = (req, res, next) => {
     if (!Array.isArray(sanitizedUpdates.careSettings)) {
       errors.push('Care settings must be an array');
     } else {
+      const mapping = { Home: 'Home Care', Hospital: 'Hospital Care' };
+      sanitizedUpdates.careSettings = Array.from(
+        new Set(sanitizedUpdates.careSettings.map((s) => mapping[s] || s)),
+      );
       const invalid = sanitizedUpdates.careSettings.some((s) => !ALLOWED_CARE_SETTINGS.includes(s));
       if (invalid) {
         errors.push(`Care settings can only contain: ${ALLOWED_CARE_SETTINGS.join(', ')}`);
@@ -451,3 +455,76 @@ export const validateGetCaregivers = (req, res, next) => {
 
   next();
 };
+
+/**
+ * Validate Caregiver document upload payload.
+ * Enforces valid documentType, bounded fileName and fileSize, and safe mimeTypes.
+ */
+export const validateCaregiverDocumentUpload = (req, res, next) => {
+  const { documentType, fileName, fileSize, mimeType, fileData, fileKey } = req.body || {};
+
+  const ALLOWED_DOC_TYPES = [
+    'identity',
+    'address_proof',
+    'nursing_registration',
+    'college_id',
+    'police_clearance',
+    'bank_verification',
+    'other',
+  ];
+
+  if (!documentType || typeof documentType !== 'string' || !ALLOWED_DOC_TYPES.includes(documentType.trim())) {
+    return res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: `documentType is required and must be one of: ${ALLOWED_DOC_TYPES.join(', ')}`,
+    });
+  }
+
+  const cleanFileName = String(fileName || `${documentType}.pdf`).trim();
+  if (cleanFileName.length > 255) {
+    return res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: 'fileName cannot exceed 255 characters',
+    });
+  }
+
+  if (fileSize !== undefined) {
+    const size = Number(fileSize);
+    if (isNaN(size) || size < 0 || size > 10 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        error: 'ValidationError',
+        message: 'fileSize must be a positive number under 10MB',
+      });
+    }
+  }
+
+  const cleanMime = String(mimeType || 'application/pdf').trim().toLowerCase();
+  const ALLOWED_MIMES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+  ];
+  if (!ALLOWED_MIMES.includes(cleanMime)) {
+    return res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: 'mimeType must be one of: application/pdf, image/jpeg, image/png, image/webp',
+    });
+  }
+
+  req.sanitizedDocument = {
+    documentType: documentType.trim(),
+    fileName: cleanFileName,
+    fileSize: Number(fileSize) || 1024,
+    mimeType: cleanMime,
+    fileKey: fileKey || (typeof fileData === 'string' && fileData.startsWith('data:') ? fileData : `docs/${req.user._id}/${documentType.trim()}_${Date.now()}`),
+  };
+
+  next();
+};
+

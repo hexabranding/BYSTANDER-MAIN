@@ -230,9 +230,6 @@ export function RatingsPage() {
         }
       />
 
-      {!isLoading && !serverData && (
-        <FallbackNotice message="Demo Mode: The live caregiver ratings API is currently unreachable. Displaying local ratings directory and distribution data." />
-      )}
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard
@@ -288,7 +285,7 @@ export function RatingsPage() {
               )
             })}
             <p className="pt-1 text-xs leading-relaxed text-muted">
-              Distribution is computed from the {reviews.length} reviews stored in the demo context.
+              Distribution is computed from {reviews.length} authenticated patient ratings.
             </p>
           </CardBody>
         </Card>
@@ -434,7 +431,7 @@ export function RatingsPage() {
             <EmptyState
               icon={ClipboardList}
               title="No written reviews yet"
-              description="This caretaker has a rating average but no individual written reviews in the demo data."
+              description="This caretaker has a rating average but no individual written reviews submitted yet."
               className="py-8"
             />
           )

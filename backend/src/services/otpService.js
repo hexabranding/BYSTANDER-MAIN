@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Booking } from '../models/index.js';
 import { generateNumericOtp, hashOtp, verifyOtpHash } from '../utils/otpUtils.js';
+import { recordBookingTransaction } from './adminFinanceService.js';
 
 const OTP_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 const OTP_COOLDOWN_MS = 60 * 1000;    // 60 seconds
@@ -487,6 +488,11 @@ export const verifyCheckOut = async (user, bookingId, checkOutData = {}) => {
     err.name = 'ConflictError';
     throw err;
   }
+
+  // Release escrow transaction in financial ledger upon verified shift completion
+  await recordBookingTransaction(updatedBooking, 'released').catch((txErr) => {
+    console.warn('[Ledger Warning] Could not record release transaction on checkout:', txErr.message);
+  });
 
   return updatedBooking.populate([
     { path: 'customer', select: 'fullName email phone' },

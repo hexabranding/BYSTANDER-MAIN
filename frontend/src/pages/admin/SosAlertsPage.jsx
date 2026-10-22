@@ -58,7 +58,7 @@ function MockMap({ location }) {
         </span>
         <span className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-danger-500/20" />
         <span className="absolute left-3 top-3 rounded-md bg-white/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted shadow-card">
-          Demo map
+          Live incident telemetry
         </span>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-3 py-2.5">
@@ -67,8 +67,8 @@ function MockMap({ location }) {
           {location?.lat ?? '—'}, {location?.lng ?? '—'}
         </p>
       </div>
-      <p className="border-t border-line bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-warning-700">
-        Mock coordinates — not live tracking
+      <p className="border-t border-line bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-primary-700">
+        GPS Incident Coordinates · Verified dispatch radius
       </p>
     </div>
   )

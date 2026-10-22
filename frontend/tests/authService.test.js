@@ -127,14 +127,25 @@ describe('Step 12B - Authentication Service & Security Integration', () => {
     assert.strictEqual(getAuthToken(), null);
   });
 
-  it('5. Customer registration enforces required bounds and maps mobile to phone', async () => {
-    let capturedPayload = null;
+  it('5. Customer registration enforces required bounds and maps address and patient schema to backend', async () => {
+    let capturedAuthPayload = null;
+    let capturedProfilePayload = null;
 
     globalThis.fetch = async (url, options) => {
       if (url.includes('/customer/profile')) {
-        return new Response(JSON.stringify({ success: true, data: {} }), { status: 200, headers: { 'content-type': 'application/json' } });
+        capturedProfilePayload = JSON.parse(options.body);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              defaultAddress: capturedProfilePayload.defaultAddress,
+              patients: capturedProfilePayload.patients,
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
       }
-      capturedPayload = JSON.parse(options.body);
+      capturedAuthPayload = JSON.parse(options.body);
       return new Response(
         JSON.stringify({
           success: true,
@@ -177,9 +188,71 @@ describe('Step 12B - Authentication Service & Security Integration', () => {
     });
 
     assert.strictEqual(validResult.ok, true);
-    assert.strictEqual(capturedPayload.phone, '+919876543210');
-    assert.strictEqual(capturedPayload.fullName, 'Neha Gupta');
+    assert.strictEqual(validResult.partial, undefined);
+    assert.strictEqual(capturedAuthPayload.phone, '+919876543210');
+    assert.strictEqual(capturedAuthPayload.fullName, 'Neha Gupta');
     assert.strictEqual(getAuthToken(), 'customer-registered-token');
+
+    // Verify profile payload alignment with backend schema
+    assert.ok(capturedProfilePayload, 'Customer profile patch must be dispatched');
+    assert.deepStrictEqual(capturedProfilePayload.defaultAddress, {
+      addressLine: 'Plot 12, Mayur Colony',
+      city: 'Pune',
+      area: 'Kothrud',
+      pincode: '411038',
+    });
+    assert.strictEqual(capturedProfilePayload.patients.length, 1);
+    assert.strictEqual(capturedProfilePayload.patients[0].name, 'Suresh Gupta');
+    assert.strictEqual(capturedProfilePayload.patients[0].age, 72);
+    assert.strictEqual(capturedProfilePayload.patients[0].relation, 'Father');
+    assert.strictEqual(capturedProfilePayload.patients[0].condition, 'Hypertension');
+
+    // Verify normalized user contains address and patient info
+    assert.strictEqual(validResult.user.city, 'Pune');
+    assert.strictEqual(validResult.user.area, 'Kothrud');
+    assert.ok(validResult.user.address.includes('Plot 12, Mayur Colony'));
+    assert.strictEqual(validResult.user.patientInfo.name, 'Suresh Gupta');
+  });
+
+  it('5b. Customer registration handles profile patch error honestly as partial registration with warning', async () => {
+    globalThis.fetch = async (url) => {
+      if (url.includes('/customer/profile')) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'ValidationError',
+            message: 'Invalid pincode format',
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            user: { _id: '6711customer456', fullName: 'Amit Roy', role: 'customer' },
+            profile: {},
+            token: 'customer-registered-token-2',
+          },
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    const result = await registerCustomer({
+      fullName: 'Amit Roy',
+      email: 'amit@example.com',
+      mobile: '+91 98765 11111',
+      password: 'StrongPassword123!',
+      city: 'Mumbai',
+      address: 'Flat 101, Sea View',
+      pincode: 'INVALID',
+    });
+
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.partial, true);
+    assert.ok(result.warning.includes('profile details could not be saved'));
+    assert.ok(result.warning.includes('Invalid pincode format'));
   });
 
   it('6. Caregiver registration normalizes qualification and maps rate and mobile', async () => {

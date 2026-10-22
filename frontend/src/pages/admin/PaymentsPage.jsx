@@ -156,7 +156,7 @@ export function PaymentsPage() {
       payout: t.payout,
       status: t.status,
     }))
-    downloadText(`caremate-transactions-${toISO(TODAY)}.csv`, toCSV(rows))
+    downloadText(`bystander-transactions-${toISO(TODAY)}.csv`, toCSV(rows))
     toast.success(`Exported ${rows.length} transaction${rows.length === 1 ? '' : 's'} to CSV`)
   }
 

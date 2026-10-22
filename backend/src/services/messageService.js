@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Message, Booking } from '../models/index.js';
 import { safeDispatchNotification } from './notificationService.js';
+import { getIO } from '../socket.js';
 
 // Regex patterns for detecting potential off-platform payment or contact circumvention
 // Flags the message for administrative review without hard-blocking the communication
@@ -122,10 +123,24 @@ export const sendMessage = async (user, messageData) => {
     idempotencyKey: `msg:${message._id}:${recipient}`,
   });
 
-  return message.populate([
+  const populated = await message.populate([
     { path: 'sender', select: 'fullName email role' },
     { path: 'recipient', select: 'fullName email role' },
   ]);
+
+  // Real-time event dispatch via Socket.IO
+  try {
+    const io = getIO();
+    if (io) {
+      const rawPayload = populated.toObject ? populated.toObject() : populated;
+      io.to(`booking:${booking._id}`).emit('new_message', rawPayload);
+      io.to(`user:${recipient}`).emit('new_message_notification', rawPayload);
+    }
+  } catch (socketErr) {
+    console.error('[Socket Warning] Failed to emit real-time message:', socketErr.message);
+  }
+
+  return populated;
 };
 
 /**
@@ -232,6 +247,21 @@ export const markMessagesAsRead = async (user, bookingId) => {
       readAt: new Date(),
     },
   });
+
+  if (result.modifiedCount > 0) {
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`booking:${booking._id}`).emit('messages_read', {
+          bookingId: booking._id.toString(),
+          readBy: user._id.toString(),
+          readAt: new Date().toISOString(),
+        });
+      }
+    } catch (socketErr) {
+      console.error('[Socket Warning] Failed to emit messages_read:', socketErr.message);
+    }
+  }
 
   return {
     modifiedCount: result.modifiedCount || 0,

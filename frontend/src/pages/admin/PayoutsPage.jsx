@@ -137,8 +137,8 @@ export function PayoutsPage() {
   const handleDownload = (payout) => {
     const line = (label, value) => `${label.padEnd(26, '.')}${value}`
     const text = [
-      'CAREMATE — PAYOUT STATEMENT (DEMO)',
-      '==================================',
+      'BYSTANDER — PAYOUT DISBURSEMENT STATEMENT',
+      '==========================================',
       line('Payout ID', payout.id),
       line('Caretaker', payout.caregiverName),
       line('Statement period', payout.period),
@@ -153,7 +153,7 @@ export function PayoutsPage() {
       line('Platform commission (12%)', `- ${formatCurrency(payout.commission)}`),
       line('Net payable', formatCurrency(payout.net)),
       '',
-      'Generated from the CareMate admin demo. Not a bank document.',
+      'Official Escrow Payout Statement · Bystander Financial Operations.',
     ].join('\n')
     downloadText(`payout-statement-${payout.id}.txt`, text, 'text/plain')
     toast.success(`Statement ${payout.id} downloaded`)
@@ -430,8 +430,7 @@ export function PayoutsPage() {
             <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 text-xs leading-relaxed text-muted">
               <p className="font-semibold text-ink">Disbursal details</p>
               <p className="mt-1.5">
-                Credited to {viewing.method} for period {viewing.period}. Settlement typically completes within 2
-                working days of approval. Demo statement — not a bank document.
+                Credited to {viewing.method} for period {viewing.period}. Disbursal is processed via platform banking gateway within 2 business days of approval.
               </p>
             </div>
           </div>

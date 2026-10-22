@@ -206,7 +206,11 @@ export function RegisterCustomerPage() {
       address: payload.address,
       patientInfo: payload.patientInfo,
     })
-    toast.success('Account created successfully.')
+    if (result.partial || result.warning) {
+      toast.warning(result.warning || result.message)
+    } else {
+      toast.success('Account created successfully.')
+    }
     navigate('/customer/dashboard', { replace: true })
   }
 

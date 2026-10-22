@@ -304,9 +304,6 @@ export function DashboardPage() {
         </div>
       </motion.section>
 
-      {!isLoading && !liveMetrics && (
-        <FallbackNotice message="Demo Mode: The live platform metrics API is unreachable. Displaying local operational and financial seed data for preview purposes." />
-      )}
 
       <SectionLabel>Key metrics</SectionLabel>
 

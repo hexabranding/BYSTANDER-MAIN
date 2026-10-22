@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Briefcase, CalendarDays, Clock, MapPin, User } from 'lucide-react'
+import { Briefcase, CalendarDays, Clock, MapPin, User, RotateCw } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -13,18 +13,24 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Tabs } from '@/components/common/Tabs'
 import { SearchBar } from '@/components/common/SearchBar'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, ErrorState } from '@/components/common/States'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Select } from '@/components/forms/FormField'
+import { bookingService, adaptBookingToJob, isMongoObjectId } from '@/services'
 
 export function JobsPage() {
   useDocumentTitle('Jobs')
 
   const { user } = useAuth()
-  const { jobs, caregivers, acceptJob, rejectJob } = useData()
+  const { caregivers, acceptJob, rejectJob } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
-  const caregiver = caregivers.find((c) => c.id === myId) || caregivers[0]
+  const caregiver = caregivers?.find((c) => c.id === myId) || caregivers?.[0]
+
+  const [realBookings, setRealBookings] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
   const [tab, setTab] = useState('open')
   const [query, setQuery] = useState('')
@@ -33,7 +39,28 @@ export function JobsPage() {
   const [sort, setSort] = useState('newest')
   const [dialog, setDialog] = useState(null)
 
-  const myJobs = useMemo(() => jobs.filter((j) => j.status === 'Open' || j.caregiverId === myId), [jobs, myId])
+  const fetchJobs = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
+    setError(null)
+    try {
+      const res = await bookingService.getBookings({ limit: 50 })
+      setRealBookings(res.bookings || [])
+    } catch (err) {
+      setError(err.message || 'Unable to load jobs')
+      setRealBookings([])
+    } finally {
+      if (showLoading) setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchJobs(true)
+  }, [fetchJobs])
+
+  const myJobs = useMemo(() => {
+    if (!realBookings) return []
+    return realBookings.map(adaptBookingToJob)
+  }, [realBookings])
 
   const counts = useMemo(
     () => ({
@@ -46,7 +73,7 @@ export function JobsPage() {
   )
 
   const serviceOptions = useMemo(() => {
-    const unique = Array.from(new Set(myJobs.map((j) => j.service)))
+    const unique = Array.from(new Set(myJobs.map((j) => j.service).filter(Boolean)))
     return ['All', ...unique]
   }, [myJobs])
 
@@ -61,8 +88,8 @@ export function JobsPage() {
     const byService = service === 'All' ? searched : searched.filter((j) => j.service === service)
     const byUrgency = urgency === 'All' ? byService : byService.filter((j) => j.urgency === urgency)
     const sorted = [...byUrgency]
-    if (sort === 'newest') sorted.sort((a, b) => b.postedAt.localeCompare(a.postedAt))
-    if (sort === 'oldest') sorted.sort((a, b) => a.postedAt.localeCompare(b.postedAt))
+    if (sort === 'newest') sorted.sort((a, b) => (b.postedAt || '').localeCompare(a.postedAt || ''))
+    if (sort === 'oldest') sorted.sort((a, b) => (a.postedAt || '').localeCompare(b.postedAt || ''))
     if (sort === 'payHigh') sorted.sort((a, b) => b.payment - a.payment)
     if (sort === 'payLow') sorted.sort((a, b) => a.payment - b.payment)
     return sorted
@@ -70,24 +97,68 @@ export function JobsPage() {
 
   const activeFilters = (service !== 'All' ? 1 : 0) + (urgency !== 'All' ? 1 : 0)
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!dialog) return
-    if (dialog.type === 'accept') {
-      acceptJob(dialog.job.id, caregiver?.id)
-      toast.success('Job accepted — added to your schedule')
-    } else {
-      rejectJob(dialog.job.id)
-      toast.info('Job declined')
+    const { type, job } = dialog
+    setActionLoading(true)
+
+    try {
+      if (type === 'accept') {
+        if (isMongoObjectId(job.id)) {
+          await bookingService.acceptBooking(job.id)
+        }
+        if (acceptJob) {
+          acceptJob(job.id, caregiver?.id)
+        }
+        setRealBookings((prev) =>
+          (prev || []).map((b) => (b.id === job.id ? { ...b, status: 'Confirmed', rawStatus: 'confirmed' } : b)),
+        )
+        toast.success('Job accepted — added to your schedule', {
+          description: `${job.service} for ${job.customerName} is confirmed.`,
+        })
+      } else {
+        if (isMongoObjectId(job.id)) {
+          await bookingService.rejectBooking(job.id, 'Declined by caretaker')
+        }
+        if (rejectJob) {
+          rejectJob(job.id)
+        }
+        setRealBookings((prev) =>
+          (prev || []).map((b) => (b.id === job.id ? { ...b, status: 'Rejected', rawStatus: 'rejected' } : b)),
+        )
+        toast.info('Job declined', {
+          description: `${job.service} has been declined.`,
+        })
+      }
+      setDialog(null)
+      fetchJobs(false)
+    } catch (err) {
+      toast.error(type === 'accept' ? 'Failed to accept job' : 'Failed to decline job', {
+        description: err.message || 'Server rejected the request.',
+      })
+    } finally {
+      setActionLoading(false)
     }
-    setDialog(null)
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Job requests"
-        subtitle="Shifts matched to your profile. Accept the ones that fit your schedule — customers are waiting for a quick response."
+        subtitle="Live booking requests matched to your profile. Accept the ones that fit your schedule — customers are waiting for a quick response."
         meta={<span className="text-sm text-muted">{counts.open} open · {counts.accepted} accepted</span>}
+        action={
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={RotateCw}
+            onClick={() => fetchJobs(true)}
+            disabled={loading}
+            className={loading ? 'animate-spin' : ''}
+          >
+            Refresh
+          </Button>
+        }
       />
 
       <Tabs
@@ -144,7 +215,43 @@ export function JobsPage() {
         </div>
       ) : null}
 
-      {filtered.length ? (
+      {loading && realBookings === null ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {[1, 2, 3, 4].map((n) => (
+            <Card key={n} className="flex flex-col animate-pulse">
+              <CardBody className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2">
+                    <div className="h-4 w-24 rounded bg-slate-200" />
+                    <div className="h-5 w-44 rounded bg-slate-200" />
+                    <div className="h-4 w-32 rounded bg-slate-100" />
+                  </div>
+                  <div className="h-6 w-20 rounded bg-slate-200" />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="h-4 w-32 rounded bg-slate-100" />
+                  <div className="h-4 w-28 rounded bg-slate-100" />
+                  <div className="h-4 w-24 rounded bg-slate-100" />
+                  <div className="h-4 w-36 rounded bg-slate-100" />
+                </div>
+                <div className="h-12 rounded-xl bg-slate-100" />
+              </CardBody>
+              <CardFooter className="flex justify-between">
+                <div className="h-4 w-20 rounded bg-slate-100" />
+                <div className="h-8 w-32 rounded bg-slate-200" />
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      ) : error && (!realBookings || realBookings.length === 0) ? (
+        <Card>
+          <ErrorState
+            title="Unable to load job requests"
+            description={error}
+            onRetry={() => fetchJobs(true)}
+          />
+        </Card>
+      ) : filtered.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {filtered.map((job) => (
             <Card key={job.id} hover className="flex flex-col">
@@ -152,7 +259,9 @@ export function JobsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">{job.id}</span>
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">
+                        {job.displayId || job.id}
+                      </span>
                       <StatusBadge status={job.urgency} size="sm" />
                       {job.status !== 'Open' ? <StatusBadge status={job.status} size="sm" /> : null}
                     </div>
@@ -266,10 +375,11 @@ export function JobsPage() {
               : `${dialog.job.service} on ${formatDate(dialog.job.date, { long: true })} will be released to other verified caretakers. This cannot be undone.`
             : ''
         }
-        confirmLabel={dialog?.type === 'accept' ? 'Accept job' : 'Decline job'}
+        confirmLabel={dialog?.type === 'accept' ? (actionLoading ? 'Accepting…' : 'Accept job') : (actionLoading ? 'Declining…' : 'Decline job')}
       />
     </div>
   )
 }
 
 export default JobsPage
+

@@ -5,7 +5,6 @@ import { Banknote, Check, CheckCircle2, Clock, Download, Eye, Hourglass, SearchX
 import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
-import { PAYOUT_TREND } from '@/data/charts'
 import { downloadText, formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -32,7 +31,7 @@ const tooltipStyle = {
   color: '#172B3A',
 }
 
-const rupeeTick = (v) => `₹${(v / 1000).toFixed(0)}k`
+const rupeeTick = (v) => (v >= 1000 ? `₹${(v / 1000).toFixed(0)}k` : `₹${v}`)
 
 export function PayoutsPage() {
   useDocumentTitle('Payouts')
@@ -51,17 +50,18 @@ export function PayoutsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSettling, setIsSettling] = useState(false)
 
-  const stats = useMemo(() => {
+  // Demo fallback stats (only used if backend is completely offline)
+  const demoStats = useMemo(() => {
     const count = (s) => payouts.filter((p) => p.status === s).length
     return {
-      total: payouts.reduce((sum, p) => sum + p.net, 0),
+      total: payouts.reduce((sum, p) => sum + (p.net || 0), 0),
       processing: count('Processing'),
       pending: count('Pending'),
       settled: count('Settled'),
     }
   }, [payouts])
 
-  const filtered = useMemo(() => {
+  const demoFiltered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
     return payouts.filter((p) => {
       const matchesStatus = status === 'All' || p.status === status
@@ -72,19 +72,29 @@ export function PayoutsPage() {
     })
   }, [payouts, debouncedSearch, status])
 
+  // Real backend fetch
   const fetchPayouts = async () => {
     setIsLoading(true)
     try {
       const res = await adminService.getAdminPayouts({
-        status: status === 'All' ? 'all' : status,
+        status: status === 'All' ? 'all' : status.toLowerCase(),
         search: debouncedSearch,
       })
-      if (res?.payouts && res.payouts.length > 0) {
+      if (res && Array.isArray(res.payouts)) {
         setLivePayouts(res.payouts)
-        if (res.stats) setLiveStats(res.stats)
+        setLiveStats(
+          res.stats || {
+            total: res.payouts.reduce((sum, p) => sum + (p.net || 0), 0),
+            processing: res.payouts.filter((p) => p.status === 'Processing').length,
+            pending: res.payouts.filter((p) => p.status === 'Pending').length,
+            settled: res.payouts.filter((p) => p.status === 'Settled').length,
+          },
+        )
         setIsFallback(false)
       } else {
-        setIsFallback(true)
+        setLivePayouts([])
+        setLiveStats({ total: 0, processing: 0, pending: 0, settled: 0 })
+        setIsFallback(false)
       }
     } catch {
       setIsFallback(true)
@@ -98,8 +108,36 @@ export function PayoutsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, debouncedSearch])
 
-  const displayedPayouts = livePayouts && !isFallback ? livePayouts : filtered
-  const displayedStats = liveStats && !isFallback ? liveStats : stats
+  // Truthful data selection: prefer live API data over demo data
+  const displayedPayouts = livePayouts !== null && !isFallback ? livePayouts : demoFiltered
+  const displayedStats =
+    liveStats !== null && !isFallback
+      ? liveStats
+      : isFallback
+        ? demoStats
+        : {
+            total: displayedPayouts.reduce((sum, p) => sum + (p.net || 0), 0),
+            processing: displayedPayouts.filter((p) => p.status === 'Processing').length,
+            pending: displayedPayouts.filter((p) => p.status === 'Pending').length,
+            settled: displayedPayouts.filter((p) => p.status === 'Settled').length,
+          }
+
+  // Monthly trend chart dynamically computed from real payouts
+  const monthlyTrend = useMemo(() => {
+    const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']
+    const monthMap = Object.fromEntries(months.map((m) => [m, 0]))
+    if (displayedPayouts && displayedPayouts.length > 0) {
+      displayedPayouts.forEach((p) => {
+        if (p.status === 'Settled' && p.requestedOn) {
+          const m = new Date(p.requestedOn).toLocaleString('en-US', { month: 'short' })
+          if (monthMap[m] !== undefined) {
+            monthMap[m] += p.net || 0
+          }
+        }
+      })
+    }
+    return months.map((month) => ({ month, payout: monthMap[month] }))
+  }, [displayedPayouts])
 
   const viewing = displayedPayouts.find((p) => p.id === viewingId) || null
   const approving = displayedPayouts.find((p) => p.id === approvingId) || null
@@ -257,7 +295,14 @@ export function PayoutsPage() {
           hint="In the banking pipeline"
           delay={0.05}
         />
-        <StatCard label="Pending" value={displayedStats.pending} icon={Hourglass} tone="warning" hint="Awaiting approval" delay={0.1} />
+        <StatCard
+          label="Pending"
+          value={displayedStats.pending}
+          icon={Hourglass}
+          tone="warning"
+          hint="Awaiting approval"
+          delay={0.1}
+        />
         <StatCard
           label="Settled"
           value={displayedStats.settled}
@@ -273,7 +318,7 @@ export function PayoutsPage() {
         <CardBody>
           <div dir="ltr" className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={PAYOUT_TREND} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}>
+              <LineChart data={monthlyTrend} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" vertical={false} />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
                 <YAxis
@@ -314,7 +359,7 @@ export function PayoutsPage() {
             tabs={STATUS_TABS.map((s) => ({
               id: s,
               label: s,
-              count: s === 'All' ? payouts.length : payouts.filter((p) => p.status === s).length,
+              count: s === 'All' ? displayedPayouts.length : displayedPayouts.filter((p) => p.status === s).length,
             }))}
             active={status}
             onChange={setStatus}
@@ -322,22 +367,28 @@ export function PayoutsPage() {
           />
         </div>
 
-        {filtered.length === 0 ? (
+        {displayedPayouts.length === 0 ? (
           <div className="rounded-card border border-line bg-white shadow-card">
             <EmptyState
-              icon={SearchX}
-              title="No payouts found"
-              description="Try a different status tab or clear the search term."
+              icon={debouncedSearch || status !== 'All' ? SearchX : Banknote}
+              title={debouncedSearch || status !== 'All' ? 'No payouts found' : 'No payout requests yet'}
+              description={
+                debouncedSearch || status !== 'All'
+                  ? 'Try a different status tab or clear the search term.'
+                  : 'Caretaker disbursal requests will appear here once shifts are completed and earnings are withdrawn.'
+              }
               action={
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearch('')
-                    setStatus('All')
-                  }}
-                >
-                  Clear filters
-                </Button>
+                debouncedSearch || status !== 'All' ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch('')
+                      setStatus('All')
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : null
               }
             />
           </div>

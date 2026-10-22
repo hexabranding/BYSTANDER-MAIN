@@ -710,6 +710,7 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
   let totalGross = 0;
   let totalCommission = 0;
   let pendingPayout = 0;
+  let availableBalance = 0;
   let thisMonth = 0;
 
   const earningsList = transactions.map((t) => {
@@ -725,6 +726,8 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
 
     if (isPending) {
       pendingPayout += net;
+    } else if (!t.payout) {
+      availableBalance += net;
     }
 
     if (dateStr.startsWith(currentMonthPrefix)) {
@@ -740,7 +743,8 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
       gross,
       commission,
       net,
-      status: isPending ? 'Pending' : 'Released',
+      status: isPending ? 'Pending' : (t.payout ? 'Paid' : 'Released'),
+      payoutId: t.payout ? String(t.payout) : null,
     };
   });
 
@@ -751,6 +755,7 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
       totalGross,
       totalCommission,
       pendingPayout,
+      availableBalance,
       thisMonth,
       commissionPct: totalGross > 0 ? Math.round((totalCommission / totalGross) * 100) : 12,
     },

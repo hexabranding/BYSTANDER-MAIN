@@ -43,6 +43,7 @@ export const getCaregiverEarnings = async () => {
     commission: Number(e.commission || 0),
     net: Number(e.net || 0),
     status: e.status || 'Pending',
+    payoutId: e.payoutId || null,
   }))
 
   const stats = response?.stats || {
@@ -50,6 +51,7 @@ export const getCaregiverEarnings = async () => {
     totalGross: earnings.reduce((s, e) => s + e.gross, 0),
     totalCommission: earnings.reduce((s, e) => s + e.commission, 0),
     pendingPayout: earnings.filter((e) => e.status === 'Pending').reduce((s, e) => s + e.net, 0),
+    availableBalance: earnings.filter((e) => e.status === 'Released' && !e.payoutId).reduce((s, e) => s + e.net, 0),
     thisMonth: earnings.reduce((s, e) => s + e.net, 0),
     commissionPct: 12,
   }

@@ -104,11 +104,21 @@ export function EarningsPage() {
     }
   }, [liveStats, isFallback, totalNet, totalGross, totalCommission, pendingPayout, thisMonth, commissionPct])
 
+  const availableToWithdraw = useMemo(() => {
+    if (liveStats?.availableBalance != null && !isFallback) {
+      return liveStats.availableBalance
+    }
+    return effectiveEarnings
+      .filter((e) => e.status === 'Released' && !e.payoutId)
+      .reduce((sum, e) => sum + (e.net || 0), 0)
+  }, [liveStats, isFallback, effectiveEarnings])
+
   const counts = useMemo(
     () => ({
       all: effectiveEarnings.length,
       pending: effectiveEarnings.filter((e) => e.status === 'Pending').length,
       released: effectiveEarnings.filter((e) => e.status === 'Released').length,
+      paid: effectiveEarnings.filter((e) => e.status === 'Paid').length,
     }),
     [effectiveEarnings],
   )
@@ -287,17 +297,17 @@ export function EarningsPage() {
           <CardBody className="space-y-4">
             <div className="rounded-xl border border-primary-100 bg-gradient-to-br from-mint-50 to-white p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-faint">Available balance</p>
-              <p className="mt-1.5 font-display text-3xl font-extrabold tabular-nums text-ink">{formatCurrency(effectiveStats.pendingPayout)}</p>
+              <p className="mt-1.5 font-display text-3xl font-extrabold tabular-nums text-ink">{formatCurrency(availableToWithdraw)}</p>
               <p className="mt-1 text-xs text-muted">Settles to your registered bank in 2 working days</p>
             </div>
             <div className="rounded-xl border border-line px-4 py-3 text-sm">
               <p className="text-muted">Linked bank account</p>
               <p className="mt-0.5 font-semibold text-ink">HDFC •••• 4412</p>
             </div>
-            <Button variant="primary" icon={HandCoins} className="w-full" disabled={effectiveStats.pendingPayout <= 0} onClick={() => setPayoutDialogOpen(true)}>
+            <Button variant="primary" icon={HandCoins} className="w-full" disabled={availableToWithdraw <= 0} onClick={() => setPayoutDialogOpen(true)}>
               Request payout
             </Button>
-            {effectiveStats.pendingPayout <= 0 ? <p className="text-center text-xs text-muted">No released balance available right now.</p> : null}
+            {availableToWithdraw <= 0 ? <p className="text-center text-xs text-muted">No released balance available right now.</p> : null}
           </CardBody>
         </Card>
       </div>
@@ -319,6 +329,7 @@ export function EarningsPage() {
             { id: 'all', label: 'All', count: counts.all },
             { id: 'pending', label: 'Pending', count: counts.pending },
             { id: 'released', label: 'Released', count: counts.released },
+            ...(counts.paid > 0 ? [{ id: 'paid', label: 'Paid', count: counts.paid }] : []),
           ]}
           active={tab}
           onChange={setTab}
@@ -344,7 +355,7 @@ export function EarningsPage() {
         loading={isSubmittingPayout}
         tone="success"
         title="Request this payout?"
-        message={`${formatCurrency(effectiveStats.pendingPayout)} will be queued for disbursal to your registered bank account. Financial transactions remain simulated in this environment.`}
+        message={`${formatCurrency(availableToWithdraw)} will be queued for disbursal to your registered bank account. Financial transactions remain simulated in this environment.`}
         confirmLabel="Request payout"
       />
     </div>

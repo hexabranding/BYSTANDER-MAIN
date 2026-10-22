@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -16,9 +16,7 @@ import {
   Lock,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
-import { WEEKLY_EARNINGS } from '@/data/charts'
 import { formatCurrency, formatDate, relativeTime } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
@@ -33,6 +31,9 @@ import { RatingStars } from '@/components/common/RatingStars'
 import { ProgressBar } from '@/components/common/Tabs'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { EmptyState } from '@/components/common/States'
+import { bookingService } from '@/services/bookingService'
+import { financeService } from '@/services/financeService'
+import { notificationService } from '@/services/notificationService'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -53,88 +54,156 @@ export function DashboardPage() {
   useDocumentTitle('Caretaker Dashboard')
 
   const { user } = useAuth()
-  const { caregivers, jobs, bookings, notifications, earnings, acceptJob, confirmBooking, cancelBooking } = useData()
-
-  const myId = user?.caregiverId || user?.id || 'cg-101'
-  const caregiver = caregivers.find((c) => c.id === myId || c._id === myId) || {
-    name: user?.name || user?.fullName || 'Caretaker',
-    qualification: user?.qualification || 'Caretaker',
-    experienceYears: user?.experienceYears ?? 0,
-    verificationStatus: user?.verificationStatus || 'pending',
-  }
-  const verified = Boolean(
-    user?.verified === true ||
-    String(user?.verificationStatus || caregiver?.verificationStatus || '').toLowerCase() === 'verified',
-  )
-
+  const [realBookings, setRealBookings] = useState([])
+  const [realEarnings, setRealEarnings] = useState(null)
+  const [realNotifications, setRealNotifications] = useState([])
   const [acceptTarget, setAcceptTarget] = useState(null)
   const [requestTarget, setRequestTarget] = useState(null)
 
-  const myJobs = useMemo(() => jobs.filter((j) => j.status === 'Open' || j.caregiverId === myId), [jobs, myId])
-  const myBookings = useMemo(() => bookings.filter((b) => b.caregiverId === myId), [bookings, myId])
+  const caregiver = {
+    name: user?.fullName || user?.name || 'Caretaker',
+    qualification: user?.qualification || 'Certified Caretaker',
+    experienceYears: user?.experienceYears ?? 0,
+    verificationStatus: user?.verificationStatus || 'pending',
+    rating: user?.rating?.average ?? 5.0,
+    reviewCount: user?.rating?.count ?? 0,
+    trustScore: user?.trustScore ?? 94,
+    responseRate: user?.responseRate ?? 98,
+    badges: user?.badges || ['Police verified', 'CPR certified'],
+  }
 
-  const openJobs = myJobs.filter((j) => j.status === 'Open')
-  const acceptedJobs = myJobs.filter((j) => j.status === 'Accepted')
+  const verified = Boolean(
+    user?.verified === true ||
+    String(user?.verificationStatus || '').toLowerCase() === 'verified',
+  )
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const [bookingsRes, earningsRes, notificationsRes] = await Promise.allSettled([
+        bookingService.getBookings({ limit: 50 }),
+        financeService.getCaregiverEarnings(),
+        notificationService.getNotifications({ limit: 10 }),
+      ])
+
+      if (bookingsRes.status === 'fulfilled') {
+        setRealBookings(bookingsRes.value?.bookings || [])
+      }
+      if (earningsRes.status === 'fulfilled') {
+        setRealEarnings(earningsRes.value || null)
+      }
+      if (notificationsRes.status === 'fulfilled') {
+        setRealNotifications(notificationsRes.value?.notifications || [])
+      }
+    } catch (err) {
+      console.warn('[Caregiver Dashboard Load Error]', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDashboard()
+  }, [loadDashboard])
+
+  const myBookings = useMemo(() => realBookings || [], [realBookings])
+
   const bookingRequests = useMemo(
-    () => myBookings.filter((b) => b.status === 'Pending').sort((a, b) => a.date.localeCompare(b.date)),
+    () => myBookings.filter((b) => b.status === 'Pending').sort((a, b) => (a.date || '').localeCompare(b.date || '')),
     [myBookings],
   )
-  const upcoming = myBookings
-    .filter((b) => ['Confirmed', 'In Progress'].includes(b.status))
-    .sort((a, b) => a.date.localeCompare(b.date))
-  const completedJobs = myBookings.filter((b) => b.status === 'Completed')
 
-  const myBookingIds = useMemo(() => new Set(myBookings.map((b) => b.id)), [myBookings])
-  const myEarnings = useMemo(
-    () => earnings.filter((e) => e.caregiverId === myId || (e.caregiverId == null && myBookingIds.has(e.bookingId))),
-    [earnings, myId, myBookingIds],
+  const upcoming = useMemo(
+    () => myBookings.filter((b) => ['Confirmed', 'In Progress'].includes(b.status)).sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+    [myBookings],
   )
-  const totalEarned = myEarnings.reduce((sum, e) => sum + e.net, 0)
-  const pendingPayout = myEarnings.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
 
-  const caregiverNotifications = useMemo(
-    () =>
-      notifications
-        .filter((n) => n.audience?.includes('caregiver'))
-        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-        .slice(0, 4),
-    [notifications],
+  const completedJobs = useMemo(
+    () => myBookings.filter((b) => b.status === 'Completed'),
+    [myBookings],
   )
+
+  const openJobs = useMemo(
+    () => myBookings.filter((b) => b.status === 'Pending'),
+    [myBookings],
+  )
+
+  const acceptedJobs = useMemo(
+    () => myBookings.filter((b) => b.status === 'Confirmed' || b.status === 'In Progress'),
+    [myBookings],
+  )
+
+  const totalEarned = realEarnings?.stats?.totalNet ?? 0
+  const pendingPayout = realEarnings?.stats?.pendingPayout ?? 0
+  const clearedPayouts = realEarnings?.stats?.availableBalance ?? 0
+
+  const caregiverNotifications = useMemo(() => {
+    return (realNotifications || []).slice(0, 4)
+  }, [realNotifications])
 
   const recommended = openJobs.slice(0, 3)
 
-  const firstName = (caregiver?.name || user?.name || 'Caretaker').split(' ')[0]
+  const firstName = (caregiver?.name || 'Caretaker').split(' ')[0]
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
-  // Headline numbers for the hero strip — kept out of the KPI cards below.
   const liveShifts = myBookings.filter((b) => b.status !== 'Cancelled')
   const bookedHours = liveShifts.reduce((sum, b) => sum + (b.hours || 0), 0)
-  const cancelledShifts = myBookings.length - liveShifts.length
+  const cancelledShifts = myBookings.filter((b) => b.status === 'Cancelled').length
   const decidedShifts = completedJobs.length + cancelledShifts
   const completionRate = decidedShifts ? Math.round((completedJobs.length / decidedShifts) * 100) : null
-  const clearedPayouts = myEarnings.filter((e) => e.status === 'Settled').reduce((sum, e) => sum + e.net, 0)
   const nextShift = upcoming[0]
 
-  const handleAccept = () => {
+  const weeklyEarningsData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    const result = days.map((day) => ({ day, earnings: 0 }))
+
+    const now = new Date()
+    const dayOfWeek = (now.getDay() + 6) % 7 // Monday = 0, Sunday = 6
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - dayOfWeek)
+    monday.setHours(0, 0, 0, 0)
+
+    const list = realEarnings?.earnings || []
+    list.forEach((e) => {
+      if (e.status !== 'Released' && e.status !== 'Paid') return
+      const d = new Date(e.date)
+      if (isNaN(d.getTime())) return
+      const diffDays = Math.floor((d.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24))
+      if (diffDays >= 0 && diffDays < 7) {
+        result[diffDays].earnings += Number(e.net || 0)
+      }
+    })
+
+    return result
+  }, [realEarnings])
+
+  const handleAccept = async () => {
     if (!acceptTarget) return
-    acceptJob(acceptTarget.id, caregiver?.id)
-    toast.success('Job accepted — added to your schedule')
-    setAcceptTarget(null)
+    try {
+      await bookingService.acceptBooking(acceptTarget.id)
+      toast.success('Job accepted — added to your schedule')
+      setAcceptTarget(null)
+      loadDashboard()
+    } catch (err) {
+      toast.error('Failed to accept job', { description: err?.message || 'Please try again.' })
+    }
   }
 
-  const handleRequestConfirm = () => {
+  const handleRequestConfirm = async () => {
     if (!requestTarget) return
-    if (requestTarget.action === 'accept') {
-      confirmBooking(requestTarget.booking.id)
-      toast.success('Booking request accepted', {
-        description: `${requestTarget.booking.service} on ${formatDate(requestTarget.booking.date, { long: true })} is confirmed.`,
-      })
-    } else {
-      cancelBooking(requestTarget.booking.id, 'Declined by caretaker')
-      toast.info('Booking request declined', { description: 'The customer has been notified.' })
+    try {
+      if (requestTarget.action === 'accept') {
+        await bookingService.acceptBooking(requestTarget.booking.id)
+        toast.success('Booking request accepted', {
+          description: `${requestTarget.booking.service} on ${formatDate(requestTarget.booking.date, { long: true })} is confirmed.`,
+        })
+      } else {
+        await bookingService.rejectBooking(requestTarget.booking.id, 'Declined by caretaker')
+        toast.info('Booking request declined', { description: 'The customer has been notified.' })
+      }
+      setRequestTarget(null)
+      loadDashboard()
+    } catch (err) {
+      toast.error('Action failed', { description: err?.message || 'Could not update booking' })
     }
-    setRequestTarget(null)
   }
 
   return (
@@ -344,7 +413,7 @@ export function DashboardPage() {
             </div>
             <div dir="ltr">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={WEEKLY_EARNINGS} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                <BarChart data={weeklyEarningsData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="cgWeeklyEarnings" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#2DD4BF" />

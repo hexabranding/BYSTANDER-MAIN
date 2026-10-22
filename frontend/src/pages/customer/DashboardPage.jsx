@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
@@ -16,9 +16,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
-import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
-import { CUSTOMER_SPEND } from '@/data/charts'
 import { formatCurrency, formatDate, formatTime, relativeTime } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -30,6 +28,10 @@ import { Avatar } from '@/components/common/Avatar'
 import { ProgressBar } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
 import { RatingModal } from '@/components/booking/RatingModal'
+import { bookingService } from '@/services/bookingService'
+import { financeService } from '@/services/financeService'
+import { notificationService } from '@/services/notificationService'
+import { reviewService } from '@/services/reviewService'
 
 const toneIcons = {
   success: CheckCircle2,
@@ -55,29 +57,75 @@ const QUICK_LINKS = [
 export function DashboardPage() {
   useDocumentTitle('Dashboard')
   const { user } = useAuth()
-  const { bookings, caregivers, notifications, markNotificationRead, addReview, updateBooking } = useData()
+  const [realBookings, setRealBookings] = useState([])
+  const [realPayments, setRealPayments] = useState(null)
+  const [realNotifications, setRealNotifications] = useState([])
   const [rateTarget, setRateTarget] = useState(null)
 
-  const customerId = user?.id || 'cu-201'
-  const firstName = (user?.name || 'Priya Sharma').split(' ')[0]
+  const firstName = (user?.name || user?.fullName || 'Customer').split(' ')[0]
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
-  const { myBookings, active, upcoming, previous, completedCount, totalSpent, caregiverFor } = useMemo(() => {
-    const list = bookings.filter((b) => b.customerId === customerId)
+  const loadDashboard = useCallback(async () => {
+    try {
+      const [bookingsRes, paymentsRes, notificationsRes] = await Promise.allSettled([
+        bookingService.getBookings({ limit: 50 }),
+        financeService.getCustomerPayments({ limit: 50 }),
+        notificationService.getNotifications({ limit: 10 }),
+      ])
+
+      if (bookingsRes.status === 'fulfilled') {
+        setRealBookings(bookingsRes.value?.bookings || [])
+      }
+      if (paymentsRes.status === 'fulfilled') {
+        setRealPayments(paymentsRes.value || null)
+      }
+      if (notificationsRes.status === 'fulfilled') {
+        setRealNotifications(notificationsRes.value?.notifications || [])
+      }
+    } catch (err) {
+      console.warn('[Customer Dashboard Load Error]', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDashboard()
+  }, [loadDashboard])
+
+  const caregiverFor = useCallback((b) => {
+    if (!b) return null
+    if (b.caregiver && typeof b.caregiver === 'object') {
+      return {
+        name: b.caregiver.fullName || b.caregiver.name || b.caregiverName || 'Caretaker',
+        photo: b.caregiver.photo || b.caregiver.avatar || null,
+        qualification: b.caregiver.qualification || 'Certified Caretaker',
+        verified: Boolean(b.caregiver.verified),
+      }
+    }
+    if (b.caregiverName) {
+      return {
+        name: b.caregiverName,
+        qualification: 'Certified Caretaker',
+        verified: true,
+      }
+    }
+    return null
+  }, [])
+
+  const { myBookings, active, upcoming, previous, completedCount, totalSpent } = useMemo(() => {
+    const list = realBookings || []
     const today = new Date().toISOString().slice(0, 10)
-    const activeList = list.filter((b) => b.status === 'In Progress' || b.status === 'Confirmed')
-    const inProgress = list.find((b) => b.status === 'In Progress') || activeList[0] || null
+    const inProgress = list.find((b) => b.status === 'In Progress') || list.find((b) => b.status === 'Confirmed') || null
     const upcomingList = list
-      .filter((b) => (b.status === 'Pending' || b.status === 'Confirmed') && b.date >= today)
-      .sort((a, b) => a.date.localeCompare(b.date))
+      .filter((b) => (b.status === 'Pending' || b.status === 'Confirmed') && b.id !== inProgress?.id && (b.date >= today || !b.date))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     const completed = list.filter((b) => b.status === 'Completed')
-    const previousList = [...completed].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3)
-    const spent = list
+    const previousList = [...completed].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 3)
+    const spent = realPayments?.stats?.totalSpent ?? list
       .filter((b) => b.status !== 'Cancelled')
       .reduce((sum, b) => sum + (b.total || 0), 0)
-    const cgMap = new Map(caregivers.map((c) => [c.id, c]))
+
     return {
       myBookings: list,
       active: inProgress,
@@ -85,33 +133,85 @@ export function DashboardPage() {
       previous: previousList,
       completedCount: completed.length,
       totalSpent: spent,
-      caregiverFor: (b) => (b ? cgMap.get(b.caregiverId) : null),
     }
-  }, [bookings, caregivers, customerId])
+  }, [realBookings, realPayments])
 
-  const activity = useMemo(
-    () => notifications.filter((n) => n.audience?.includes('customer')).slice(0, 6),
-    [notifications],
-  )
+  const spendChartData = useMemo(() => {
+    const months = []
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthKey = d.toISOString().slice(0, 7)
+      const label = d.toLocaleString('default', { month: 'short' })
+      months.push({ key: monthKey, month: label, spend: 0 })
+    }
+
+    const txs = realPayments?.transactions || []
+    if (txs.length > 0) {
+      txs.forEach((t) => {
+        if (t.status === 'refunded' || t.status === 'Refunded') return
+        const txDate = t.createdAt || t.date
+        if (!txDate) return
+        const key = new Date(txDate).toISOString().slice(0, 7)
+        const found = months.find((m) => m.key === key)
+        if (found) {
+          found.spend += Number(t.amount || 0)
+        }
+      })
+    } else {
+      myBookings.forEach((b) => {
+        if (b.status === 'Cancelled') return
+        const bDate = b.date || b.startDateTime || b.createdAt
+        if (!bDate) return
+        const key = new Date(bDate).toISOString().slice(0, 7)
+        const found = months.find((m) => m.key === key)
+        if (found) {
+          found.spend += Number(b.total || 0)
+        }
+      })
+    }
+
+    return months.map(({ month, spend }) => ({ month, spend }))
+  }, [realPayments, myBookings])
+
+  const activity = useMemo(() => {
+    return (realNotifications || []).slice(0, 6)
+  }, [realNotifications])
 
   const activeCaregiver = caregiverFor(active)
   const activeStepsDone = active?.timeline?.filter((t) => t.status === 'completed').length || 1
   const activeStepsTotal = active?.timeline?.length || 5
 
-  const handleSubmitRating = (b, { criteria, average, comment }) => {
-    addReview({
-      bookingId: b.id,
-      caregiverId: b.caregiverId,
-      customerId: b.customerId,
-      customerName: user?.name || 'Customer',
-      rating: average,
-      criteria,
-      comment: comment || 'Great service, thank you!',
-    })
-    updateBooking(b.id, { customerRating: { ...criteria, average, at: new Date().toISOString() } })
-    toast.success('Thank you for your review!', {
-      description: `${caregiverFor(b)?.name || 'Your caretaker'} received your ${average}-star rating.`,
-    })
+  const handleSubmitRating = async (b, { average, comment }) => {
+    try {
+      await reviewService.submitReview({
+        bookingId: b.id || b._id,
+        rating: average,
+        comment: comment || 'Great service, thank you!',
+      })
+      toast.success('Thank you for your review!', {
+        description: `${caregiverFor(b)?.name || 'Your caretaker'} received your ${average}-star rating.`,
+      })
+      setRateTarget(null)
+      loadDashboard()
+    } catch (err) {
+      toast.error('Review submission failed', {
+        description: err?.message || 'Unable to submit review. Please try again.',
+      })
+    }
+  }
+
+  const handleMarkRead = async (id) => {
+    try {
+      await notificationService.markOneAsRead(id)
+      setRealNotifications((prev) =>
+        prev ? prev.map((n) => (n.id === id ? { ...n, read: true } : n)) : []
+      )
+    } catch {
+      setRealNotifications((prev) =>
+        prev ? prev.map((n) => (n.id === id ? { ...n, read: true } : n)) : []
+      )
+    }
   }
 
   return (
@@ -353,7 +453,7 @@ export function DashboardPage() {
             <CardBody>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={CUSTOMER_SPEND} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                  <AreaChart data={spendChartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                     <defs>
                       <linearGradient id="customerSpendFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#0F766E" stopOpacity={0.28} />
@@ -433,7 +533,7 @@ export function DashboardPage() {
                     <button
                       key={n.id}
                       type="button"
-                      onClick={() => !n.read && markNotificationRead(n.id)}
+                      onClick={() => !n.read && handleMarkRead(n.id)}
                       className="flex w-full items-start gap-3 px-5 py-3.5 text-left transition hover:bg-mint-50/60"
                     >
                       <span className="relative mt-0.5 shrink-0">
@@ -468,7 +568,11 @@ export function DashboardPage() {
                 <p className="mt-1 text-xs leading-relaxed text-muted">
                   Our care coordinators can help you pick the right service for {user?.patientInfo?.name || 'your loved one'}.
                 </p>
-                <p className="mt-2 text-xs text-faint">Last visit: {formatDate(myBookings[myBookings.length - 1]?.createdAt)} · {formatTime(myBookings[myBookings.length - 1]?.createdAt)}</p>
+                {myBookings.length ? (
+                  <p className="mt-2 text-xs text-faint">
+                    Last visit: {formatDate(myBookings[myBookings.length - 1]?.createdAt || myBookings[myBookings.length - 1]?.date)}
+                  </p>
+                ) : null}
               </div>
             </CardBody>
           </Card>

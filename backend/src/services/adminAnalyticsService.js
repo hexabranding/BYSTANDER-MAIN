@@ -4,6 +4,7 @@ import { CaregiverProfile } from '../models/CaregiverProfile.js';
 import { Booking } from '../models/Booking.js';
 import { SosIncident } from '../models/SosIncident.js';
 import { Complaint } from '../models/Complaint.js';
+import { Payout } from '../models/Payout.js';
 
 /**
  * Helper to format date into month label (e.g. 'Oct 2026')
@@ -36,6 +37,8 @@ export const getAdminMetrics = async () => {
     recentCustomers,
     recentCaregivers,
     activeSosDocs,
+    pendingVerificationsDocs,
+    payoutAgg,
   ] = await Promise.all([
     User.countDocuments({ role: 'customer' }),
     CaregiverProfile.countDocuments(),
@@ -91,6 +94,20 @@ export const getAdminMetrics = async () => {
     SosIncident.find({ status: { $in: ['Open', 'Under Investigation'] } })
       .sort({ createdAt: -1 })
       .limit(5),
+    CaregiverProfile.find({ verificationStatus: { $in: ['pending', 'under_review'] } })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate('user', 'fullName avatar email phone'),
+    (mongoose.connection.readyState === 1 || (typeof Payout?.aggregate === 'function' && Payout.aggregate !== mongoose.Model.aggregate))
+      ? Payout.aggregate([
+          {
+            $group: {
+              _id: '$status',
+              total: { $sum: '$net' },
+            },
+          },
+        ]).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   const financials = financialAgg[0] || { gross: 0, count: 0 };
@@ -101,20 +118,40 @@ export const getAdminMetrics = async () => {
   const totalDecided = completedBookingsCount + cancelledBookingsCount;
   const completionRate = totalDecided > 0 ? Math.round((completedBookingsCount / totalDecided) * 100) : 100;
 
-  // Transform monthly activity for frontend charts
-  const bookingActivity = monthlyActivityAgg.map((item) => ({
-    month: formatMonthLabel(item._id),
-    bookings: item.bookings,
-    completed: item.completed,
-    cancelled: item.cancelled,
-  }));
+  // Generate a continuous rolling 6-month calendar time-series for frontend charts
+  const rollingMonths = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    rollingMonths.push({
+      key,
+      month: formatMonthLabel(key),
+    });
+  }
 
-  const revenueSplit = monthlyActivityAgg.map((item) => ({
-    month: formatMonthLabel(item._id),
-    revenue: item.gross,
-    commission: Math.round(item.gross * 0.12),
-    payout: Math.round(item.gross * 0.88),
-  }));
+  const activityMap = new Map((monthlyActivityAgg || []).map((item) => [item._id, item]));
+
+  const bookingActivity = rollingMonths.map((m) => {
+    const agg = activityMap.get(m.key);
+    return {
+      month: m.month,
+      bookings: agg ? agg.bookings : 0,
+      completed: agg ? agg.completed : 0,
+      cancelled: agg ? agg.cancelled : 0,
+    };
+  });
+
+  const revenueSplit = rollingMonths.map((m) => {
+    const agg = activityMap.get(m.key);
+    const itemGross = agg ? agg.gross : 0;
+    return {
+      month: m.month,
+      revenue: itemGross,
+      commission: Math.round(itemGross * 0.12),
+      payout: Math.round(itemGross * 0.88),
+    };
+  });
 
   // Service distribution percentages
   const totalServices = serviceDistAgg.reduce((sum, s) => sum + s.count, 0) || 1;
@@ -152,6 +189,31 @@ export const getAdminMetrics = async () => {
     .sort((a, b) => new Date(b.joinedOn).getTime() - new Date(a.joinedOn).getTime())
     .slice(0, 5);
 
+  // Pending verifications list
+  const pendingVerifications = (pendingVerificationsDocs || []).map((cp) => ({
+    id: cp._id.toString(),
+    name: cp.user?.fullName || 'Caregiver',
+    avatar: cp.user?.avatar || null,
+    qualification: cp.qualification || 'Caregiver',
+    status: cp.verificationStatus === 'under_review' ? 'Under Review' : 'Pending',
+    submittedOn: cp.createdAt,
+  }));
+
+  // Aggregate real payout lifecycle summary
+  const payoutSummary = { due: 0, processing: 0, settled: 0 };
+  if (Array.isArray(payoutAgg)) {
+    payoutAgg.forEach((item) => {
+      if (item._id === 'pending') {
+        payoutSummary.due += item.total || 0;
+      } else if (item._id === 'processing') {
+        payoutSummary.due += item.total || 0;
+        payoutSummary.processing += item.total || 0;
+      } else if (item._id === 'settled') {
+        payoutSummary.settled += item.total || 0;
+      }
+    });
+  }
+
   return {
     stats: {
       customers: customersCount,
@@ -182,6 +244,7 @@ export const getAdminMetrics = async () => {
       createdAt: b.createdAt,
     })),
     recentRegistrations,
+    pendingVerifications,
     activeSos: activeSosDocs.map((s) => ({
       id: s.incidentNumber || s._id.toString(),
       priority: s.priority,
@@ -189,11 +252,7 @@ export const getAdminMetrics = async () => {
       summary: s.summary,
       reportedAt: s.createdAt,
     })),
-    payoutSummary: {
-      due: Math.round(gross * 0.88),
-      processing: Math.round(gross * 0.2),
-      settled: Math.round(gross * 0.68),
-    },
+    payoutSummary,
   };
 };
 

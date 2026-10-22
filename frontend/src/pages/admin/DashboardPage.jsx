@@ -31,13 +31,9 @@ import {
   Users,
   XCircle,
 } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { EASE } from '@/utils/motion'
-import { CUSTOMERS, getCustomerById } from '@/data/bookings'
-import { PAYOUTS } from '@/data/finance'
-import { BOOKING_ACTIVITY, CITY_DISTRIBUTION, REVENUE_SPLIT, SERVICE_DISTRIBUTION } from '@/data/charts'
 import { formatCompactCurrency, formatCurrency, formatDate, formatNumber, relativeTime } from '@/utils/format'
 import { StatCard } from '@/components/common/StatCard'
 import { SectionLabel } from '@/components/common/SectionLabel'
@@ -46,7 +42,6 @@ import { Button } from '@/components/common/Button'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/States'
-import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { adminService } from '@/services/adminService'
 
 const tooltipStyle = {
@@ -81,7 +76,6 @@ function LegendDots({ items }) {
 export function DashboardPage() {
   useDocumentTitle('Admin dashboard')
 
-  const { bookings, caregivers, verifications, sos } = useData()
   const [liveMetrics, setLiveMetrics] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -107,44 +101,25 @@ export function DashboardPage() {
   }, [])
 
   const stats = useMemo(() => {
-    if (liveMetrics?.stats) {
-      const s = liveMetrics.stats
-      const pendingVerifications = verifications.filter((v) => v.status === 'Pending' || v.status === 'Under Review')
-      return {
-        customers: s.customers,
-        caregivers: s.caregivers,
-        pendingVerifications,
-        active: s.active,
-        completed: s.completed,
-        cancelled: s.cancelled,
-        liveCount: s.liveCount,
-        gross: s.gross,
-        revenue: s.revenue,
-        avgValue: s.avgValue,
-        completionRate: s.completionRate,
-      }
-    }
-    const active = bookings.filter((b) => ['Pending', 'Confirmed', 'In Progress'].includes(b.status))
-    const completed = bookings.filter((b) => b.status === 'Completed')
-    const cancelled = bookings.filter((b) => b.status === 'Cancelled')
-    const live = bookings.filter((b) => b.status !== 'Cancelled')
-    const gross = live.reduce((sum, b) => sum + (b.total || 0), 0)
-    const revenue = live.reduce((sum, b) => sum + (b.commission || 0), 0)
-    const pendingVerifications = verifications.filter((v) => v.status === 'Pending' || v.status === 'Under Review')
+    const s = liveMetrics?.stats
     return {
-      customers: CUSTOMERS.length,
-      caregivers: caregivers.length,
-      pendingVerifications,
-      active: active.length,
-      completed: completed.length,
-      cancelled: cancelled.length,
-      liveCount: live.length,
-      gross,
-      revenue,
-      avgValue: Math.round(gross / Math.max(1, live.length)),
-      completionRate: Math.round((completed.length / Math.max(1, completed.length + cancelled.length)) * 100),
+      customers: s?.customers ?? 0,
+      caregivers: s?.caregivers ?? 0,
+      pendingVerificationsCount: s?.pendingVerificationsCount ?? 0,
+      active: s?.active ?? 0,
+      completed: s?.completed ?? 0,
+      cancelled: s?.cancelled ?? 0,
+      liveCount: s?.liveCount ?? 0,
+      gross: s?.gross ?? 0,
+      revenue: s?.revenue ?? 0,
+      avgValue: s?.avgValue ?? 0,
+      completionRate: s?.completionRate ?? 100,
     }
-  }, [bookings, caregivers, verifications, liveMetrics])
+  }, [liveMetrics])
+
+  const pendingVerificationsList = useMemo(() => {
+    return liveMetrics?.pendingVerifications || []
+  }, [liveMetrics])
 
   const recentBookings = useMemo(() => {
     if (liveMetrics?.recentBookings?.length) {
@@ -153,70 +128,30 @@ export function DashboardPage() {
         service: b.service,
         date: b.date,
         startTime: b.date ? new Date(b.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM',
-        customerName: b.customerName,
+        customerName: b.customerName || 'Customer',
         status: b.status ? b.status.charAt(0).toUpperCase() + b.status.slice(1).replace('_', ' ') : 'Pending',
         createdAt: b.createdAt,
       }))
     }
-    return [...bookings]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5)
-  }, [bookings, liveMetrics])
-
-  const recentRegistrations = useMemo(() => {
-    if (liveMetrics?.recentRegistrations?.length) {
-      return liveMetrics.recentRegistrations
-    }
-    return [
-      ...CUSTOMERS.map((c) => ({
-        id: c.id,
-        kind: 'Customer',
-        name: c.name,
-        avatar: c.avatar,
-        meta: c.city,
-        joinedOn: c.joinedOn,
-      })),
-      ...caregivers.map((c) => ({
-        id: c.id,
-        kind: 'Caretaker',
-        name: c.name,
-        avatar: c.photo,
-        meta: c.qualification,
-        joinedOn: c.joinedOn,
-      })),
-    ]
-      .sort((a, b) => String(b.joinedOn).localeCompare(String(a.joinedOn)))
-      .slice(0, 5)
-  }, [caregivers, liveMetrics])
-
-  const activeSos = useMemo(() => {
-    if (liveMetrics?.activeSos?.length) {
-      return liveMetrics.activeSos
-    }
-    return sos.filter((s) => s.status === 'Open' || s.status === 'Under Investigation')
-  }, [sos, liveMetrics])
-
-  const payoutSummary = useMemo(() => {
-    if (liveMetrics?.payoutSummary) {
-      return liveMetrics.payoutSummary
-    }
-    const month = new Date().toISOString().slice(0, 7)
-    const due = PAYOUTS.filter((p) => p.status === 'Pending' || p.status === 'Processing').reduce(
-      (sum, p) => sum + p.net,
-      0,
-    )
-    const processing = PAYOUTS.filter((p) => p.status === 'Processing').reduce((sum, p) => sum + p.net, 0)
-    const settled = PAYOUTS.filter((p) => p.status === 'Settled' && String(p.requestedOn).startsWith(month)).reduce(
-      (sum, p) => sum + p.net,
-      0,
-    )
-    return { due, processing, settled }
+    return []
   }, [liveMetrics])
 
-  const bookingActivityData = liveMetrics?.bookingActivity?.length ? liveMetrics.bookingActivity : BOOKING_ACTIVITY
-  const revenueSplitData = liveMetrics?.revenueSplit?.length ? liveMetrics.revenueSplit : REVENUE_SPLIT
-  const serviceDistributionData = liveMetrics?.serviceDistribution?.length ? liveMetrics.serviceDistribution : SERVICE_DISTRIBUTION
-  const cityDistributionData = liveMetrics?.cityDistribution?.length ? liveMetrics.cityDistribution : CITY_DISTRIBUTION
+  const recentRegistrations = useMemo(() => {
+    return liveMetrics?.recentRegistrations || []
+  }, [liveMetrics])
+
+  const activeSos = useMemo(() => {
+    return liveMetrics?.activeSos || []
+  }, [liveMetrics])
+
+  const payoutSummary = useMemo(() => {
+    return liveMetrics?.payoutSummary || { due: 0, processing: 0, settled: 0 }
+  }, [liveMetrics])
+
+  const bookingActivityData = liveMetrics?.bookingActivity || []
+  const revenueSplitData = liveMetrics?.revenueSplit || []
+  const serviceDistributionData = liveMetrics?.serviceDistribution || []
+  const cityDistributionData = liveMetrics?.cityDistribution || []
   const serviceTotal = serviceDistributionData.reduce((sum, s) => sum + s.value, 0)
 
   return (
@@ -328,7 +263,7 @@ export function DashboardPage() {
         />
         <StatCard
           label="Pending verifications"
-          value={stats.pendingVerifications.length}
+          value={stats.pendingVerificationsCount}
           icon={FileCheck2}
           tone="warning"
           hint="Awaiting a decision"
@@ -470,74 +405,92 @@ export function DashboardPage() {
         <Card>
           <CardHeader title="Service distribution" subtitle="Share of bookings by care service" icon={ClipboardList} />
           <CardBody>
-            <div className="flex flex-col items-center gap-5 sm:flex-row">
-              <div dir="ltr" className="h-56 w-full sm:w-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={serviceDistributionData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={54}
-                      outerRadius={86}
-                      paddingAngle={2}
-                      stroke="#FFFFFF"
-                      strokeWidth={2}
-                    >
-                      {serviceDistributionData.map((service) => (
-                        <Cell key={service.name} fill={service.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [`${value}%`, name]} />
-                  </PieChart>
-                </ResponsiveContainer>
+            {serviceDistributionData.length > 0 ? (
+              <div className="flex flex-col items-center gap-5 sm:flex-row">
+                <div dir="ltr" className="h-56 w-full sm:w-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={serviceDistributionData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={54}
+                        outerRadius={86}
+                        paddingAngle={2}
+                        stroke="#FFFFFF"
+                        strokeWidth={2}
+                      >
+                        {serviceDistributionData.map((service) => (
+                          <Cell key={service.name} fill={service.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [`${value}%`, name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full flex-1 space-y-2.5">
+                  {serviceDistributionData.map((service) => (
+                    <div key={service.name} className="flex items-center gap-2.5 text-sm">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: service.fill }} />
+                      <span className="min-w-0 flex-1 truncate text-ink-soft">{service.name}</span>
+                      <span className="font-semibold tabular-nums text-ink">
+                        {Math.round((service.value / Math.max(1, serviceTotal)) * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="w-full flex-1 space-y-2.5">
-                {serviceDistributionData.map((service) => (
-                  <div key={service.name} className="flex items-center gap-2.5 text-sm">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: service.fill }} />
-                    <span className="min-w-0 flex-1 truncate text-ink-soft">{service.name}</span>
-                    <span className="font-semibold tabular-nums text-ink">
-                      {Math.round((service.value / Math.max(1, serviceTotal)) * 100)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            ) : (
+              <EmptyState
+                icon={ClipboardList}
+                title="No service data"
+                description="Service breakdown will display as bookings are placed."
+                className="py-12"
+              />
+            )}
           </CardBody>
         </Card>
 
         <Card>
           <CardHeader title="City distribution" subtitle="Bookings placed across the top cities" icon={Activity} />
           <CardBody>
-            <div dir="ltr" className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={cityDistributionData} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="adminCityBar" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#0F766E" />
-                      <stop offset="100%" stopColor="#38BDF8" />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" horizontal={false} />
-                  <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
-                  <YAxis
-                    type="category"
-                    dataKey="city"
-                    tickLine={false}
-                    axisLine={false}
-                    width={92}
-                    tick={{ fontSize: 11, fill: '#64748B' }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(15,118,110,0.06)' }}
-                    contentStyle={tooltipStyle}
-                    formatter={(value) => [formatNumber(value), 'Bookings']}
-                  />
-                  <Bar dataKey="bookings" fill="url(#adminCityBar)" radius={[0, 6, 6, 0]} barSize={14} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {cityDistributionData.length > 0 ? (
+              <div dir="ltr" className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={cityDistributionData} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="adminCityBar" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#0F766E" />
+                        <stop offset="100%" stopColor="#38BDF8" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" horizontal={false} />
+                    <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
+                    <YAxis
+                      type="category"
+                      dataKey="city"
+                      tickLine={false}
+                      axisLine={false}
+                      width={92}
+                      tick={{ fontSize: 11, fill: '#64748B' }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(15,118,110,0.06)' }}
+                      contentStyle={tooltipStyle}
+                      formatter={(value) => [formatNumber(value), 'Bookings']}
+                    />
+                    <Bar dataKey="bookings" fill="url(#adminCityBar)" radius={[0, 6, 6, 0]} barSize={14} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <EmptyState
+                icon={Activity}
+                title="No city data"
+                description="Geographic distribution will display as bookings are placed."
+                className="py-16"
+              />
+            )}
           </CardBody>
         </Card>
       </div>
@@ -571,7 +524,7 @@ export function DashboardPage() {
                       {b.id} · {b.service}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-muted">
-                      {b.customerName || getCustomerById(b.customerId)?.name || 'Customer'} · {formatDate(b.date)} · {b.startTime}
+                      {b.customerName} · {formatDate(b.date)} · {b.startTime}
                     </p>
                   </div>
                   <div className="hidden shrink-0 text-right sm:block">
@@ -599,27 +552,36 @@ export function DashboardPage() {
             }
           />
           <CardBody className="divide-y divide-line p-0">
-            {recentRegistrations.map((r) => (
-              <div key={`${r.kind}-${r.id}`} className="flex items-center gap-3 px-5 py-3.5">
-                <Avatar src={r.avatar} name={r.name} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-ink">{r.name}</p>
-                  <p className="mt-0.5 truncate text-xs text-muted">{r.meta}</p>
+            {recentRegistrations.length ? (
+              recentRegistrations.map((r) => (
+                <div key={`${r.kind}-${r.id}`} className="flex items-center gap-3 px-5 py-3.5">
+                  <Avatar src={r.avatar} name={r.name} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-ink">{r.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted">{r.meta}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span
+                      className={
+                        r.kind === 'Customer'
+                          ? 'inline-flex items-center rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-600'
+                          : 'inline-flex items-center rounded-full bg-mint-100 px-2 py-0.5 text-[11px] font-bold text-primary-700'
+                      }
+                    >
+                      {r.kind}
+                    </span>
+                    <p className="mt-1 text-[11px] text-faint">{formatDate(r.joinedOn)}</p>
+                  </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <span
-                    className={
-                      r.kind === 'Customer'
-                        ? 'inline-flex items-center rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-bold text-accent-600'
-                        : 'inline-flex items-center rounded-full bg-mint-100 px-2 py-0.5 text-[11px] font-bold text-primary-700'
-                    }
-                  >
-                    {r.kind}
-                  </span>
-                  <p className="mt-1 text-[11px] text-faint">{formatDate(r.joinedOn)}</p>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyState
+                icon={UserPlus}
+                title="No registrations yet"
+                description="Registered customers and caretakers will appear here."
+                className="py-8"
+              />
+            )}
           </CardBody>
         </Card>
 
@@ -635,8 +597,8 @@ export function DashboardPage() {
               }
             />
             <CardBody className="divide-y divide-line p-0">
-              {stats.pendingVerifications.length ? (
-                stats.pendingVerifications.slice(0, 4).map((v) => (
+              {pendingVerificationsList.length ? (
+                pendingVerificationsList.slice(0, 4).map((v) => (
                   <Link
                     key={v.id}
                     to="/admin/verifications"

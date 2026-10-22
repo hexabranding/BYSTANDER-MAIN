@@ -2,13 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Download, Printer, Receipt, SearchX } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { downloadText, formatCurrency, formatDate } from '@/utils/format'
 import { durationBasis, formatDuration } from '@/utils/duration'
 import { GST_RATE, PLATFORM_FEE } from '@/utils/constants'
-import { getCustomerById } from '@/data/bookings'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Tabs, Chip } from '@/components/common/Tabs'
@@ -19,6 +17,7 @@ import { Modal } from '@/components/common/Modal'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/States'
 import { Logo } from '@/components/common/Logo'
+import { bookingService } from '@/services/bookingService'
 
 const PRINT_CSS = `
 @media print {
@@ -36,16 +35,23 @@ const PRINT_CSS = `
 `
 
 function invoiceTotals(b) {
-  const subtotal = b.subtotal ?? (b.hourlyRate || 0) * (b.hours || 0)
-  const platformFee = b.platformFee ?? PLATFORM_FEE
-  const tax = b.tax ?? Math.round((subtotal + platformFee) * GST_RATE)
-  const total = b.total ?? subtotal + platformFee + tax
+  const subtotal = b.breakdown?.baseAmount ?? b.subtotal ?? (b.hourlyRate || 0) * (b.hours || 0)
+  const platformFee = b.breakdown?.platformFee ?? b.platformFee ?? PLATFORM_FEE
+  const tax = b.breakdown?.tax ?? b.tax ?? Math.round((subtotal + platformFee) * GST_RATE)
+  const total = b.totalAmount ?? b.total ?? subtotal + platformFee + tax
   return { subtotal, platformFee, tax, total }
 }
 
 function buildInvoiceText(b, caregiverName, customer) {
   const { subtotal, platformFee, tax, total } = invoiceTotals(b)
-  const patient = b.patient || {}
+  const patient = b.patientDetails || b.patient || {}
+  const cust = customer || b.customer || {}
+  const customerName = cust.fullName || cust.name || b.customerName || '—'
+  const customerEmail = cust.email || b.customer?.email || '—'
+  const customerPhone = cust.phone || b.customer?.phone || '—'
+  const customerAddress = cust.address || b.address || '—'
+  const cgName = caregiverName || b.caregiverName || b.caregiverUser?.fullName || 'Caretaker'
+
   const pad = (label, value) => `${label.padEnd(22, '.')}${value}`
   return [
     'BYSTANDER — VERIFIED HEALTHCARE & BEDSIDE CARE',
@@ -54,28 +60,28 @@ function buildInvoiceText(b, caregiverName, customer) {
     '',
     'TAX INVOICE',
     '-'.repeat(56),
-    pad('Invoice number', b.invoiceNo),
+    pad('Invoice number', b.invoiceNo || b.id),
     pad('Invoice date', formatDate(b.createdAt, { long: true })),
-    pad('Payment status', b.paymentStatus),
+    pad('Payment status', b.paymentStatus || 'Paid'),
     '',
     'BILLED TO',
     '-'.repeat(56),
-    pad('Customer', customer?.name || '—'),
-    pad('Email', customer?.email || '—'),
-    pad('Phone', customer?.phone || '—'),
-    pad('Address', customer?.address || b.address),
+    pad('Customer', customerName),
+    pad('Email', customerEmail),
+    pad('Phone', customerPhone),
+    pad('Address', customerAddress),
     '',
     'BOOKING DETAILS',
     '-'.repeat(56),
     pad('Booking ID', b.id),
     pad('Reference', b.ref || '—'),
-    pad('Service', b.service),
-    pad('Care type', b.careType || '—'),
-    pad('Caretaker', caregiverName),
+    pad('Service', b.service || b.serviceName),
+    pad('Care type', b.careType || 'Home Care'),
+    pad('Caretaker', cgName),
     pad('Patient', `${patient.name || '—'} (${patient.age || '—'} yrs, ${patient.relation || '—'})`),
-    pad('Service date', formatDate(b.date, { long: true })),
-    pad('Duration', `${b.startTime} · ${formatDuration(b.hours, { short: true })}`),
-    pad('Address', b.address),
+    pad('Service date', formatDate(b.date || b.startDateTime, { long: true })),
+    pad('Duration', `${b.startTime || '09:00'} · ${formatDuration(b.hours, { short: true })}`),
+    pad('Address', b.address || customerAddress),
     '',
     'LINE ITEMS',
     '-'.repeat(56),
@@ -98,15 +104,17 @@ function buildInvoiceText(b, caregiverName, customer) {
 
 function InvoiceSheet({ booking, caregiverName, customer }) {
   const { subtotal, platformFee, tax, total } = invoiceTotals(booking)
-  const patient = booking.patient || {}
+  const patient = booking.patientDetails || booking.patient || {}
+  const cust = customer || booking.customer || {}
+  const cgName = caregiverName || booking.caregiverName || booking.caregiverUser?.fullName || 'Caretaker'
 
   const details = [
-    { label: 'Service', value: booking.service },
-    { label: 'Care type', value: booking.careType || '—' },
-    { label: 'Caretaker', value: caregiverName },
+    { label: 'Service', value: booking.service || booking.serviceName },
+    { label: 'Care type', value: booking.careType || 'Home Care' },
+    { label: 'Caretaker', value: cgName },
     { label: 'Booking ID', value: booking.id },
-    { label: 'Service date', value: formatDate(booking.date, { long: true }) },
-    { label: 'Duration', value: `${booking.startTime} · ${formatDuration(booking.hours, { short: true })}` },
+    { label: 'Service date', value: formatDate(booking.date || booking.startDateTime, { long: true }) },
+    { label: 'Duration', value: `${booking.startTime || '09:00'} · ${formatDuration(booking.hours, { short: true })}` },
     { label: 'Patient', value: `${patient.name || '—'} · ${patient.age || '—'} yrs · ${patient.relation || '—'}` },
     { label: 'Reference', value: booking.ref || '—' },
   ]
@@ -132,13 +140,13 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
       <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-faint">Tax invoice</p>
-          <p className="mt-0.5 font-display text-xl font-extrabold text-ink">{booking.invoiceNo}</p>
+          <p className="mt-0.5 font-display text-xl font-extrabold text-ink">{booking.invoiceNo || booking.id}</p>
           <p className="mt-1 text-xs text-muted">
             Issued on {formatDate(booking.createdAt, { long: true })} · Booking {booking.id}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <StatusBadge status={booking.paymentStatus} />
+          <StatusBadge status={booking.paymentStatus || 'Paid'} />
           <span className="text-[11px] text-faint">Due on receipt</span>
         </div>
       </div>
@@ -146,15 +154,15 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
       <div className="mt-5 grid gap-4 rounded-xl border border-line bg-slate-50/70 p-4 sm:grid-cols-2">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Billed to</p>
-          <p className="mt-1.5 text-sm font-bold text-ink">{customer?.name || 'Customer'}</p>
-          <p className="text-xs text-muted">{customer?.email || '—'}</p>
-          <p className="text-xs text-muted">{customer?.phone || '—'}</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">{customer?.address || booking.address}</p>
+          <p className="mt-1.5 text-sm font-bold text-ink">{cust.name || cust.fullName || 'Customer'}</p>
+          <p className="text-xs text-muted">{cust.email || '—'}</p>
+          <p className="text-xs text-muted">{cust.phone || '—'}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">{cust.address || booking.address || '—'}</p>
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Service location</p>
           <p className="mt-1.5 text-sm font-bold text-ink">{booking.city || '—'}</p>
-          <p className="text-xs leading-relaxed text-muted">{booking.address}</p>
+          <p className="text-xs leading-relaxed text-muted">{booking.address || '—'}</p>
           <p className="mt-1 text-xs text-muted">Patient: {patient.name || '—'}</p>
         </div>
       </div>
@@ -169,7 +177,7 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
         ))}
         <div className="flex items-start justify-between gap-4 border-b border-line py-2.5 sm:col-span-2">
           <dt className="shrink-0 text-xs font-semibold uppercase tracking-wider text-faint">Address</dt>
-          <dd className="max-w-md text-right text-sm font-semibold text-ink">{booking.address}</dd>
+          <dd className="max-w-md text-right text-sm font-semibold text-ink">{booking.address || '—'}</dd>
         </div>
       </dl>
 
@@ -179,7 +187,9 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
           <thead>
             <tr className="border-b border-line bg-slate-50">
               <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-faint">Description</th>
-              <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-faint">Amount</th>
+              <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-faint">
+                Amount
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -232,40 +242,57 @@ function InvoiceSheet({ booking, caregiverName, customer }) {
 export function InvoicesPage() {
   useDocumentTitle('Invoices')
   const { user } = useAuth()
-  const { bookings, caregivers } = useData()
 
+  const [invoices, setInvoices] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
   const [selected, setSelected] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const customerId = user?.id || 'cu-201'
-
-  const mine = useMemo(() => {
-    return bookings.filter((b) => b.invoiceNo && b.customerId === customerId)
-  }, [bookings, customerId])
+  useEffect(() => {
+    let mounted = true
+    setIsLoading(true)
+    bookingService
+      .getBookings({ limit: 50 })
+      .then((res) => {
+        if (!mounted) return
+        if (Array.isArray(res?.bookings)) {
+          setInvoices(res.bookings)
+        }
+      })
+      .catch((err) => {
+        console.warn('[Customer Invoices Warning]', err.message)
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const statusTabs = useMemo(() => {
     const seen = []
-    mine.forEach((b) => {
-      if (!seen.includes(b.paymentStatus)) seen.push(b.paymentStatus)
+    invoices.forEach((b) => {
+      if (b.paymentStatus && !seen.includes(b.paymentStatus)) seen.push(b.paymentStatus)
     })
     return ['All', ...seen]
-  }, [mine])
+  }, [invoices])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
-    return mine.filter((b) => {
+    return invoices.filter((b) => {
       const matchesStatus = status === 'All' || b.paymentStatus === status
       const matchesSearch =
         !q ||
-        b.invoiceNo.toLowerCase().includes(q) ||
-        b.id.toLowerCase().includes(q) ||
-        b.ref?.toLowerCase().includes(q) ||
-        b.service.toLowerCase().includes(q)
+        (b.invoiceNo && b.invoiceNo.toLowerCase().includes(q)) ||
+        (b.id && b.id.toLowerCase().includes(q)) ||
+        (b.ref && b.ref.toLowerCase().includes(q)) ||
+        (b.service && b.service.toLowerCase().includes(q))
       return matchesStatus && matchesSearch
     })
-  }, [mine, debouncedSearch, status])
+  }, [invoices, debouncedSearch, status])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
   useEffect(() => {
@@ -273,14 +300,12 @@ export function InvoicesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, status])
 
-  const caregiverName = (id) => caregivers.find((c) => c.id === id)?.name || 'To be assigned'
-
-  const totalBilled = useMemo(() => mine.reduce((sum, b) => sum + (b.total || 0), 0), [mine])
+  const totalBilled = useMemo(() => invoices.reduce((sum, b) => sum + (b.total || b.totalAmount || 0), 0), [invoices])
 
   const handleDownload = (b) => {
-    const content = buildInvoiceText(b, caregiverName(b.caregiverId), getCustomerById(b.customerId) || user)
-    downloadText(`${b.invoiceNo}.txt`, content, 'text/plain')
-    toast.success('Invoice downloaded', { description: `${b.invoiceNo}.txt is ready.` })
+    const content = buildInvoiceText(b, b.caregiverName, b.customer || user)
+    downloadText(`${b.invoiceNo || b.id}.txt`, content, 'text/plain')
+    toast.success('Invoice downloaded', { description: `${b.invoiceNo || b.id}.txt is ready.` })
   }
 
   const columns = [
@@ -289,7 +314,7 @@ export function InvoicesPage() {
       header: 'Invoice no',
       render: (b) => (
         <div>
-          <p className="font-display text-sm font-bold text-ink">{b.invoiceNo}</p>
+          <p className="font-display text-sm font-bold text-ink">{b.invoiceNo || b.id}</p>
           <p className="text-xs text-faint">{b.ref}</p>
         </div>
       ),
@@ -299,18 +324,23 @@ export function InvoicesPage() {
     {
       key: 'date',
       header: 'Date',
-      render: (b) => <span className="whitespace-nowrap font-medium text-ink">{formatDate(b.date, { long: true })}</span>,
+      render: (b) => <span className="whitespace-nowrap font-medium text-ink">{formatDate(b.date || b.startDateTime, { long: true })}</span>,
+    },
+    {
+      key: 'caregiver',
+      header: 'Caretaker',
+      render: (b) => b.caregiverName || b.caregiverUser?.fullName || 'Caregiver',
     },
     {
       key: 'total',
       header: 'Amount',
       align: 'right',
-      render: (b) => <span className="font-semibold tabular-nums text-ink">{formatCurrency(b.total)}</span>,
+      render: (b) => <span className="font-semibold tabular-nums text-ink">{formatCurrency(b.total || b.totalAmount)}</span>,
     },
     {
       key: 'paymentStatus',
       header: 'Payment status',
-      render: (b) => <StatusBadge status={b.paymentStatus} size="sm" />,
+      render: (b) => <StatusBadge status={b.paymentStatus || 'Paid'} size="sm" />,
     },
     {
       key: 'action',
@@ -318,34 +348,22 @@ export function InvoicesPage() {
       align: 'right',
       sortable: false,
       render: (b) => (
-        <Button
-          size="xs"
-          variant="outline"
-          onClick={(e) => {
-            e.stopPropagation()
-            setSelected(b)
-          }}
-        >
+        <Button size="xs" variant="outline" onClick={() => setSelected(b)}>
           View
         </Button>
       ),
     },
   ]
 
-  if (!mine.length) {
+  if (!isLoading && !invoices.length) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Invoices" subtitle="Downloadable GST invoices for every care booking you have made." />
+        <PageHeader title="Invoices" subtitle="Review and download tax invoices for your care bookings." />
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={Receipt}
             title="No invoices yet"
-            description="Once a booking is created, its invoice will appear here ready to view, print or download."
-            action={
-              <Button to="/customer/caregivers" icon={Receipt}>
-                Find a caretaker
-              </Button>
-            }
+            description="Your booking invoices and tax receipts will appear here automatically."
           />
         </div>
       </div>
@@ -358,11 +376,11 @@ export function InvoicesPage() {
 
       <PageHeader
         title="Invoices"
-        subtitle="Every invoice for your care bookings — view, print or download a copy."
+        subtitle="Review and download tax invoices for your care bookings."
         meta={
           <>
-            <Chip>{`${mine.length} invoices`}</Chip>
-            <Chip>{`${formatCurrency(totalBilled)} billed`}</Chip>
+            <Chip>{`${invoices.length} ${invoices.length === 1 ? 'invoice' : 'invoices'}`}</Chip>
+            <Chip>{`${formatCurrency(totalBilled)} total billed`}</Chip>
           </>
         }
       />
@@ -371,14 +389,14 @@ export function InvoicesPage() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search invoice, booking or service…"
+          placeholder="Search by invoice no, booking or service…"
           className="sm:max-w-sm sm:flex-1"
         />
         <Tabs
           tabs={statusTabs.map((s) => ({
             id: s,
             label: s,
-            count: s === 'All' ? mine.length : mine.filter((b) => b.paymentStatus === s).length,
+            count: s === 'All' ? invoices.length : invoices.filter((b) => b.paymentStatus === s).length,
           }))}
           active={status}
           onChange={setStatus}
@@ -391,7 +409,7 @@ export function InvoicesPage() {
           <EmptyState
             icon={SearchX}
             title="No invoices found"
-            description="Try clearing the search or switching the payment status filter."
+            description="Try clearing your search or switching the payment status tab."
             action={
               <Button
                 variant="outline"
@@ -424,8 +442,8 @@ export function InvoicesPage() {
         <div className="print-invoice hidden print:block">
           <InvoiceSheet
             booking={selected}
-            caregiverName={caregiverName(selected.caregiverId)}
-            customer={getCustomerById(selected.customerId) || user}
+            caregiverName={selected.caregiverName}
+            customer={selected.customer || user}
           />
         </div>
       ) : null}
@@ -433,7 +451,7 @@ export function InvoicesPage() {
       <Modal
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
-        title={selected ? `Invoice ${selected.invoiceNo}` : 'Invoice'}
+        title={selected ? `Invoice ${selected.invoiceNo || selected.id}` : 'Invoice'}
         subtitle={selected ? `${selected.service} · ${formatDate(selected.date, { long: true })}` : ''}
         size="lg"
         footer={
@@ -444,11 +462,7 @@ export function InvoicesPage() {
             <Button variant="outline" icon={Printer} onClick={() => window.print()}>
               Print
             </Button>
-            <Button
-              icon={Download}
-              onClick={() => handleDownload(selected)}
-              disabled={Boolean(!selected)}
-            >
+            <Button icon={Download} onClick={() => selected && handleDownload(selected)}>
               Download
             </Button>
           </div>
@@ -457,8 +471,8 @@ export function InvoicesPage() {
         {selected ? (
           <InvoiceSheet
             booking={selected}
-            caregiverName={caregiverName(selected.caregiverId)}
-            customer={getCustomerById(selected.customerId) || user}
+            caregiverName={selected.caregiverName}
+            customer={selected.customer || user}
           />
         ) : null}
       </Modal>

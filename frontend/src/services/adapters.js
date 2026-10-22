@@ -480,15 +480,38 @@ export const adaptBooking = (raw) => {
   const hasCheckedIn = Boolean(checkIn?.at) || ['In Progress', 'Completed'].includes(normalizedStatus)
   const hasCheckedOut = Boolean(checkOut?.at) || normalizedStatus === 'Completed'
 
+  // Canonical invoice number: INV-YYYY-XXXX
+  const invYear = raw.createdAt ? new Date(raw.createdAt).getFullYear() : new Date().getFullYear()
+  const invSuffix = id.length >= 4 ? id.slice(-4).toUpperCase() : (ref.length >= 4 ? ref.slice(-4).toUpperCase() : '0001')
+  const invoiceNo = raw.invoiceNo || `INV-${invYear}-${invSuffix}`
+
   return {
     ...raw,
     id,
     _id: raw._id ? String(raw._id) : (isMongoObjectId(id) ? id : undefined),
     ref,
     bookingReference: ref,
+    invoiceNo,
     customerId,
     customerName,
-    customer: raw.customer || null,
+    customer: typeof raw.customer === 'object' && raw.customer !== null
+      ? {
+          id: customerId,
+          _id: customerId,
+          name: customerName,
+          fullName: customerName,
+          email: raw.customer.email || '',
+          phone: raw.customer.phone || '',
+          address: raw.customer.address || addressLine || fullAddress,
+        }
+      : {
+          id: customerId,
+          name: customerName,
+          fullName: customerName,
+          email: '',
+          phone: '',
+          address: addressLine || fullAddress,
+        },
     caregiverId,
     caregiverName,
     caregiver: raw.caregiver || null,
@@ -526,7 +549,13 @@ export const adaptBooking = (raw) => {
     currency: raw.currency || 'INR',
     status: normalizedStatus,
     rawStatus: raw.status || normalizedStatus.toLowerCase(),
-    paymentStatus: raw.paymentStatus || (normalizedStatus === 'Completed' ? 'Paid' : 'Escrow Held'),
+    paymentStatus:
+      raw.paymentStatus ||
+      (normalizedStatus === 'Completed'
+        ? 'Paid'
+        : normalizedStatus === 'Cancelled'
+          ? 'Refunded'
+          : 'Escrow Held'),
     createdAt: raw.createdAt || new Date().toISOString(),
     startDateTime: raw.startDateTime || null,
     endDateTime: raw.endDateTime || null,

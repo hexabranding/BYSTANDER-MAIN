@@ -396,8 +396,8 @@ export function CommissionsPage() {
         loading={isReconciling}
         tone="primary"
         title="Reconcile commission ledger?"
-        message={`${stats.accruedCount} accrued entr${stats.accruedCount === 1 ? 'y' : 'ies'} totalling ${formatCurrency(
-          stats.accrued,
+        message={`${displayedStats.accruedCount} accrued entr${displayedStats.accruedCount === 1 ? 'y' : 'ies'} totalling ${formatCurrency(
+          displayedStats.accrued,
         )} will be matched against the next payout batch. Reconciliation is recorded in the simulated audit trail.`}
         confirmLabel="Reconcile"
       />

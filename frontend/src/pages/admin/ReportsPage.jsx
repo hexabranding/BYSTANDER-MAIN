@@ -71,6 +71,7 @@ export function ReportsPage() {
 
   const [generated, setGenerated] = useState([])
   const [revenueSplit, setRevenueSplit] = useState([])
+  const [scheduled, setScheduled] = useState(2)
   const [range, setRange] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)

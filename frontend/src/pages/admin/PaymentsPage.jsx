@@ -140,17 +140,6 @@ export function PaymentsPage() {
     downloadText(`bystander-transactions-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
     toast.success(`Exported ${rows.length} transaction${rows.length === 1 ? '' : 's'} to CSV`)
   }
-      caregiver: t.caregiverName,
-      service: t.service,
-      method: t.method,
-      amount: t.amount,
-      commission: t.commission,
-      payout: t.payout,
-      status: t.status,
-    }))
-    downloadText(`bystander-transactions-${toISO(TODAY)}.csv`, toCSV(rows))
-    toast.success(`Exported ${rows.length} transaction${rows.length === 1 ? '' : 's'} to CSV`)
-  }
 
   const columns = [
     {

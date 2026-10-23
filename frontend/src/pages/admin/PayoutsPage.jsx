@@ -105,16 +105,6 @@ export function PayoutsPage() {
     }
     return months.map((month) => ({ month, payout: monthMap[month] }))
   }, [displayedPayouts])
-        if (p.status === 'Settled' && p.requestedOn) {
-          const m = new Date(p.requestedOn).toLocaleString('en-US', { month: 'short' })
-          if (monthMap[m] !== undefined) {
-            monthMap[m] += p.net || 0
-          }
-        }
-      })
-    }
-    return months.map((month) => ({ month, payout: monthMap[month] }))
-  }, [displayedPayouts])
 
   const viewing = displayedPayouts.find((p) => p.id === viewingId) || null
   const approving = displayedPayouts.find((p) => p.id === approvingId) || null

@@ -1,4 +1,12 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
+
+// Ensure SRV records can be resolved when local router or ISP DNS blocks SRV queries
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch {
+  // Fall back to system resolver if not supported
+}
 
 /**
  * Reusable Mongoose connection function.

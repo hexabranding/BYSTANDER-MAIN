@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Banknote, Check, CheckCircle2, Clock, Download, Eye, Hourglass, SearchX, TrendingUp } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { downloadText, formatCurrency, formatDate, formatNumber } from '@/utils/format'
@@ -17,8 +16,7 @@ import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
-import { EmptyState } from '@/components/common/States'
-import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { EmptyState, TableSkeleton } from '@/components/common/States'
 import { adminService } from '@/services/adminService'
 
 const STATUS_TABS = ['All', 'Pending', 'Processing', 'Settled']
@@ -36,43 +34,18 @@ const rupeeTick = (v) => (v >= 1000 ? `₹${(v / 1000).toFixed(0)}k` : `₹${v}`
 export function PayoutsPage() {
   useDocumentTitle('Payouts')
 
-  const { payouts } = useData()
-
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
   const [viewingId, setViewingId] = useState(null)
   const [approvingId, setApprovingId] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const [livePayouts, setLivePayouts] = useState(null)
+  const [livePayouts, setLivePayouts] = useState([])
   const [liveStats, setLiveStats] = useState(null)
-  const [isFallback, setIsFallback] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isSettling, setIsSettling] = useState(false)
 
-  // Demo fallback stats (only used if backend is completely offline)
-  const demoStats = useMemo(() => {
-    const count = (s) => payouts.filter((p) => p.status === s).length
-    return {
-      total: payouts.reduce((sum, p) => sum + (p.net || 0), 0),
-      processing: count('Processing'),
-      pending: count('Pending'),
-      settled: count('Settled'),
-    }
-  }, [payouts])
-
-  const demoFiltered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase()
-    return payouts.filter((p) => {
-      const matchesStatus = status === 'All' || p.status === status
-      const matchesSearch =
-        !q ||
-        [p.id, p.caregiverName, p.period, p.method, p.status].join(' ').toLowerCase().includes(q)
-      return matchesStatus && matchesSearch
-    })
-  }, [payouts, debouncedSearch, status])
-
-  // Real backend fetch
+  // Real backend fetch from MongoDB
   const fetchPayouts = async () => {
     setIsLoading(true)
     try {
@@ -90,14 +63,12 @@ export function PayoutsPage() {
             settled: res.payouts.filter((p) => p.status === 'Settled').length,
           },
         )
-        setIsFallback(false)
       } else {
         setLivePayouts([])
         setLiveStats({ total: 0, processing: 0, pending: 0, settled: 0 })
-        setIsFallback(false)
       }
     } catch {
-      setIsFallback(true)
+      setLivePayouts([])
     } finally {
       setIsLoading(false)
     }
@@ -108,19 +79,15 @@ export function PayoutsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, debouncedSearch])
 
-  // Truthful data selection: prefer live API data over demo data
-  const displayedPayouts = livePayouts !== null && !isFallback ? livePayouts : demoFiltered
+  // Truthful live data from MongoDB
+  const displayedPayouts = livePayouts || []
   const displayedStats =
-    liveStats !== null && !isFallback
-      ? liveStats
-      : isFallback
-        ? demoStats
-        : {
-            total: displayedPayouts.reduce((sum, p) => sum + (p.net || 0), 0),
-            processing: displayedPayouts.filter((p) => p.status === 'Processing').length,
-            pending: displayedPayouts.filter((p) => p.status === 'Pending').length,
-            settled: displayedPayouts.filter((p) => p.status === 'Settled').length,
-          }
+    liveStats || {
+      total: displayedPayouts.reduce((sum, p) => sum + (p.net || 0), 0),
+      processing: displayedPayouts.filter((p) => p.status === 'Processing').length,
+      pending: displayedPayouts.filter((p) => p.status === 'Pending').length,
+      settled: displayedPayouts.filter((p) => p.status === 'Settled').length,
+    }
 
   // Monthly trend chart dynamically computed from real payouts
   const monthlyTrend = useMemo(() => {
@@ -128,6 +95,16 @@ export function PayoutsPage() {
     const monthMap = Object.fromEntries(months.map((m) => [m, 0]))
     if (displayedPayouts && displayedPayouts.length > 0) {
       displayedPayouts.forEach((p) => {
+        if (p.status === 'Settled' && p.requestedOn) {
+          const m = new Date(p.requestedOn).toLocaleString('en-US', { month: 'short' })
+          if (monthMap[m] !== undefined) {
+            monthMap[m] += p.net || 0
+          }
+        }
+      })
+    }
+    return months.map((month) => ({ month, payout: monthMap[month] }))
+  }, [displayedPayouts])
         if (p.status === 'Settled' && p.requestedOn) {
           const m = new Date(p.requestedOn).toLocaleString('en-US', { month: 'short' })
           if (monthMap[m] !== undefined) {
@@ -268,10 +245,6 @@ export function PayoutsPage() {
 
   return (
     <div className="space-y-6">
-      {isFallback && (
-        <FallbackNotice message="Displaying payout records from local cache while administrative disbursal service is connecting." />
-      )}
-
       <PageHeader
         title="Payouts"
         subtitle="Review and settle caretaker payouts — gross earnings less the 12% platform commission."
@@ -367,7 +340,9 @@ export function PayoutsPage() {
           />
         </div>
 
-        {displayedPayouts.length === 0 ? (
+        {isLoading ? (
+          <TableSkeleton rows={6} cols={6} />
+        ) : displayedPayouts.length === 0 ? (
           <div className="rounded-card border border-line bg-white shadow-card">
             <EmptyState
               icon={debouncedSearch || status !== 'All' ? SearchX : Banknote}

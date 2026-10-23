@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { CheckCircle2, Gauge, Hourglass, Percent, RefreshCw, Scale, SearchX } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
-import { REVENUE_SPLIT } from '@/data/charts'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -19,9 +17,7 @@ import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
-import { EmptyState } from '@/components/common/States'
-
-import { FallbackNotice } from '@/components/common/FallbackNotice'
+import { EmptyState, TableSkeleton } from '@/components/common/States'
 import { adminService } from '@/services/adminService'
 
 const STATUS_TABS = ['All', 'Accrued', 'Settled']
@@ -39,57 +35,42 @@ const rupeeTick = (v) => `₹${(v / 1000).toFixed(0)}k`
 export function CommissionsPage() {
   useDocumentTitle('Commissions')
 
-  const { commissions } = useData()
-
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All')
   const [selected, setSelected] = useState(null)
   const [reconcileOpen, setReconcileOpen] = useState(false)
-  const [liveCommissions, setLiveCommissions] = useState(null)
+  const [liveCommissions, setLiveCommissions] = useState([])
   const [liveStats, setLiveStats] = useState(null)
-  const [isFallback, setIsFallback] = useState(false)
+  const [revenueSplit, setRevenueSplit] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isReconciling, setIsReconciling] = useState(false)
   const debouncedSearch = useDebouncedValue(search)
 
-  const stats = useMemo(() => {
-    const total = commissions.reduce((s, c) => s + c.amount, 0)
-    const accrued = commissions.filter((c) => c.status === 'Accrued').reduce((s, c) => s + c.amount, 0)
-    const settled = commissions.filter((c) => c.status === 'Settled').reduce((s, c) => s + c.amount, 0)
-    const base = commissions.reduce((s, c) => s + c.base, 0)
-    return {
-      total,
-      accrued,
-      settled,
-      accruedCount: commissions.filter((c) => c.status === 'Accrued').length,
-      effective: base ? Math.round((total / base) * 1000) / 10 : PLATFORM_COMMISSION * 100,
-    }
-  }, [commissions])
-
-  const filtered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase()
-    return commissions.filter((c) => {
-      const matchesStatus = status === 'All' || c.status === status
-      const matchesSearch =
-        !q || [c.id, c.bookingId, c.caregiverName, c.rate, c.status].join(' ').toLowerCase().includes(q)
-      return matchesStatus && matchesSearch
-    })
-  }, [commissions, debouncedSearch, status])
+  // Load real continuous rolling 6-month metrics from MongoDB
+  useEffect(() => {
+    adminService
+      .getAdminMetrics()
+      .then((res) => {
+        if (res?.revenueSplit && Array.isArray(res.revenueSplit)) {
+          setRevenueSplit(res.revenueSplit)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const fetchCommissions = async () => {
+    setIsLoading(true)
     try {
       const res = await adminService.getAdminCommissions({
         status: status === 'All' ? 'all' : status,
         search: debouncedSearch,
       })
-      if (res?.commissions && res.commissions.length > 0) {
-        setLiveCommissions(res.commissions)
-        if (res.stats) setLiveStats(res.stats)
-        setIsFallback(false)
-      } else {
-        setIsFallback(true)
-      }
+      setLiveCommissions(res?.commissions || [])
+      if (res?.stats) setLiveStats(res.stats)
     } catch {
-      setIsFallback(true)
+      setLiveCommissions([])
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -98,8 +79,29 @@ export function CommissionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, debouncedSearch])
 
-  const displayedCommissions = liveCommissions && !isFallback ? liveCommissions : filtered
-  const displayedStats = liveStats && !isFallback ? liveStats : stats
+  const displayedCommissions = liveCommissions || []
+  const displayedStats = useMemo(() => {
+    if (liveStats) {
+      return {
+        total: liveStats.total || 0,
+        accrued: liveStats.accrued || 0,
+        settled: liveStats.settled || 0,
+        accruedCount: liveStats.accruedCount || 0,
+        effective: liveStats.effectiveRate || 12,
+      }
+    }
+    const total = displayedCommissions.reduce((s, c) => s + (c.amount || 0), 0)
+    const accrued = displayedCommissions.filter((c) => c.status === 'Accrued').reduce((s, c) => s + (c.amount || 0), 0)
+    const settled = displayedCommissions.filter((c) => c.status === 'Settled').reduce((s, c) => s + (c.amount || 0), 0)
+    const base = displayedCommissions.reduce((s, c) => s + (c.base || 0), 0)
+    return {
+      total,
+      accrued,
+      settled,
+      accruedCount: displayedCommissions.filter((c) => c.status === 'Accrued').length,
+      effective: base ? Math.round((total / base) * 1000) / 10 : Math.round(PLATFORM_COMMISSION * 100),
+    }
+  }, [liveStats, displayedCommissions])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(displayedCommissions, 8)
   useEffect(() => {
@@ -161,10 +163,6 @@ export function CommissionsPage() {
 
   return (
     <div className="space-y-6">
-      {isFallback && (
-        <FallbackNotice message="Displaying platform commission entries from offline cache while administrative finance service is connecting." />
-      )}
-
       <PageHeader
         title="Commissions"
         subtitle="The 12% platform commission earned on every completed care booking."
@@ -214,13 +212,13 @@ export function CommissionsPage() {
         <Card className="lg:col-span-2">
           <CardHeader
             title="Monthly commission"
-            subtitle="Commission collected per month across all services"
+            subtitle="Commission collected per month across all services (live continuous time-series)"
             icon={Percent}
           />
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={REVENUE_SPLIT} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                <BarChart data={revenueSplit} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" vertical={false} />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
                   <YAxis
@@ -291,7 +289,9 @@ export function CommissionsPage() {
           />
         </div>
 
-        {displayedCommissions.length === 0 ? (
+        {isLoading ? (
+          <TableSkeleton rows={6} cols={6} />
+        ) : displayedCommissions.length === 0 ? (
           <div className="rounded-card border border-line bg-white shadow-card">
             <EmptyState
               icon={SearchX}

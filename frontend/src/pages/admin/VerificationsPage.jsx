@@ -14,7 +14,6 @@ import {
   SearchX,
   XCircle,
 } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatDateTime, formatDate, relativeTime } from '@/utils/format'
@@ -319,9 +318,7 @@ function DetailPanel({
 export function VerificationsPage() {
   useDocumentTitle('Verifications')
 
-  const { verifications: seedVerifications, setVerificationStatus, updateDocument } = useData()
-
-  const [realVerifications, setRealVerifications] = useState(null)
+  const [realVerifications, setRealVerifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -346,7 +343,7 @@ export function VerificationsPage() {
       setRealVerifications(res.verifications || [])
     } catch (err) {
       setError(err.message || 'Unable to load caregiver verification queue')
-      if (showLoading) setRealVerifications(null)
+      if (showLoading) setRealVerifications([])
     } finally {
       if (showLoading) setLoading(false)
     }
@@ -357,9 +354,8 @@ export function VerificationsPage() {
   }, [fetchVerifications])
 
   const verifications = useMemo(() => {
-    if (realVerifications !== null) return realVerifications
-    return seedVerifications || []
-  }, [realVerifications, seedVerifications])
+    return realVerifications || []
+  }, [realVerifications])
 
   useEffect(() => {
     if (!selectedId && verifications.length > 0) {
@@ -483,13 +479,13 @@ export function VerificationsPage() {
           }))
         }
 
-        if (isMongoObjectId(targetDoc.id)) {
+        try {
           await adminService.updateDocumentStatus(targetDoc.id, {
             status: 'rejected',
             notes: finalReason,
           })
-        } else {
-          updateDocument(record.id, targetDoc.id, { status: 'Rejected', feedback: finalReason })
+        } catch (err) {
+          toast.error('Failed to update document status', { description: err.message })
         }
 
         toast.success(`${targetDoc.type} rejected`, {
@@ -517,13 +513,13 @@ export function VerificationsPage() {
           })
         })
 
-        if (isMongoObjectId(record.id)) {
+        try {
           await adminService.updateCaregiverVerificationStatus(record.id, {
             status: 'rejected',
             reason: finalReason,
           })
-        } else {
-          setVerificationStatus(record.id, 'Rejected', finalReason)
+        } catch (err) {
+          toast.error('Failed to update application status', { description: err.message })
         }
 
         toast.success(`${record.name}'s application rejected`, {
@@ -575,26 +571,19 @@ export function VerificationsPage() {
         })
       })
 
-      if (isMongoObjectId(record.id)) {
-        try {
-          await adminService.updateCaregiverVerificationStatus(record.id, {
-            status: 'verified',
-            reason: 'Application approved — profile marked Verified',
-            trustScore: 90,
-          })
-          toast.success(`${record.name} approved`, {
-            description: 'Profile marked Verified and visible in customer search.',
-          })
-          fetchVerifications(false)
-        } catch (err) {
-          toast.error('Failed to approve application', { description: err.message })
-          fetchVerifications(false)
-        }
-      } else {
-        setVerificationStatus(record.id, 'Verified', 'Application approved — profile marked Verified')
+      try {
+        await adminService.updateCaregiverVerificationStatus(record.id, {
+          status: 'verified',
+          reason: 'Application approved — profile marked Verified',
+          trustScore: 90,
+        })
         toast.success(`${record.name} approved`, {
           description: 'Profile marked Verified and visible in customer search.',
         })
+        fetchVerifications(false)
+      } catch (err) {
+        toast.error('Failed to approve application', { description: err.message })
+        fetchVerifications(false)
       }
     } else if (action.kind === 'approveDocument') {
       const doc = action.doc
@@ -642,21 +631,16 @@ export function VerificationsPage() {
         }))
       }
 
-      if (isMongoObjectId(doc.id)) {
-        try {
-          await adminService.updateDocumentStatus(doc.id, {
-            status: 'verified',
-            notes: 'Approved by admin',
-          })
-          toast.success(`${doc.type} approved`)
-          fetchVerifications(false)
-        } catch (err) {
-          toast.error('Failed to approve document', { description: err.message })
-          fetchVerifications(false)
-        }
-      } else {
-        updateDocument(record.id, doc.id, { status: 'Verified', feedback: 'Approved by admin' })
+      try {
+        await adminService.updateDocumentStatus(doc.id, {
+          status: 'verified',
+          notes: 'Approved by admin',
+        })
         toast.success(`${doc.type} approved`)
+        fetchVerifications(false)
+      } catch (err) {
+        toast.error('Failed to approve document', { description: err.message })
+        fetchVerifications(false)
       }
     }
   }

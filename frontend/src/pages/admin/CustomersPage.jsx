@@ -13,12 +13,12 @@ import {
   UserRound,
   Users,
 } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { formatDate, formatCurrency, maskEmail, maskPhone } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
 import { adminService } from '@/services/adminService'
+import { bookingService } from '@/services/bookingService'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -38,8 +38,6 @@ const DEFAULT_CITIES = ['All', 'Mumbai, MH', 'New Delhi, DL', 'Bengaluru, KA', '
 
 export function CustomersPage() {
   useDocumentTitle('Customers')
-
-  const { bookings } = useData()
 
   const [customers, setCustomers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, lifetime: 0 })
@@ -118,17 +116,40 @@ export function CustomersPage() {
 
   const selected = viewingId ? customers.find((c) => c.id === viewingId) : null
 
-  const selectedBookings = useMemo(
-    () =>
-      selected
-        ? bookings.filter((b) => b.customerId === selected.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-        : [],
-    [bookings, selected],
-  )
+  const [selectedBookings, setSelectedBookings] = useState([])
+  const [isLoadingBookings, setIsLoadingBookings] = useState(false)
 
-  const selectedSpend = selectedBookings
-    .filter((b) => b.status !== 'Cancelled')
-    .reduce((sum, b) => sum + (b.total || 0), 0)
+  useEffect(() => {
+    if (!selected) {
+      setSelectedBookings([])
+      return
+    }
+    let cancelled = false
+    setIsLoadingBookings(true)
+    bookingService
+      .getBookings({ customerId: selected.id, limit: 20 })
+      .then((res) => {
+        if (!cancelled) {
+          setSelectedBookings(res.bookings || [])
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load customer bookings:', err)
+        if (!cancelled) setSelectedBookings([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingBookings(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
+  const selectedSpend =
+    selected?.totalSpent ||
+    selectedBookings
+      .filter((b) => b.status !== 'Cancelled')
+      .reduce((sum, b) => sum + (b.total || 0), 0)
 
   const handleOpenSuspendModal = (targetCustomer) => {
     setSuspendTarget(targetCustomer)
@@ -475,7 +496,9 @@ export function CustomersPage() {
                 subtitle={`${selectedBookings.length} booking${selectedBookings.length === 1 ? '' : 's'} on CareMate`}
               />
               <CardBody className="divide-y divide-line p-0">
-                {selectedBookings.length ? (
+                {isLoadingBookings ? (
+                  <div className="p-6 text-center text-sm text-muted">Loading live booking history...</div>
+                ) : selectedBookings.length ? (
                   selectedBookings.map((b) => (
                     <div key={b.id} className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-mint-50/60">
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">

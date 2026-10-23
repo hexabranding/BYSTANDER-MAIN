@@ -302,15 +302,24 @@ export const getBookings = async (user, query = {}) => {
     filter.customer = user._id;
   } else if (user.role === 'caregiver') {
     filter.caregiverUser = user._id;
+  } else if (user.role === 'admin') {
+    if (query.customerId && mongoose.Types.ObjectId.isValid(query.customerId)) {
+      filter.customer = query.customerId;
+    }
+    if (query.caregiverId && mongoose.Types.ObjectId.isValid(query.caregiverId)) {
+      filter.$or = [
+        { caregiver: query.caregiverId },
+        { caregiverUser: query.caregiverId },
+      ];
+    }
   }
-  // Admins have no participant filter
 
   if (status && ['pending', 'confirmed', 'cancelled', 'rejected', 'completed'].includes(status)) {
     filter.status = status;
   }
 
   const parsedPage = Math.max(1, parseInt(page, 10) || 1);
-  const parsedLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
+  const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
   const skip = (parsedPage - 1) * parsedLimit;
 
   const [bookings, total] = await Promise.all([

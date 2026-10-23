@@ -13,7 +13,6 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatDateTime } from '@/utils/format'
@@ -78,9 +77,8 @@ export function SosAlertsPage() {
   useDocumentTitle('SOS alerts')
 
   const { user } = useAuth()
-  const { sos: seedSos, updateSos } = useData()
 
-  const [realIncidents, setRealIncidents] = useState(null)
+  const [realIncidents, setRealIncidents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('Active')
@@ -95,7 +93,7 @@ export function SosAlertsPage() {
       setRealIncidents(res.incidents || [])
     } catch (err) {
       setError(err.message || 'Unable to load SOS incidents from server')
-      setRealIncidents(null)
+      setRealIncidents([])
     } finally {
       setLoading(false)
     }
@@ -105,11 +103,10 @@ export function SosAlertsPage() {
     fetchIncidents()
   }, [fetchIncidents])
 
-  // Use live incidents when available, otherwise seed fallback
+  // Pure live MongoDB incidents
   const allSos = useMemo(() => {
-    if (realIncidents !== null) return realIncidents
-    return seedSos || []
-  }, [realIncidents, seedSos])
+    return realIncidents || []
+  }, [realIncidents])
 
   const openIncident = allSos.find((s) => s.id === openId) || null
 
@@ -139,44 +136,34 @@ export function SosAlertsPage() {
   const resolved = useMemo(() => allSos.filter((s) => s.status === 'Resolved'), [allSos])
 
   const assignToMe = async (id) => {
-    const adminName = user?.fullName || 'Kavya Raman'
-    if (isMongoObjectId(id)) {
-      try {
-        if (user?._id && isMongoObjectId(user._id)) {
-          await sosService.assignSos(id, user._id)
-        } else {
-          await sosService.addTimelineNote(id, {
-            action: `Assigned to ${adminName}`,
-            notes: 'Administrative assignment updated by operations desk.',
-          })
-        }
-        toast.success(`SOS ${id} assigned to you`, { description: 'The incident timeline records the assignment.' })
-        await fetchIncidents()
-      } catch (err) {
-        toast.error('Failed to assign incident', { description: err.message })
+    const adminName = user?.fullName || 'Operations Admin'
+    try {
+      if (user?._id && isMongoObjectId(user._id)) {
+        await sosService.assignSos(id, user._id)
+      } else {
+        await sosService.addTimelineNote(id, {
+          action: `Assigned to ${adminName}`,
+          notes: 'Administrative assignment updated by operations desk.',
+        })
       }
-    } else {
-      updateSos(id, { assignedTo: adminName }, `Assigned to ${adminName}`)
       toast.success(`SOS ${id} assigned to you`, { description: 'The incident timeline records the assignment.' })
+      await fetchIncidents()
+    } catch (err) {
+      toast.error('Failed to assign incident', { description: err.message })
     }
   }
 
   const changeAssignee = async (id, name) => {
     if (!name) return
-    if (isMongoObjectId(id)) {
-      try {
-        await sosService.addTimelineNote(id, {
-          action: `Assigned to ${name}`,
-          notes: `Operational assignment updated to ${name}`,
-        })
-        toast.success(`SOS ${id} assigned to ${name}`)
-        await fetchIncidents()
-      } catch (err) {
-        toast.error('Failed to assign incident', { description: err.message })
-      }
-    } else {
-      updateSos(id, { assignedTo: name }, `Assigned to ${name}`)
+    try {
+      await sosService.addTimelineNote(id, {
+        action: `Assigned to ${name}`,
+        notes: `Operational assignment updated to ${name}`,
+      })
       toast.success(`SOS ${id} assigned to ${name}`)
+      await fetchIncidents()
+    } catch (err) {
+      toast.error('Failed to assign incident', { description: err.message })
     }
   }
 
@@ -185,31 +172,24 @@ export function SosAlertsPage() {
     const { id, status } = confirm
     setConfirm(null)
 
-    if (isMongoObjectId(id)) {
-      try {
-        if (status === 'Resolved') {
-          await sosService.resolveSos(id, {
-            status: 'Resolved',
-            resolutionNotes: 'Incident evaluated and resolved after verifying safety of all participants.',
-          })
-        } else {
-          await sosService.addTimelineNote(id, {
-            action: `Moved to ${status}`,
-            notes: 'Operations desk escalated to active investigation.',
-          })
-        }
-        toast.success(`SOS ${id} — ${status}`, {
-          description: `Status changed to ${status} and written to the incident timeline.`,
+    try {
+      if (status === 'Resolved') {
+        await sosService.resolveSos(id, {
+          status: 'Resolved',
+          resolutionNotes: 'Incident evaluated and resolved after verifying safety of all participants.',
         })
-        await fetchIncidents()
-      } catch (err) {
-        toast.error(`Failed to update status to ${status}`, { description: err.message })
+      } else {
+        await sosService.addTimelineNote(id, {
+          action: `Moved to ${status}`,
+          notes: 'Operations desk escalated to active investigation.',
+        })
       }
-    } else {
-      updateSos(id, { status }, `Status changed to ${status}`)
       toast.success(`SOS ${id} — ${status}`, {
         description: `Status changed to ${status} and written to the incident timeline.`,
       })
+      await fetchIncidents()
+    } catch (err) {
+      toast.error(`Failed to update status to ${status}`, { description: err.message })
     }
   }
 

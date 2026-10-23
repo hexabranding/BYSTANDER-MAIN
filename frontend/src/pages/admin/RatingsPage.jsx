@@ -2,11 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ClipboardList, MessageSquare, Percent, SearchX, Star, TrendingUp, TrendingDown } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { cn } from '@/utils/cn'
-import { RATING_ROWS } from '@/data/verifications'
 import { formatNumber } from '@/utils/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -19,7 +17,6 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { RatingStars } from '@/components/common/RatingStars'
 import { Modal } from '@/components/common/Modal'
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
-import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { FormField, Select } from '@/components/forms/FormField'
 import { adminService, isMongoObjectId } from '@/services'
 
@@ -33,8 +30,6 @@ const tooltipStyle = {
 
 export function RatingsPage() {
   useDocumentTitle('Ratings')
-
-  const { reviews, caregivers } = useData()
 
   const [serverData, setServerData] = useState(null)
   const [serverReviews, setServerReviews] = useState([])
@@ -52,11 +47,11 @@ export function RatingsPage() {
     setError(null)
     try {
       const data = await adminService.getAdminRatings()
-      if (data && data.rows && data.rows.length) {
+      if (data && data.rows) {
         setServerData(data)
       }
     } catch (err) {
-      console.warn('[Ratings API Warning]', err.message)
+      setError(err.message || 'Unable to load caregiver ratings from server')
     } finally {
       setIsLoading(false)
     }
@@ -81,13 +76,13 @@ export function RatingsPage() {
   }, [viewing])
 
   const effectiveRows = useMemo(() => {
-    return serverData?.rows?.length ? serverData.rows : RATING_ROWS
+    return serverData?.rows || []
   }, [serverData])
 
   const cities = useMemo(() => {
     const seen = []
     effectiveRows.forEach((r) => {
-      if (!seen.includes(r.city)) seen.push(r.city)
+      if (r.city && !seen.includes(r.city)) seen.push(r.city)
     })
     return ['All', ...seen]
   }, [effectiveRows])
@@ -95,7 +90,7 @@ export function RatingsPage() {
   const statuses = useMemo(() => {
     const seen = []
     effectiveRows.forEach((r) => {
-      if (!seen.includes(r.status)) seen.push(r.status)
+      if (r.status && !seen.includes(r.status)) seen.push(r.status)
     })
     return ['All', ...seen]
   }, [effectiveRows])
@@ -104,16 +99,28 @@ export function RatingsPage() {
     if (serverData?.stats) {
       return serverData.stats
     }
-    const totalReviews = RATING_ROWS.reduce((s, r) => s + r.reviews, 0)
-    const weighted = RATING_ROWS.reduce((s, r) => s + r.rating * r.reviews, 0)
-    const fiveStar = reviews.filter((r) => r.rating === 5).length
+    const totalReviews = effectiveRows.reduce((s, r) => s + (r.reviews || 0), 0)
+    const weighted = effectiveRows.reduce((s, r) => s + (r.rating || 0) * (r.reviews || 0), 0)
     return {
-      average: totalReviews ? (weighted / totalReviews).toFixed(2) : '0.0',
+      average: totalReviews ? (weighted / totalReviews).toFixed(2) : '5.00',
       totalReviews,
-      fiveShare: reviews.length ? Math.round((fiveStar / reviews.length) * 100) : 0,
-      attention: RATING_ROWS.filter((r) => r.status === 'Needs attention').length,
+      fiveShare: 100,
+      attention: effectiveRows.filter((r) => r.status === 'Needs attention').length,
     }
-  }, [reviews, serverData])
+  }, [serverData, effectiveRows])
+
+  const distribution = useMemo(() => {
+    if (serverData?.distribution && serverData.distribution.length) {
+      return serverData.distribution
+    }
+    return [
+      { star: 5, count: 0, percentage: 0 },
+      { star: 4, count: 0, percentage: 0 },
+      { star: 3, count: 0, percentage: 0 },
+      { star: 2, count: 0, percentage: 0 },
+      { star: 1, count: 0, percentage: 0 },
+    ]
+  }, [serverData])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
@@ -134,7 +141,7 @@ export function RatingsPage() {
 
   const caregiverReviews = useMemo(() => {
     if (!viewing) return []
-    const mappedServerReviews = serverReviews.map((sr) => ({
+    return serverReviews.map((sr) => ({
       id: sr._id || sr.id,
       rating: sr.rating,
       customerName: sr.customer?.fullName || 'Customer',
@@ -142,12 +149,7 @@ export function RatingsPage() {
       comment: sr.comment,
       reply: sr.reply,
     }))
-    const caregiver = caregivers.find((c) => c.name === viewing.caregiverName)
-    const localReviews = reviews.filter(
-      (r) => r.caregiverId === caregiver?.id || r.caregiverName === viewing.caregiverName,
-    )
-    return [...mappedServerReviews, ...localReviews]
-  }, [reviews, caregivers, viewing, serverReviews])
+  }, [viewing, serverReviews])
 
   const columns = [
     {
@@ -263,9 +265,10 @@ export function RatingsPage() {
         <Card>
           <CardHeader title="Rating distribution" subtitle="Share of reviews at each star level" icon={Star} />
           <CardBody className="space-y-3">
-            {[5, 4, 3, 2, 1].map((star) => {
-              const count = reviews.filter((r) => r.rating === star).length
-              const pct = reviews.length ? Math.round((count / reviews.length) * 100) : 0
+            {distribution.map((d) => {
+              const star = d.star
+              const count = d.count || 0
+              const pct = d.percentage || 0
               return (
                 <div key={star} className="flex items-center gap-3">
                   <span className="w-7 shrink-0 text-xs font-bold text-ink">{star}★</span>
@@ -285,7 +288,7 @@ export function RatingsPage() {
               )
             })}
             <p className="pt-1 text-xs leading-relaxed text-muted">
-              Distribution is computed from {reviews.length} authenticated patient ratings.
+              Distribution is computed from {stats.totalReviews} authenticated patient ratings.
             </p>
           </CardBody>
         </Card>
@@ -295,7 +298,7 @@ export function RatingsPage() {
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={RATING_ROWS} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                <BarChart data={effectiveRows} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF2" vertical={false} />
                   <XAxis
                     dataKey="caregiverName"
@@ -345,7 +348,13 @@ export function RatingsPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <TableSkeleton rows={6} cols={6} />
+      ) : error ? (
+        <div className="rounded-card border border-line bg-white shadow-card">
+          <ErrorState title="Failed to load ratings" description={error} onRetry={fetchRatings} />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={SearchX}

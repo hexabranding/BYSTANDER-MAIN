@@ -1,12 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { CalendarClock, Download, FileSpreadsheet, Inbox, Plus, SearchX, TrendingUp } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
-import { REPORTS } from '@/data/verifications'
-import { REVENUE_SPLIT } from '@/data/charts'
 import { downloadText, formatNumber, formatDate, toCSV, uid } from '@/utils/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -35,8 +33,6 @@ const REPORT_TYPES = [
 
 const PERIODS = ['Oct 2026 (H1)', 'Sep 2026', 'Q3 2026', 'FY 2026–27']
 const FORMATS = ['CSV', 'PDF']
-
-const TODAY_ISO = '2026-10-10'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -74,29 +70,54 @@ export function ReportsPage() {
   useDocumentTitle('Reports')
 
   const [generated, setGenerated] = useState([])
-  const [scheduled, setScheduled] = useState(2)
+  const [revenueSplit, setRevenueSplit] = useState([])
   const [range, setRange] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const reports = useMemo(() => [...generated, ...REPORTS], [generated])
+  // Load real continuous rolling 6-month revenue split from MongoDB
+  useEffect(() => {
+    adminService
+      .getAdminMetrics()
+      .then((res) => {
+        if (res?.revenueSplit && Array.isArray(res.revenueSplit)) {
+          setRevenueSplit(res.revenueSplit)
+        }
+      })
+      .catch(() => {})
+
+    // Automatically generate initial Monthly booking & revenue report from live MongoDB data
+    adminService
+      .generateAdminReport({
+        type: 'Monthly booking & revenue report',
+        period: 'Oct 2026 (H1)',
+        format: 'CSV',
+      })
+      .then((res) => {
+        const payload = res?.report || res?.data?.report || res
+        if (payload?.title) {
+          setGenerated([payload])
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const reports = generated
 
   const filtered = useMemo(() => {
     if (range === 'all') return reports
     const days = Number(range)
-    const cutoff = new Date(2026, 9, 10)
+    const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
-    const iso = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(
-      cutoff.getDate(),
-    ).padStart(2, '0')}`
+    const iso = cutoff.toISOString().slice(0, 10)
     return reports.filter((r) => r.generatedOn >= iso)
   }, [reports, range])
 
   const stats = useMemo(
     () => ({
       total: reports.length,
-      rows: reports.reduce((s, r) => s + r.rows, 0),
-      last: reports.map((r) => r.generatedOn).sort().slice(-1)[0],
+      rows: reports.reduce((s, r) => s + (r.rows || 0), 0),
+      last: reports.map((r) => r.generatedOn).sort().slice(-1)[0] || new Date().toISOString().slice(0, 10),
       ready: reports.filter((r) => r.status === 'Ready').length,
     }),
     [reports],
@@ -171,8 +192,8 @@ export function ReportsPage() {
     const csv = [
       meta.map(([k, v]) => `"${k}","${v}"`).join(','),
       '',
-      'Sample data source (monthly revenue split)',
-      toCSV(REVENUE_SPLIT),
+      'Live platform data source',
+      toCSV(revenueSplit),
     ].join('\n')
     downloadText(`${slug(report.title)}.csv`, csv)
     toast.success('Report downloaded', { description: `${slug(report.title)}.csv is ready.` })
@@ -286,7 +307,7 @@ export function ReportsPage() {
         <CardBody>
           <div dir="ltr" className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={REVENUE_SPLIT} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}>
+              <AreaChart data={revenueSplit} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}>
                 <defs>
                   <linearGradient id="reportRevFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0F766E" stopOpacity={0.26} />

@@ -14,12 +14,12 @@ import {
   Stethoscope,
   Users,
 } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
 import { adminService } from '@/services/adminService'
+import { bookingService } from '@/services/bookingService'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -52,7 +52,6 @@ export function CaregiversPage() {
   useDocumentTitle('Caretakers')
 
   const navigate = useNavigate()
-  const { bookings, verifications } = useData()
 
   const [caregivers, setCaregivers] = useState([])
   const [stats, setStats] = useState({ total: 0, verified: 0, pending: 0, avg: '5.0' })
@@ -155,15 +154,40 @@ export function CaregiversPage() {
 
   const selected = viewingId ? caregivers.find((c) => c.id === viewingId) : null
 
-  const selectedRecord = selected ? verifications.find((v) => v.caregiverId === selected.id) : null
+  const [selectedBookings, setSelectedBookings] = useState([])
+  const [selectedVerification, setSelectedVerification] = useState(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
-  const selectedBookings = useMemo(
-    () =>
-      selected
-        ? bookings.filter((b) => b.caregiverId === selected.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 4)
-        : [],
-    [bookings, selected],
-  )
+  useEffect(() => {
+    if (!selected) {
+      setSelectedBookings([])
+      setSelectedVerification(null)
+      return
+    }
+    let cancelled = false
+    setIsLoadingDetails(true)
+    Promise.allSettled([
+      bookingService.getBookings({ caregiverId: selected.id, limit: 10 }),
+      adminService.getVerificationById(selected.id),
+    ]).then(([bookingsRes, verifRes]) => {
+      if (cancelled) return
+      if (bookingsRes.status === 'fulfilled') {
+        setSelectedBookings(bookingsRes.value.bookings || [])
+      } else {
+        setSelectedBookings([])
+      }
+      if (verifRes.status === 'fulfilled') {
+        setSelectedVerification(verifRes.value)
+      } else {
+        setSelectedVerification(null)
+      }
+      setIsLoadingDetails(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
 
   const handleExport = () => {
     const rows = filtered.map((c) => ({
@@ -618,6 +642,33 @@ export function CaregiversPage() {
               </Card>
             </div>
 
+            {selectedVerification?.documents?.length ? (
+              <Card>
+                <CardHeader
+                  title="Verification documents"
+                  subtitle={`${selectedVerification.documents.length} credentials registered`}
+                  action={
+                    <Button variant="link" size="sm" onClick={() => navigate('/admin/verifications')}>
+                      View dossier
+                    </Button>
+                  }
+                />
+                <CardBody className="divide-y divide-line p-0">
+                  {selectedVerification.documents.map((doc) => (
+                    <div key={doc.id || doc.name} className="flex items-center justify-between gap-3 px-5 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-ink">{doc.name}</p>
+                        <p className="text-xs text-muted">
+                          {doc.type} {doc.uploadedAt ? `· uploaded ${formatDate(doc.uploadedAt)}` : ''}
+                        </p>
+                      </div>
+                      <StatusBadge status={doc.status} size="sm" />
+                    </div>
+                  ))}
+                </CardBody>
+              </Card>
+            ) : null}
+
             <Card>
               <CardHeader
                 title="Recent bookings"
@@ -629,8 +680,10 @@ export function CaregiversPage() {
                 }
               />
               <CardBody className="divide-y divide-line p-0">
-                {selectedBookings.length ? (
-                  selectedBookings.map((b) => (
+                {isLoadingDetails ? (
+                  <div className="p-6 text-center text-sm text-muted">Loading live shift history...</div>
+                ) : selectedBookings.length ? (
+                  selectedBookings.slice(0, 4).map((b) => (
                     <div key={b.id} className="flex items-center gap-3 px-5 py-3 transition hover:bg-mint-50/60">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-ink">

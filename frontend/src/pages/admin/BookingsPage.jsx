@@ -17,10 +17,8 @@ import {
   UserRound,
   XCircle,
 } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
-import { getCustomerById } from '@/data/bookings'
 import { BOOKING_STATUSES } from '@/utils/constants'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
 import { durationBasis, formatDuration } from '@/utils/duration'
@@ -52,8 +50,6 @@ const DATE_RANGES = [
 export function BookingsPage() {
   useDocumentTitle('Bookings')
 
-  const { bookings: seedBookings, caregivers, advanceBooking, cancelBooking } = useData()
-
   const [realBookings, setRealBookings] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -73,11 +69,11 @@ export function BookingsPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await bookingService.getBookings()
+      const res = await bookingService.getBookings({ limit: 100 })
       setRealBookings(res.bookings || [])
     } catch (err) {
       setError(err.message || 'Unable to load bookings from server')
-      setRealBookings(null)
+      setRealBookings([])
     } finally {
       setLoading(false)
     }
@@ -88,9 +84,8 @@ export function BookingsPage() {
   }, [fetchBookings])
 
   const allBookings = useMemo(() => {
-    if (realBookings !== null) return realBookings
-    return seedBookings || []
-  }, [realBookings, seedBookings])
+    return realBookings || []
+  }, [realBookings])
 
   const stats = useMemo(() => {
     const active = allBookings.filter((b) => ['Pending', 'Confirmed', 'In Progress'].includes(b.status)).length
@@ -104,8 +99,8 @@ export function BookingsPage() {
     const cutoff = range === 'all' ? null : new Date(Date.now() - Number(range) * 86400000).toISOString().slice(0, 10)
     return allBookings
       .filter((b) => {
-        const customerName = b.customerName || (b.customer?.fullName) || getCustomerById(b.customerId)?.name || ''
-        const caregiverName = b.caregiverName || (b.caregiver?.user?.fullName) || caregivers.find((c) => c.id === b.caregiverId)?.name || ''
+        const customerName = b.customerName || (b.customer?.fullName) || ''
+        const caregiverName = b.caregiverName || (b.caregiver?.user?.fullName) || ''
         const matchesStatus = status === 'All' || b.status === status
         const matchesRange = !cutoff || (b.date && b.date >= cutoff)
         const matchesSearch =
@@ -115,10 +110,10 @@ export function BookingsPage() {
       })
       .map((b) => ({
         ...b,
-        customerName: b.customerName || (b.customer?.fullName) || getCustomerById(b.customerId)?.name || 'Customer',
-        caregiverName: b.caregiverName || (b.caregiver?.user?.fullName) || caregivers.find((c) => c.id === b.caregiverId)?.name || 'Assigning…',
+        customerName: b.customerName || (b.customer?.fullName) || 'Customer',
+        caregiverName: b.caregiverName || (b.caregiver?.user?.fullName) || 'Assigned Caregiver',
       }))
-  }, [allBookings, caregivers, debouncedSearch, status, range])
+  }, [allBookings, debouncedSearch, status, range])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
 
@@ -128,7 +123,7 @@ export function BookingsPage() {
   }, [debouncedSearch, status, range])
 
   const selected = viewingId ? allBookings.find((b) => b.id === viewingId) : null
-  const selectedCaregiver = selected ? (selected.caregiver || caregivers.find((c) => c.id === selected.caregiverId)) : null
+  const selectedCaregiver = selected?.caregiver || null
 
   const canCancel = selected && ['Pending', 'Confirmed', 'pending', 'confirmed'].includes(selected.status)
   const canAct = selected && !['Completed', 'Cancelled', 'completed', 'cancelled'].includes(selected.status)
@@ -175,30 +170,18 @@ export function BookingsPage() {
     if (!action || !selected) return
 
     if (action.kind === 'complete') {
-      if (isMongoObjectId(selected.id)) {
-        toast.error('Force completion not permitted', {
-          description: 'Shifts must be verified via customer and caretaker OTP exchange to safeguard escrow payouts.',
-        })
-      } else {
-        advanceBooking(selected.id, 'complete')
-        toast.success(`Booking ${selected.id} marked complete`, {
-          description: 'Escrow releases to the caretaker within 24 hours.',
-        })
-      }
+      toast.error('Force completion not permitted', {
+        description: 'Shifts must be verified via customer and caretaker OTP exchange to safeguard escrow payouts.',
+      })
     } else {
-      if (isMongoObjectId(selected.id)) {
-        try {
-          await bookingService.cancelBooking(selected.id, action.reason)
-          toast.success(`Booking ${selected.id} cancelled`, { description: action.reason })
-          await fetchBookings()
-        } catch (err) {
-          toast.error('Cancellation failed', {
-            description: err.message || 'Unable to cancel this booking engagement.',
-          })
-        }
-      } else {
-        cancelBooking(selected.id, action.reason)
-        toast.error(`Booking ${selected.id} cancelled`, { description: action.reason })
+      try {
+        await bookingService.cancelBooking(selected.id, action.reason)
+        toast.success(`Booking ${selected.id} cancelled`, { description: action.reason })
+        await fetchBookings()
+      } catch (err) {
+        toast.error('Cancellation failed', {
+          description: err.message || 'Unable to cancel this booking engagement.',
+        })
       }
     }
   }

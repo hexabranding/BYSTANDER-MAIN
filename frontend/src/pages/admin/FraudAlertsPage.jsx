@@ -16,7 +16,6 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { formatDate } from '@/utils/format'
@@ -49,8 +48,6 @@ const RISK_TONE = { High: 'danger', Medium: 'warning', Low: 'accent' }
 export function FraudAlertsPage() {
   useDocumentTitle('Fraud alerts & moderation')
 
-  const { frauds, caregivers, updateFraud } = useData()
-
   const [activeView, setActiveView] = useState('flagged_messages')
 
   // Live Flagged Messages state
@@ -61,7 +58,9 @@ export function FraudAlertsPage() {
   const [reasonFilter, setReasonFilter] = useState('All')
   const [selectedMessage, setSelectedMessage] = useState(null)
 
-  // Seed Fraud Alerts state
+  // Live Risk Engine Alerts state
+  const [riskAlerts, setRiskAlerts] = useState([])
+  const [isLoadingRiskAlerts, setIsLoadingRiskAlerts] = useState(false)
   const [search, setSearch] = useState('')
   const [risk, setRisk] = useState('All')
   const [status, setStatus] = useState('All')
@@ -69,6 +68,71 @@ export function FraudAlertsPage() {
   const [action, setAction] = useState(null)
 
   const debouncedSearch = useDebouncedValue(search)
+
+  const fetchRiskAlerts = useCallback(async () => {
+    setIsLoadingRiskAlerts(true)
+    try {
+      const [messagesRes, complaintsRes] = await Promise.allSettled([
+        adminService.getFlaggedMessages({ limit: 50 }),
+        adminService.getComplaints({ limit: 50 }),
+      ])
+
+      const derived = []
+
+      if (messagesRes.status === 'fulfilled' && Array.isArray(messagesRes.value?.messages)) {
+        messagesRes.value.messages.forEach((m) => {
+          const hasUpi = m.flaggedReasons?.some((r) => /upi/i.test(r))
+          const hasPhone = m.flaggedReasons?.some((r) => /phone/i.test(r))
+          derived.push({
+            id: `ALT-MSG-${m.id.slice(-6).toUpperCase()}`,
+            subject: m.senderName || 'Active User',
+            subjectType: m.senderRole === 'caregiver' ? 'Caretaker' : 'Customer',
+            signal: m.flaggedReasons?.join(', ') || 'Off-platform contact attempt detected in booking chat',
+            risk: hasUpi ? 'High' : hasPhone ? 'Medium' : 'Low',
+            status: 'Open',
+            raisedOn: m.flaggedAt || m.createdAt,
+            bookingNumber: m.bookingNumber,
+            bookingId: m.bookingId,
+            rawMessage: m,
+          })
+        })
+      }
+
+      if (complaintsRes.status === 'fulfilled' && Array.isArray(complaintsRes.value?.complaints)) {
+        complaintsRes.value.complaints.forEach((c) => {
+          const isHighPriority = c.priority === 'Critical' || c.priority === 'High'
+          derived.push({
+            id: c.complaintNumber || `ALT-CP-${c.id.slice(-6).toUpperCase()}`,
+            subject: c.respondentName || c.subject || 'Platform engagement',
+            subjectType: c.respondentRole === 'caregiver' ? 'Caretaker' : 'Booking',
+            signal: `${c.category || 'Grievance'}: ${c.description || c.subject || 'Safety review flag'}`,
+            risk: isHighPriority ? 'High' : c.priority === 'Medium' ? 'Medium' : 'Low',
+            status:
+              c.status === 'Submitted'
+                ? 'Open'
+                : c.status === 'Investigation'
+                  ? 'Under Review'
+                  : c.status === 'Resolved'
+                    ? 'Resolved'
+                    : c.status === 'Dismissed'
+                      ? 'Dismissed'
+                      : 'Under Review',
+            raisedOn: c.createdAt,
+            bookingNumber: c.bookingNumber,
+            bookingId: c.bookingId,
+            rawComplaint: c,
+          })
+        })
+      }
+
+      derived.sort((a, b) => new Date(b.raisedOn) - new Date(a.raisedOn))
+      setRiskAlerts(derived)
+    } catch (err) {
+      console.error('Failed to load risk alerts:', err)
+    } finally {
+      setIsLoadingRiskAlerts(false)
+    }
+  }, [])
 
   // 1. Fetch live flagged messages from administrative moderation endpoint
   const fetchFlaggedMessages = useCallback(async () => {
@@ -100,8 +164,10 @@ export function FraudAlertsPage() {
   useEffect(() => {
     if (activeView === 'flagged_messages') {
       fetchFlaggedMessages()
+    } else {
+      fetchRiskAlerts()
     }
-  }, [activeView, fetchFlaggedMessages])
+  }, [activeView, fetchFlaggedMessages, fetchRiskAlerts])
 
   // Flagged messages pagination
   const {
@@ -112,29 +178,29 @@ export function FraudAlertsPage() {
     goto: gotoMsgPage,
   } = usePagination(flaggedMessages, 8)
 
-  // Seed fraud alerts filtering & pagination
-  const selectedFraud = frauds.find((f) => f.id === selectedId) || null
+  // Risk alerts filtering & pagination
+  const selectedFraud = riskAlerts.find((f) => f.id === selectedId) || null
 
   const fraudStats = useMemo(
     () => ({
-      open: frauds.filter((f) => f.status === 'Open').length,
-      high: frauds.filter((f) => f.risk === 'High' && f.status !== 'Resolved' && f.status !== 'Dismissed').length,
-      review: frauds.filter((f) => f.status === 'Under Review').length,
-      resolved: frauds.filter((f) => f.status === 'Resolved').length,
+      open: riskAlerts.filter((f) => f.status === 'Open').length,
+      high: riskAlerts.filter((f) => f.risk === 'High' && f.status !== 'Resolved' && f.status !== 'Dismissed').length,
+      review: riskAlerts.filter((f) => f.status === 'Under Review').length,
+      resolved: riskAlerts.filter((f) => f.status === 'Resolved').length,
     }),
-    [frauds],
+    [riskAlerts],
   )
 
   const filteredFrauds = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
-    return frauds.filter((f) => {
+    return riskAlerts.filter((f) => {
       const matchesRisk = risk === 'All' || f.risk === risk
       const matchesStatus = status === 'All' || f.status === status
       const matchesSearch =
         !q || [f.id, f.subject, f.subjectType, f.signal, f.risk, f.status].join(' ').toLowerCase().includes(q)
       return matchesRisk && matchesStatus && matchesSearch
     })
-  }, [frauds, debouncedSearch, risk, status])
+  }, [riskAlerts, debouncedSearch, risk, status])
 
   const {
     page: fraudPage,
@@ -150,13 +216,31 @@ export function FraudAlertsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, risk, status, reasonFilter, activeView])
 
-  const runAction = () => {
+  const runAction = async () => {
     if (!action || !action.alert) return
-    updateFraud(action.alert.id, action.next)
-    toast.success(`Fraud alert ${action.alert.id} ${action.message}`, {
-      description: `Status is now "${action.next}".`,
-    })
-    setAction(null)
+    const target = action.alert
+    const nextStatus = action.next
+
+    try {
+      if (target.rawComplaint?.id) {
+        await adminService.updateComplaintStatus(target.rawComplaint.id, {
+          status: nextStatus === 'Resolved' ? 'Resolved' : nextStatus === 'Dismissed' ? 'Dismissed' : 'Under Review',
+          resolutionDetails: `Updated to ${nextStatus} via Fraud & Moderation Console`,
+        })
+      }
+      setRiskAlerts((list) =>
+        list.map((item) => (item.id === target.id ? { ...item, status: nextStatus } : item))
+      )
+      toast.success(`Risk alert ${target.id} ${action.message}`, {
+        description: `Status is now "${nextStatus}".`,
+      })
+    } catch (err) {
+      toast.error('Failed to update alert status', {
+        description: err.message || 'Server error updating alert.',
+      })
+    } finally {
+      setAction(null)
+    }
   }
 
   // Columns for Live Flagged Messages Table
@@ -323,14 +407,11 @@ export function FraudAlertsPage() {
   const linkedRecords = (f) => {
     if (!f) return []
     const records = []
-    if (f.subjectType === 'Booking') {
-      const ref = f.subject.replace(/^Booking\s+/, '')
-      records.push({ label: 'Booking reference', value: ref, to: '/admin/bookings' })
+    if (f.subjectType === 'Booking' || f.bookingNumber) {
+      records.push({ label: 'Booking reference', value: f.bookingNumber || f.subject, to: '/admin/bookings' })
     }
     if (f.subjectType === 'Caretaker') {
-      const caregiver = caregivers.find((c) => c.name === f.subject)
-      records.push({ label: 'Caretaker profile', value: caregiver ? caregiver.id : f.subject, to: '/admin/caregivers' })
-      if (caregiver) records.push({ label: 'City', value: caregiver.city || '—' })
+      records.push({ label: 'Caretaker profile', value: f.subject, to: '/admin/caregivers' })
     }
     if (f.subjectType === 'Customer') {
       records.push({ label: 'Customer account', value: f.subject, to: '/admin/customers' })
@@ -551,7 +632,7 @@ export function FraudAlertsPage() {
               tabs={RISK_TABS.map((r) => ({
                 id: r,
                 label: r,
-                count: r === 'All' ? frauds.length : frauds.filter((f) => f.risk === r).length,
+                count: r === 'All' ? riskAlerts.length : riskAlerts.filter((f) => f.risk === r).length,
               }))}
               active={risk}
               onChange={setRisk}
@@ -559,7 +640,11 @@ export function FraudAlertsPage() {
             />
           </div>
 
-          {filteredFrauds.length === 0 ? (
+          {isLoadingRiskAlerts ? (
+            <div className="rounded-card border border-line bg-white p-6 shadow-card">
+              <TableSkeleton rows={6} cols={7} />
+            </div>
+          ) : filteredFrauds.length === 0 ? (
             <div className="rounded-card border border-line bg-white shadow-card">
               <EmptyState
                 icon={SearchX}

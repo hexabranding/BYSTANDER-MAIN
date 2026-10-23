@@ -11,10 +11,8 @@ import {
   YAxis,
 } from 'recharts'
 import { Download, IndianRupee, Lock, Percent, RotateCcw, SearchX, TrendingUp } from 'lucide-react'
-import { useData } from '@/context/DataContext'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
-import { REVENUE_SPLIT } from '@/data/charts'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -26,9 +24,8 @@ import { DataTable } from '@/components/common/DataTable'
 import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
-import { EmptyState } from '@/components/common/States'
+import { EmptyState, TableSkeleton } from '@/components/common/States'
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
-import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { FormField, Select } from '@/components/forms/FormField'
 import { adminService } from '@/services/adminService'
 
@@ -39,11 +36,6 @@ const RANGES = [
 ]
 
 const STATUS_TABS = ['All', 'Escrow Held', 'Released', 'Refunded']
-
-const TODAY = new Date(2026, 9, 10)
-
-const toISO = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -65,49 +57,32 @@ function splitFor(tx) {
 export function PaymentsPage() {
   useDocumentTitle('Payments')
 
-  const { transactions } = useData()
-
   const [range, setRange] = useState('30')
   const [status, setStatus] = useState('All')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
   const debouncedSearch = useDebouncedValue(search)
 
-  const [liveTransactions, setLiveTransactions] = useState(null)
+  const [liveTransactions, setLiveTransactions] = useState([])
   const [liveStats, setLiveStats] = useState(null)
-  const [isFallback, setIsFallback] = useState(false)
+  const [revenueSplit, setRevenueSplit] = useState([])
 
-  const inRange = useMemo(() => {
-    const cutoff = new Date(TODAY)
-    cutoff.setDate(cutoff.getDate() - Number(range))
-    const cutoffISO = toISO(cutoff)
-    return transactions.filter((t) => t.date >= cutoffISO)
-  }, [transactions, range])
-
-  const filtered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase()
-    return inRange.filter((t) => {
-      const matchesStatus = status === 'All' || t.status === status
-      const matchesSearch =
-        !q ||
-        [t.id, t.bookingId, t.customerName, t.caregiverName, t.service, t.method, t.type]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-      return matchesStatus && matchesSearch
-    })
-  }, [inRange, debouncedSearch, status])
-
-  const stats = useMemo(() => {
-    const gross = inRange.filter((t) => t.status !== 'Refunded').reduce((s, t) => s + t.amount, 0)
-    const commission = inRange.reduce((s, t) => s + t.commission, 0)
-    const refunded = inRange.filter((t) => t.status === 'Refunded').reduce((s, t) => s + t.amount, 0)
-    const escrow = inRange.filter((t) => t.status === 'Escrow Held').reduce((s, t) => s + t.amount, 0)
-    return { gross, commission, refunded, escrow }
-  }, [inRange])
+  // Load real continuous rolling 6-month revenue split from MongoDB
+  useEffect(() => {
+    adminService
+      .getAdminMetrics()
+      .then((res) => {
+        if (res?.revenueSplit && Array.isArray(res.revenueSplit)) {
+          setRevenueSplit(res.revenueSplit)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     let mounted = true
+    setIsLoading(true)
     adminService
       .getAdminPayments({
         status: status === 'All' ? 'all' : status,
@@ -116,16 +91,14 @@ export function PaymentsPage() {
       })
       .then((res) => {
         if (!mounted) return
-        if (res?.transactions && res.transactions.length > 0) {
-          setLiveTransactions(res.transactions)
-          if (res.stats) setLiveStats(res.stats)
-          setIsFallback(false)
-        } else {
-          setIsFallback(true)
-        }
+        setLiveTransactions(res?.transactions || [])
+        if (res?.stats) setLiveStats(res.stats)
       })
       .catch(() => {
-        if (mounted) setIsFallback(true)
+        if (mounted) setLiveTransactions([])
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false)
       })
 
     return () => {
@@ -133,8 +106,16 @@ export function PaymentsPage() {
     }
   }, [status, range, debouncedSearch])
 
-  const displayedTransactions = liveTransactions && !isFallback ? liveTransactions : filtered
-  const displayedStats = liveStats && !isFallback ? liveStats : stats
+  const displayedTransactions = liveTransactions || []
+  const displayedStats = useMemo(() => {
+    if (liveStats) return liveStats
+    return {
+      gross: displayedTransactions.filter((t) => t.status !== 'Refunded').reduce((s, t) => s + (t.amount || 0), 0),
+      commission: displayedTransactions.reduce((s, t) => s + (t.commission || 0), 0),
+      refunded: displayedTransactions.filter((t) => t.status === 'Refunded').reduce((s, t) => s + (t.amount || 0), 0),
+      escrow: displayedTransactions.filter((t) => t.status === 'Escrow Held').reduce((s, t) => s + (t.amount || 0), 0),
+    }
+  }, [liveStats, displayedTransactions])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(displayedTransactions, 8)
   useEffect(() => {
@@ -143,11 +124,22 @@ export function PaymentsPage() {
   }, [debouncedSearch, status, range, displayedTransactions.length])
 
   const handleExport = () => {
-    const rows = filtered.map((t) => ({
+    const rows = displayedTransactions.map((t) => ({
       transactionId: t.id,
       date: t.date,
       booking: t.bookingId,
       customer: t.customerName,
+      caregiver: t.caregiverName,
+      service: t.service,
+      method: t.method,
+      amount: t.amount,
+      commission: t.commission,
+      payout: t.payout,
+      status: t.status,
+    }))
+    downloadText(`bystander-transactions-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
+    toast.success(`Exported ${rows.length} transaction${rows.length === 1 ? '' : 's'} to CSV`)
+  }
       caregiver: t.caregiverName,
       service: t.service,
       method: t.method,
@@ -212,13 +204,9 @@ export function PaymentsPage() {
 
   return (
     <div className="space-y-6">
-      {isFallback && (
-        <FallbackNotice message="Displaying financial ledger records from offline cache while administrative transaction service is connecting." />
-      )}
-
       <PageHeader
         title="Payments"
-        subtitle="Every rupee moving through CareMate — escrow holdings, releases, refunds and commission."
+        subtitle="Every rupee moving through Bystander — escrow holdings, releases, refunds and commission."
         action={
           <Button variant="outline" icon={Download} onClick={handleExport} disabled={!displayedTransactions.length}>
             Export CSV
@@ -266,13 +254,13 @@ export function PaymentsPage() {
         <Card className="lg:col-span-2">
           <CardHeader
             title="Revenue & commission"
-            subtitle="Monthly gross revenue against platform commission collected"
+            subtitle="Monthly gross revenue against platform commission collected (live continuous time-series)"
             icon={TrendingUp}
           />
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_SPLIT} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}>
+                <AreaChart data={revenueSplit} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}>
                   <defs>
                     <linearGradient id="payRevenueFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0F766E" stopOpacity={0.26} />
@@ -337,7 +325,7 @@ export function PaymentsPage() {
         <Card>
           <CardHeader title="Filters" subtitle="Narrow the ledger before exporting" icon={RotateCcw} />
           <CardBody className="space-y-4">
-            <FormField label="Date range" htmlFor="pay-range" hint="Measured against 10 Oct 2026">
+            <FormField label="Date range" htmlFor="pay-range">
               <Select id="pay-range" value={range} onChange={(e) => setRange(e.target.value)}>
                 {RANGES.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -349,11 +337,11 @@ export function PaymentsPage() {
             <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 text-xs leading-relaxed text-muted">
               <p className="font-semibold text-ink">Ledger snapshot</p>
               <p className="mt-1.5">
-                {inRange.length} transactions in range · {formatCurrency(stats.gross)} gross ·{' '}
-                {formatCurrency(stats.commission)} commission retained by the platform.
+                {displayedTransactions.length} transactions · {formatCurrency(displayedStats.gross)} gross ·{' '}
+                {formatCurrency(displayedStats.commission)} platform commission.
               </p>
             </div>
-            <Button variant="secondary" className="w-full" onClick={handleExport} disabled={!filtered.length} icon={Download}>
+            <Button variant="secondary" className="w-full" onClick={handleExport} disabled={!displayedTransactions.length} icon={Download}>
               Export filtered rows
             </Button>
           </CardBody>
@@ -372,7 +360,7 @@ export function PaymentsPage() {
             tabs={STATUS_TABS.map((s) => ({
               id: s,
               label: s,
-              count: s === 'All' ? inRange.length : inRange.filter((t) => t.status === s).length,
+              count: s === 'All' ? displayedTransactions.length : displayedTransactions.filter((t) => t.status === s).length,
             }))}
             active={status}
             onChange={setStatus}
@@ -380,7 +368,9 @@ export function PaymentsPage() {
           />
         </div>
 
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <TableSkeleton rows={6} cols={6} />
+        ) : displayedTransactions.length === 0 ? (
           <div className="rounded-card border border-line bg-white shadow-card">
             <EmptyState
               icon={SearchX}
@@ -414,10 +404,6 @@ export function PaymentsPage() {
             <Pagination page={page} totalPages={totalPages} onPageChange={goto} totalItems={totalItems} />
           </>
         )}
-
-        <p className="text-xs leading-relaxed text-muted">
-          Sample financial data — no real payment processing.
-        </p>
       </section>
 
       <Modal

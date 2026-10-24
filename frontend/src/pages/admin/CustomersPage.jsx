@@ -71,8 +71,8 @@ export function CustomersPage() {
       setCustomers(result.customers || [])
       setStats({
         total: result.stats?.total ?? result.customers.length,
-        active: result.stats?.active ?? result.customers.filter((c) => c.status === 'Active').length,
-        inactive: (result.stats?.suspended || 0) + (result.stats?.blocked || 0) || result.customers.filter((c) => c.status !== 'Active').length,
+        active: result.stats?.active ?? result.customers.filter((c) => c.status?.toLowerCase() === 'active').length,
+        inactive: (result.stats?.suspended || 0) + (result.stats?.blocked || 0) || result.customers.filter((c) => c.status?.toLowerCase() !== 'active').length,
         lifetime: result.customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0),
       })
     } catch (err) {
@@ -94,10 +94,11 @@ export function CustomersPage() {
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
     return customers.filter((c) => {
+      const isAct = c.status?.toLowerCase() === 'active'
       const matchesStatus =
         status === 'All' ||
-        (status === 'Active' && c.status === 'Active') ||
-        (status === 'Inactive' && c.status !== 'Active')
+        (status === 'Active' && isAct) ||
+        (status === 'Inactive' && !isAct)
       const matchesCity = city === 'All' || c.city === city
       const matchesSearch =
         !q ||
@@ -168,7 +169,7 @@ export function CustomersPage() {
     }
 
     setIsUpdating(true)
-    const isCurrentlyActive = suspendTarget.status === 'Active'
+    const isCurrentlyActive = suspendTarget.status?.toLowerCase() === 'active'
     const nextStatus = isCurrentlyActive ? 'suspended' : 'active'
 
     try {
@@ -240,25 +241,43 @@ export function CustomersPage() {
       render: (c) => <span className="font-semibold tabular-nums text-ink">{formatCurrency(c.totalSpent)}</span>,
     },
     { key: 'createdAt', header: 'Joined', render: (c) => <span className="whitespace-nowrap">{formatDate(c.createdAt)}</span> },
-    { key: 'status', header: 'Status', render: (c) => <StatusBadge status={c.status} size="sm" /> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (c) => {
+        const s = (c.status || '').toLowerCase()
+        if (s === 'blocked') return <StatusBadge status="Blacklisted" size="sm" />
+        if (s === 'suspended') return <StatusBadge status="Suspended" size="sm" />
+        return <StatusBadge status="Active" size="sm" />
+      },
+    },
     {
       key: 'action',
       header: 'Action',
       align: 'right',
       sortable: false,
-      render: (c) => (
-        <Button
-          size="xs"
-          variant="outline"
-          icon={Eye}
-          onClick={(e) => {
-            e.stopPropagation()
-            setViewingId(c.id)
-          }}
-        >
-          View
-        </Button>
-      ),
+      render: (c) => {
+        const isBanned = ['suspended', 'blocked'].includes((c.status || '').toLowerCase())
+        return (
+          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <Button
+              size="xs"
+              variant="outline"
+              icon={Eye}
+              onClick={() => setViewingId(c.id)}
+            >
+              View
+            </Button>
+            <Button
+              size="xs"
+              variant={isBanned ? 'outline' : 'dangerGhost'}
+              onClick={() => handleOpenSuspendModal(c)}
+            >
+              {isBanned ? 'Reinstate' : 'Suspend'}
+            </Button>
+          </div>
+        )
+      },
     },
   ]
 
@@ -304,8 +323,8 @@ export function CustomersPage() {
               s === 'All'
                 ? customers.length
                 : s === 'Active'
-                  ? customers.filter((c) => c.status === 'Active').length
-                  : customers.filter((c) => c.status !== 'Active').length,
+                  ? customers.filter((c) => c.status?.toLowerCase() === 'active').length
+                  : customers.filter((c) => c.status?.toLowerCase() !== 'active').length,
           }))}
           active={status}
           onChange={setStatus}
@@ -381,11 +400,11 @@ export function CustomersPage() {
           selected ? (
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button
-                variant={selected.status === 'Active' ? 'dangerGhost' : 'outline'}
+                variant={selected.status?.toLowerCase() === 'active' ? 'dangerGhost' : 'outline'}
                 icon={Ban}
                 onClick={() => handleOpenSuspendModal(selected)}
               >
-                {selected.status === 'Active' ? 'Suspend account' : 'Reactivate account'}
+                {selected.status?.toLowerCase() === 'active' ? 'Suspend account' : 'Reinstate account'}
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
@@ -546,11 +565,11 @@ export function CustomersPage() {
             setReasonError('')
           }
         }}
-        title={suspendTarget?.status === 'Active' ? 'Suspend Customer Account' : 'Reactivate Customer Account'}
+        title={suspendTarget?.status?.toLowerCase() === 'active' ? 'Suspend Customer Account' : 'Reinstate Customer Account'}
         description={
-          suspendTarget?.status === 'Active'
+          suspendTarget?.status?.toLowerCase() === 'active'
             ? `Suspend ${suspendTarget?.name}. They will be placed on the blacklist and cannot book services.`
-            : `Reactivate ${suspendTarget?.name}'s account so they can resume normal access.`
+            : `Reinstate ${suspendTarget?.name}'s account so they can resume normal access.`
         }
       >
         <div className="space-y-4">
@@ -571,7 +590,7 @@ export function CustomersPage() {
             />
           </FormField>
 
-          {suspendTarget?.status === 'Active' && (
+          {suspendTarget?.status?.toLowerCase() === 'active' && (
             <FormField
               label="Review after"
               htmlFor="customer-suspend-review"
@@ -587,7 +606,7 @@ export function CustomersPage() {
             </FormField>
           )}
 
-          {suspendTarget?.status === 'Active' && (
+          {suspendTarget?.status?.toLowerCase() === 'active' && (
             <p className="rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
               Blacklist actions are permanently recorded in MongoDB with your admin actor attribution and prevent login or job acceptance.
             </p>
@@ -607,15 +626,15 @@ export function CustomersPage() {
               Cancel
             </Button>
             <Button
-              variant={suspendTarget?.status === 'Active' ? 'danger' : 'primary'}
+              variant={suspendTarget?.status?.toLowerCase() === 'active' ? 'danger' : 'primary'}
               onClick={handleSuspendSubmit}
               disabled={isUpdating || suspendReason.trim().length < 3}
             >
               {isUpdating
                 ? 'Updating…'
-                : suspendTarget?.status === 'Active'
+                : suspendTarget?.status?.toLowerCase() === 'active'
                   ? 'Suspend Account'
-                  : 'Reactivate Account'}
+                  : 'Reinstate Account'}
             </Button>
           </div>
         </div>

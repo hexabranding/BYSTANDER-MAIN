@@ -664,6 +664,20 @@ export const getCustomerPayments = async (customerId, query = {}) => {
     .sort({ createdAt: -1 })
     .lean();
 
+  const now = new Date();
+
+  // 1. Continuous rolling 6-month slots up to current month (e.g. May to Oct)
+  const monthlySpendMap = new Map();
+  const monthlySpend = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+    const slot = { month: monthLabel, spend: 0 };
+    monthlySpend.push(slot);
+    monthlySpendMap.set(monthKey, slot);
+  }
+
   let totalSpent = 0;
   let escrowHeld = 0;
   let refunded = 0;
@@ -677,6 +691,14 @@ export const getCustomerPayments = async (customerId, query = {}) => {
     if (t.status === 'escrow_held') {
       escrowHeld += t.amount || 0;
     }
+
+    if (t.status !== 'refunded') {
+      const txDate = t.createdAt ? new Date(t.createdAt) : now;
+      const monthKey = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlySpendMap.has(monthKey)) {
+        monthlySpendMap.get(monthKey).spend += t.amount || 0;
+      }
+    }
   });
 
   return {
@@ -686,6 +708,7 @@ export const getCustomerPayments = async (customerId, query = {}) => {
       escrowHeld,
       refunded,
     },
+    monthlySpend,
   };
 };
 
@@ -704,7 +727,37 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const now = new Date();
+  const currentMonthPrefix = now.toISOString().slice(0, 7);
+
+  // 1. Continuous rolling 6-month slots up to current month
+  const monthlyEarningsMap = new Map();
+  const monthlyEarnings = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+    const slot = { month: monthLabel, earnings: 0 };
+    monthlyEarnings.push(slot);
+    monthlyEarningsMap.set(monthKey, slot);
+  }
+
+  // 2. Weekly slots Monday to Sunday for the current calendar week
+  const dayOfWeek = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - dayOfWeek);
+  monday.setHours(0, 0, 0, 0);
+
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const weeklyEarningsMap = new Map();
+  const weeklyEarnings = dayNames.map((dayName, idx) => {
+    const slotDate = new Date(monday);
+    slotDate.setDate(monday.getDate() + idx);
+    const dateStr = slotDate.toISOString().slice(0, 10);
+    const slot = { day: dayName, earnings: 0 };
+    weeklyEarningsMap.set(dateStr, slot);
+    return slot;
+  });
 
   let totalNet = 0;
   let totalGross = 0;
@@ -719,6 +772,7 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
     const net = t.breakdown?.caregiverPayout || gross - commission;
     const isPending = t.status === 'escrow_held';
     const dateStr = t.createdAt ? new Date(t.createdAt).toISOString().slice(0, 10) : '';
+    const monthKey = dateStr.slice(0, 7);
 
     totalGross += gross;
     totalCommission += commission;
@@ -734,8 +788,18 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
       thisMonth += net;
     }
 
+    // Released and Paid earnings contribute to the weekly & monthly trends
+    if (!isPending) {
+      if (weeklyEarningsMap.has(dateStr)) {
+        weeklyEarningsMap.get(dateStr).earnings += net;
+      }
+      if (monthlyEarningsMap.has(monthKey)) {
+        monthlyEarningsMap.get(monthKey).earnings += net;
+      }
+    }
+
     return {
-      id: `EX-${t.transactionNumber.slice(-6)}`,
+      id: `EX-${t.transactionNumber ? t.transactionNumber.slice(-6) : String(t._id).slice(-6).toUpperCase()}`,
       transactionId: t._id,
       date: dateStr,
       bookingId: t.booking ? String(t.booking._id || t.booking) : '—',
@@ -759,6 +823,8 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
       thisMonth,
       commissionPct: totalGross > 0 ? Math.round((totalCommission / totalGross) * 100) : 12,
     },
+    weeklyEarnings,
+    monthlyEarnings,
   };
 };
 

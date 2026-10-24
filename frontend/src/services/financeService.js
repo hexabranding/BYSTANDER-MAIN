@@ -24,7 +24,11 @@ export const getCustomerPayments = async (query = {}) => {
     refunded: transactions.reduce((s, t) => s + (t.status === 'Refunded' ? t.amount : 0), 0),
   }
 
-  return { transactions, stats }
+  return {
+    transactions,
+    stats,
+    monthlySpend: Array.isArray(response?.monthlySpend) ? response.monthlySpend : null,
+  }
 }
 
 /**
@@ -56,7 +60,12 @@ export const getCaregiverEarnings = async () => {
     commissionPct: 12,
   }
 
-  return { earnings, stats }
+  return {
+    earnings,
+    stats,
+    weeklyEarnings: Array.isArray(response?.weeklyEarnings) ? response.weeklyEarnings : null,
+    monthlyEarnings: Array.isArray(response?.monthlyEarnings) ? response.monthlyEarnings : null,
+  }
 }
 
 /**

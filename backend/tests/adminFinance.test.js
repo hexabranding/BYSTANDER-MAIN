@@ -495,6 +495,9 @@ test('Step 14 - 12: getCustomerPayments strictly scopes transactions to authenti
     assert.equal(queryCaptured.customer.toString(), customerId.toString());
     assert.equal(result.stats.escrowHeld, 3500);
     assert.equal(result.stats.totalSpent, 3500);
+    assert.equal(result.monthlySpend.length, 6);
+    const totalSpendBucket = result.monthlySpend.reduce((acc, m) => acc + m.spend, 0);
+    assert.equal(totalSpendBucket, 3500);
   } finally {
     Transaction.find = origFind;
   }
@@ -536,6 +539,12 @@ test('Step 14 - 13: getCaregiverEarnings strictly scopes earnings to authenticat
     assert.equal(result.stats.totalCommission, 600);
     assert.equal(result.stats.totalNet, 4400);
     assert.equal(result.stats.commissionPct, 12);
+    assert.equal(result.weeklyEarnings.length, 7);
+    assert.equal(result.monthlyEarnings.length, 6);
+    const totalWeeklyBucket = result.weeklyEarnings.reduce((acc, d) => acc + d.earnings, 0);
+    assert.equal(totalWeeklyBucket, 4400);
+    const totalMonthlyBucket = result.monthlyEarnings.reduce((acc, m) => acc + m.earnings, 0);
+    assert.equal(totalMonthlyBucket, 4400);
   } finally {
     Transaction.find = origFind;
   }

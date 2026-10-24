@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, IndianRupee, Lock, RefreshCcw, ShieldCheck, Wallet } from 'lucide-react'
+import { Download, IndianRupee, Lock, RefreshCcw, RefreshCw, ShieldCheck, Wallet } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
-import { useData } from '@/context/DataContext'
 import { useDocumentTitle, useDebouncedValue } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
-import { CUSTOMER_SPEND } from '@/data/charts'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -17,94 +15,135 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Select } from '@/components/forms/FormField'
 import { Button } from '@/components/common/Button'
-import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { financeService } from '@/services/financeService'
 
 const STATUS_OPTIONS = ['All statuses', 'Escrow Held', 'Released', 'Refunded', 'Paid', 'Pending']
 
+const tooltipStyle = {
+  borderRadius: 12,
+  border: '1px solid #E2E8F0',
+  boxShadow: '0 10px 30px -18px rgba(23,43,58,0.35)',
+  fontSize: 13,
+  color: '#172B3A',
+}
+
+const rupeeTick = (v) => {
+  if (v === 0) return '₹0'
+  if (v >= 1000) return `₹${(v / 1000).toFixed(1)}k`
+  return `₹${v}`
+}
+
+/**
+ * Pure helper to compute rolling 6-month spend buckets ending at current calendar month
+ */
+const computeMonthlySpend = (items) => {
+  const months = []
+  const now = new Date()
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push({
+      month: d.toLocaleString('en-US', { month: 'short' }),
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      spend: 0,
+    })
+  }
+
+  const map = new Map(months.map((m) => [m.key, m]))
+  items.forEach((t) => {
+    if (t.status === 'Refunded' || t.status === 'refunded') return
+    const dateStr = t.date || t.createdAt
+    if (!dateStr) return
+    const key = String(dateStr).slice(0, 7)
+    if (map.has(key)) {
+      map.get(key).spend += Number(t.amount || 0)
+    }
+  })
+
+  return months.map(({ month, spend }) => ({ month, spend }))
+}
+
 export function PaymentsPage() {
   useDocumentTitle('Payments')
   const { user } = useAuth()
-  const { transactions } = useData()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState(STATUS_OPTIONS[0])
-  const [liveTransactions, setLiveTransactions] = useState(null)
-  const [liveStats, setLiveStats] = useState(null)
-  const [isFallback, setIsFallback] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [transactions, setTransactions] = useState([])
+  const [stats, setStats] = useState({ totalSpent: 0, escrowHeld: 0, refunded: 0 })
+  const [backendMonthly, setBackendMonthly] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const customerId = user?.id || 'cu-201'
-
-  const mine = useMemo(() => {
-    return transactions.filter((t) => t.customerId === customerId)
-  }, [transactions, customerId])
-
-  const { totalSpent, escrowHeld, refunded } = useMemo(() => {
-    let spent = 0
-    let escrow = 0
-    let ref = 0
-    mine.forEach((t) => {
-      if (t.status === 'Refunded') ref += t.amount || 0
-      else spent += t.amount || 0
-      if (t.status === 'Escrow Held') escrow += t.amount || 0
-    })
-    return { totalSpent: spent, escrowHeld: escrow, refunded: ref }
-  }, [mine])
-
   const loadPayments = async () => {
+    setLoading(true)
     try {
       const res = await financeService.getCustomerPayments({
         status: status === STATUS_OPTIONS[0] ? 'all' : status,
         search: debouncedSearch,
       })
-      if (res?.transactions && res.transactions.length > 0) {
-        setLiveTransactions(res.transactions)
-        if (res.stats) setLiveStats(res.stats)
-        setIsFallback(false)
+      const list = res?.transactions || []
+      setTransactions(list)
+      if (res?.stats) {
+        setStats(res.stats)
       } else {
-        setIsFallback(true)
+        let spent = 0
+        let escrow = 0
+        let ref = 0
+        list.forEach((t) => {
+          if (t.status === 'Refunded') ref += t.amount || 0
+          else spent += t.amount || 0
+          if (t.status === 'Escrow Held') escrow += t.amount || 0
+        })
+        setStats({ totalSpent: spent, escrowHeld: escrow, refunded: ref })
       }
-    } catch {
-      setIsFallback(true)
+      if (Array.isArray(res?.monthlySpend) && res.monthlySpend.length === 6) {
+        setBackendMonthly(res.monthlySpend)
+      }
+    } catch (err) {
+      toast.error('Unable to load payment transactions', {
+        description: err?.message || 'Please check your connection and try again.',
+      })
+      setTransactions([])
+    } finally {
+      setLoading(false)
     }
   }
 
   useEffect(() => {
     loadPayments()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId, status, debouncedSearch])
+  }, [user?._id, status, debouncedSearch])
+
+  const monthlySpendData = useMemo(() => {
+    if (backendMonthly && backendMonthly.length === 6) return backendMonthly
+    return computeMonthlySpend(transactions)
+  }, [backendMonthly, transactions])
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
-    return mine.filter((t) => {
+    return transactions.filter((t) => {
       const matchesStatus = status === STATUS_OPTIONS[0] || t.status === status
       const matchesSearch =
         !q ||
-        t.id.toLowerCase().includes(q) ||
+        t.id?.toLowerCase().includes(q) ||
         t.bookingId?.toLowerCase().includes(q) ||
         t.caregiverName?.toLowerCase().includes(q) ||
         t.service?.toLowerCase().includes(q) ||
         t.method?.toLowerCase().includes(q)
       return matchesStatus && matchesSearch
     })
-  }, [mine, debouncedSearch, status])
+  }, [transactions, debouncedSearch, status])
 
-  const effectiveTransactions = liveTransactions && !isFallback ? liveTransactions : filtered
-  const effectiveStats = liveStats && !isFallback ? liveStats : { totalSpent, escrowHeld, refunded }
-
-  const { page, totalPages, totalItems, pageItems, goto } = usePagination(effectiveTransactions, 8)
+  const { page, totalPages, totalItems, pageItems, goto } = usePagination(filtered, 8)
   useEffect(() => {
     goto(1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, status, effectiveTransactions.length])
+  }, [debouncedSearch, status, filtered.length])
 
   const handleExport = () => {
-    if (!effectiveTransactions.length) {
-      toast.error('Nothing to export', { description: 'Adjust your filters and try again.' })
+    if (!filtered.length) {
+      toast.error('Nothing to export', { description: 'Adjust your filters or make a booking payment first.' })
       return
     }
-    const rows = effectiveTransactions.map((t) => ({
+    const rows = filtered.map((t) => ({
       Date: t.date,
       'Transaction ID': t.id,
       Booking: t.bookingId,
@@ -115,7 +154,7 @@ export function PaymentsPage() {
       Type: t.type,
       Status: t.status,
     }))
-    downloadText(`caremate-payments-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
+    downloadText(`bystander-payments-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
     toast.success('Export ready', { description: `${rows.length} transactions downloaded as CSV.` })
   }
 
@@ -151,17 +190,18 @@ export function PaymentsPage() {
 
   return (
     <div className="space-y-6">
-      {isFallback && (
-        <FallbackNotice message="Displaying payment transactions from offline cache while live billing service is connecting." />
-      )}
-
       <PageHeader
         title="Payments"
         subtitle="Every rupee you have spent on care — escrow, settlements and refunds."
         action={
-          <Button variant="outline" icon={Download} onClick={handleExport}>
-            Export CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" icon={RefreshCw} loading={loading} onClick={loadPayments}>
+              Refresh
+            </Button>
+            <Button variant="outline" icon={Download} onClick={handleExport} disabled={filtered.length === 0}>
+              Export CSV
+            </Button>
+          </div>
         }
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-500/30">
@@ -171,9 +211,9 @@ export function PaymentsPage() {
       />
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Total spent" value={formatCurrency(effectiveStats.totalSpent)} icon={IndianRupee} tone="primary" hint="All settled + escrow" delay={0} />
-        <StatCard label="Escrow held" value={formatCurrency(effectiveStats.escrowHeld)} icon={Lock} tone="warning" hint="Released after service" delay={0.05} />
-        <StatCard label="Refunded this year" value={formatCurrency(effectiveStats.refunded)} icon={RefreshCcw} tone="success" hint="Back to original method" delay={0.1} />
+        <StatCard label="Total spent" value={formatCurrency(stats.totalSpent)} icon={IndianRupee} tone="primary" hint="All settled + escrow" delay={0} />
+        <StatCard label="Escrow held" value={formatCurrency(stats.escrowHeld)} icon={Lock} tone="warning" hint="Released after service" delay={0.05} />
+        <StatCard label="Refunded this year" value={formatCurrency(stats.refunded)} icon={RefreshCcw} tone="success" hint="Back to original method" delay={0.1} />
         <StatCard label="Next payout to caretakers" value="Awaiting settlement" icon={Wallet} tone="info" hint="Handled by Bystander ops" delay={0.15} />
       </div>
 
@@ -182,7 +222,7 @@ export function PaymentsPage() {
         <CardBody>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={CUSTOMER_SPEND} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+              <AreaChart data={monthlySpendData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                 <defs>
                   <linearGradient id="paymentsSpendFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0F766E" stopOpacity={0.28} />
@@ -195,16 +235,11 @@ export function PaymentsPage() {
                   tickLine={false}
                   axisLine={false}
                   tick={{ fontSize: 12, fill: '#64748B' }}
-                  tickFormatter={(v) => `₹${v / 1000}k`}
+                  tickFormatter={rupeeTick}
                 />
                 <Tooltip
                   formatter={(value) => [formatCurrency(value), 'Spend']}
-                  contentStyle={{
-                    borderRadius: 12,
-                    border: '1px solid #E2E8F0',
-                    boxShadow: '0 10px 30px -18px rgba(23,43,58,0.35)',
-                    fontSize: 13,
-                  }}
+                  contentStyle={tooltipStyle}
                 />
                 <Area type="monotone" dataKey="spend" stroke="#0F766E" strokeWidth={2.5} fill="url(#paymentsSpendFill)" />
               </AreaChart>
@@ -240,7 +275,7 @@ export function PaymentsPage() {
         keyExtractor={(row) => row.id}
         initialSort={{ key: 'date', dir: 'desc' }}
         emptyTitle="No transactions found"
-        emptyDescription="Try clearing the search or switching the status filter."
+        emptyDescription={search || status !== STATUS_OPTIONS[0] ? 'Try clearing the search or switching the status filter.' : 'Your care bookings and payment receipts will appear here.'}
       />
       <Pagination page={page} totalPages={totalPages} onPageChange={goto} totalItems={totalItems} />
     </div>

@@ -87,6 +87,7 @@ export const getCustomerPayments = async (req, res, next) => {
       success: true,
       data: result.transactions,
       stats: result.stats,
+      monthlySpend: result.monthlySpend,
     });
   } catch (err) {
     next(err);
@@ -100,6 +101,8 @@ export const getCaregiverEarnings = async (req, res, next) => {
       success: true,
       data: result.earnings,
       stats: result.stats,
+      weeklyEarnings: result.weeklyEarnings,
+      monthlyEarnings: result.monthlyEarnings,
     });
   } catch (err) {
     next(err);

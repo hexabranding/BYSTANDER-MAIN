@@ -11,11 +11,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Banknote, Download, HandCoins, Wallet } from 'lucide-react'
+import { Banknote, Download, HandCoins, RefreshCw, Wallet } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
-import { MONTHLY_EARNINGS, WEEKLY_EARNINGS } from '@/data/charts'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { formatCurrency, formatDate, toCSV, downloadText } from '@/utils/format'
 import { Button } from '@/components/common/Button'
@@ -28,7 +26,6 @@ import { Tabs, ProgressBar } from '@/components/common/Tabs'
 import { SearchBar } from '@/components/common/SearchBar'
 import { DataTable } from '@/components/common/DataTable'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
-import { FallbackNotice } from '@/components/common/FallbackNotice'
 import { financeService } from '@/services/financeService'
 
 const tooltipStyle = {
@@ -39,98 +36,178 @@ const tooltipStyle = {
   color: '#172B3A',
 }
 
-const rupeeTick = (v) => `₹${(v / 1000).toFixed(1)}k`
+const rupeeTick = (v) => {
+  if (v === 0) return '₹0'
+  if (v >= 1000) return `₹${(v / 1000).toFixed(1)}k`
+  return `₹${v}`
+}
+
+/**
+ * Pure helper to compute Monday–Sunday weekly earnings buckets for current calendar week
+ */
+const computeWeeklyTrend = (items) => {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const result = days.map((day) => ({ day, earnings: 0 }))
+
+  const now = new Date()
+  const dayOfWeek = (now.getDay() + 6) % 7 // Monday = 0, Sunday = 6
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - dayOfWeek)
+  monday.setHours(0, 0, 0, 0)
+
+  items.forEach((e) => {
+    if (e.status !== 'Released' && e.status !== 'Paid') return
+    const d = new Date(e.date)
+    if (isNaN(d.getTime())) return
+    const diffDays = Math.floor((d.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays >= 0 && diffDays < 7) {
+      result[diffDays].earnings += Number(e.net || 0)
+    }
+  })
+
+  return result
+}
+
+/**
+ * Pure helper to compute rolling 6-month earnings buckets ending at current calendar month
+ */
+const computeMonthlyTrend = (items) => {
+  const months = []
+  const now = new Date()
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push({
+      month: d.toLocaleString('en-US', { month: 'short' }),
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      earnings: 0,
+    })
+  }
+
+  const map = new Map(months.map((m) => [m.key, m]))
+  items.forEach((e) => {
+    if (e.status !== 'Released' && e.status !== 'Paid') return
+    const key = (e.date || '').slice(0, 7)
+    if (map.has(key)) {
+      map.get(key).earnings += Number(e.net || 0)
+    }
+  })
+
+  return months.map(({ month, earnings }) => ({ month, earnings }))
+}
 
 export function EarningsPage() {
   useDocumentTitle('Earnings')
 
   const { user } = useAuth()
-  const { bookings, earnings } = useData()
-
-  const myId = user?.caregiverId || 'cg-101'
 
   const [tab, setTab] = useState('all')
   const [query, setQuery] = useState('')
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false)
   const [isSubmittingPayout, setIsSubmittingPayout] = useState(false)
-  const [liveEarnings, setLiveEarnings] = useState(null)
-  const [liveStats, setLiveStats] = useState(null)
-  const [isFallback, setIsFallback] = useState(false)
-
-  const myEarnings = useMemo(() => {
-    const myBookingIds = new Set(bookings.filter((b) => b.caregiverId === myId).map((b) => b.id))
-    return earnings.filter((e) => e.caregiverId === myId || (e.caregiverId == null && myBookingIds.has(e.bookingId)))
-  }, [earnings, bookings, myId])
+  const [loading, setLoading] = useState(true)
+  const [earnings, setEarnings] = useState([])
+  const [stats, setStats] = useState({
+    totalNet: 0,
+    totalGross: 0,
+    totalCommission: 0,
+    pendingPayout: 0,
+    availableBalance: 0,
+    thisMonth: 0,
+    commissionPct: 12,
+  })
+  const [backendWeekly, setBackendWeekly] = useState(null)
+  const [backendMonthly, setBackendMonthly] = useState(null)
 
   const loadEarnings = async () => {
+    setLoading(true)
     try {
       const res = await financeService.getCaregiverEarnings()
-      if (res?.earnings && res.earnings.length > 0) {
-        setLiveEarnings(res.earnings)
-        if (res.stats) setLiveStats(res.stats)
-        setIsFallback(false)
+      const list = res?.earnings || []
+      setEarnings(list)
+      if (res?.stats) {
+        setStats(res.stats)
       } else {
-        setIsFallback(true)
+        const gross = list.reduce((sum, e) => sum + e.gross, 0)
+        const commission = list.reduce((sum, e) => sum + e.commission, 0)
+        const net = list.reduce((sum, e) => sum + e.net, 0)
+        const pendingPayout = list.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
+        const availableBalance = list.filter((e) => e.status === 'Released' && !e.payoutId).reduce((sum, e) => sum + e.net, 0)
+        const curMonthPrefix = new Date().toISOString().slice(0, 7)
+        const thisMonth = list.filter((e) => e.date?.startsWith(curMonthPrefix)).reduce((sum, e) => sum + e.net, 0)
+        const commissionPct = gross > 0 ? Math.round((commission / gross) * 100) : 12
+
+        setStats({
+          totalNet: net,
+          totalGross: gross,
+          totalCommission: commission,
+          pendingPayout,
+          availableBalance,
+          thisMonth,
+          commissionPct,
+        })
       }
-    } catch {
-      setIsFallback(true)
+
+      if (Array.isArray(res?.weeklyEarnings) && res.weeklyEarnings.length === 7) {
+        setBackendWeekly(res.weeklyEarnings)
+      }
+      if (Array.isArray(res?.monthlyEarnings) && res.monthlyEarnings.length === 6) {
+        setBackendMonthly(res.monthlyEarnings)
+      }
+    } catch (err) {
+      toast.error('Unable to load live earnings ledger', {
+        description: err?.message || 'Please check your connection and try again.',
+      })
+      setEarnings([])
+    } finally {
+      setLoading(false)
     }
   }
 
   useEffect(() => {
     loadEarnings()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myId])
+  }, [user?._id])
 
-  const effectiveEarnings = liveEarnings && !isFallback ? liveEarnings : myEarnings
+  const weeklyEarningsData = useMemo(() => {
+    if (backendWeekly && backendWeekly.length === 7) return backendWeekly
+    return computeWeeklyTrend(earnings)
+  }, [backendWeekly, earnings])
 
-  const totalNet = myEarnings.reduce((sum, e) => sum + e.net, 0)
-  const totalGross = myEarnings.reduce((sum, e) => sum + e.gross, 0)
-  const totalCommission = myEarnings.reduce((sum, e) => sum + e.commission, 0)
-  const pendingPayout = myEarnings.filter((e) => e.status === 'Pending').reduce((sum, e) => sum + e.net, 0)
-  const currentMonth = new Date().toISOString().slice(0, 7)
-  const thisMonth = myEarnings.filter((e) => e.date.startsWith(currentMonth)).reduce((sum, e) => sum + e.net, 0)
-  const commissionPct = totalGross > 0 ? Math.round((totalCommission / totalGross) * 100) : 0
-
-  const effectiveStats = useMemo(() => {
-    if (liveStats && !isFallback) return liveStats
-    return {
-      totalNet,
-      totalGross,
-      totalCommission,
-      pendingPayout,
-      thisMonth,
-      commissionPct,
-    }
-  }, [liveStats, isFallback, totalNet, totalGross, totalCommission, pendingPayout, thisMonth, commissionPct])
+  const monthlyEarningsData = useMemo(() => {
+    if (backendMonthly && backendMonthly.length === 6) return backendMonthly
+    return computeMonthlyTrend(earnings)
+  }, [backendMonthly, earnings])
 
   const availableToWithdraw = useMemo(() => {
-    if (liveStats?.availableBalance != null && !isFallback) {
-      return liveStats.availableBalance
+    if (stats?.availableBalance != null) {
+      return stats.availableBalance
     }
-    return effectiveEarnings
+    return earnings
       .filter((e) => e.status === 'Released' && !e.payoutId)
       .reduce((sum, e) => sum + (e.net || 0), 0)
-  }, [liveStats, isFallback, effectiveEarnings])
+  }, [stats, earnings])
 
   const counts = useMemo(
     () => ({
-      all: effectiveEarnings.length,
-      pending: effectiveEarnings.filter((e) => e.status === 'Pending').length,
-      released: effectiveEarnings.filter((e) => e.status === 'Released').length,
-      paid: effectiveEarnings.filter((e) => e.status === 'Paid').length,
+      all: earnings.length,
+      pending: earnings.filter((e) => e.status === 'Pending').length,
+      released: earnings.filter((e) => e.status === 'Released').length,
+      paid: earnings.filter((e) => e.status === 'Paid').length,
     }),
-    [effectiveEarnings],
+    [earnings],
   )
 
   const filtered = useMemo(() => {
-    const list = tab === 'all' ? effectiveEarnings : effectiveEarnings.filter((e) => e.status.toLowerCase() === tab)
+    const list = tab === 'all' ? earnings : earnings.filter((e) => e.status.toLowerCase() === tab)
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((e) => [e.id, e.bookingId, e.service, e.status].join(' ').toLowerCase().includes(q))
-  }, [effectiveEarnings, tab, query])
+  }, [earnings, tab, query])
 
   const handleExport = () => {
+    if (filtered.length === 0) {
+      toast.info('No transactions to export')
+      return
+    }
     const rows = filtered.map((e) => ({
       id: e.id,
       date: e.date,
@@ -152,7 +229,7 @@ export function EarningsPage() {
       await financeService.requestCaregiverPayout({
         disbursalMethod: 'Bank Transfer',
       })
-      toast.success('Payout request submitted (simulated)', {
+      toast.success('Payout request submitted', {
         description: 'Your payout request has been queued for administrative processing.',
       })
       setPayoutDialogOpen(false)
@@ -193,26 +270,27 @@ export function EarningsPage() {
 
   return (
     <div className="space-y-6">
-      {isFallback && (
-        <FallbackNotice message="Displaying caregiver earnings from offline cache while live finance service is connecting." />
-      )}
-
       <PageHeader
         title="Earnings"
         subtitle="Track every rupee — gross service value, platform commission and the net amount that lands in your bank."
         meta={<span className="text-sm text-muted">{Math.round(PLATFORM_COMMISSION * 100)}% platform commission · payouts settle in 2 working days</span>}
         action={
-          <Button variant="outline" icon={Download} onClick={handleExport}>
-            Export CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" icon={RefreshCw} loading={loading} onClick={loadEarnings}>
+              Refresh
+            </Button>
+            <Button variant="outline" icon={Download} onClick={handleExport} disabled={filtered.length === 0}>
+              Export CSV
+            </Button>
+          </div>
         }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total earnings" value={formatCurrency(effectiveStats.totalNet)} icon={Banknote} tone="primary" hint="Lifetime net of commission" delay={0} />
-        <StatCard label="Pending payout" value={formatCurrency(effectiveStats.pendingPayout)} icon={Wallet} tone="warning" hint="Releasing soon" delay={0.05} />
-        <StatCard label="This month" value={formatCurrency(effectiveStats.thisMonth)} icon={HandCoins} tone="accent" hint="Current calendar month" delay={0.1} />
-        <StatCard label="Jobs completed" value={effectiveEarnings.length} icon={Wallet} tone="success" hint="Paid transactions" delay={0.15} />
+        <StatCard label="Total earnings" value={formatCurrency(stats.totalNet)} icon={Banknote} tone="primary" hint="Lifetime net of commission" delay={0} />
+        <StatCard label="Pending payout" value={formatCurrency(stats.pendingPayout)} icon={Wallet} tone="warning" hint="Releasing soon" delay={0.05} />
+        <StatCard label="This month" value={formatCurrency(stats.thisMonth)} icon={HandCoins} tone="accent" hint="Current calendar month" delay={0.1} />
+        <StatCard label="Jobs completed" value={earnings.length} icon={Wallet} tone="success" hint="Paid transactions" delay={0.15} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -221,7 +299,7 @@ export function EarningsPage() {
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={WEEKLY_EARNINGS} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                <BarChart data={weeklyEarningsData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="cgEarningsWeekly" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#2DD4BF" />
@@ -244,7 +322,7 @@ export function EarningsPage() {
           <CardBody>
             <div dir="ltr" className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={MONTHLY_EARNINGS} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                <AreaChart data={monthlyEarningsData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="earningsFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0F766E" stopOpacity={0.25} />
@@ -269,22 +347,22 @@ export function EarningsPage() {
           <CardBody className="space-y-4">
             <div className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3 text-sm">
               <span className="text-muted">Gross earnings (all services)</span>
-              <span className="font-semibold tabular-nums text-ink">{formatCurrency(effectiveStats.totalGross)}</span>
+              <span className="font-semibold tabular-nums text-ink">{formatCurrency(stats.totalGross)}</span>
             </div>
             <div className="flex items-center justify-between gap-4 rounded-xl border border-dashed border-line px-4 py-3 text-sm">
-              <span className="text-muted">Platform commission ({Math.round(PLATFORM_COMMISSION * 100)}%)</span>
-              <span className="font-semibold tabular-nums text-muted">− {formatCurrency(effectiveStats.totalCommission)}</span>
+              <span className="text-muted">Platform commission ({stats.commissionPct}%)</span>
+              <span className="font-semibold tabular-nums text-muted">− {formatCurrency(stats.totalCommission)}</span>
             </div>
             <div className="flex items-center justify-between gap-4 rounded-xl bg-gradient-to-br from-mint-100 to-mint-200 px-4 py-3">
               <span className="text-sm font-bold text-primary-900">Net payable to you</span>
-              <span className="font-display text-lg font-extrabold tabular-nums text-primary-800">{formatCurrency(effectiveStats.totalNet)}</span>
+              <span className="font-display text-lg font-extrabold tabular-nums text-primary-800">{formatCurrency(stats.totalNet)}</span>
             </div>
             <div>
               <div className="mb-1.5 flex items-center justify-between text-xs">
                 <span className="font-semibold text-ink-soft">Commission as % of gross</span>
-                <span className="font-bold text-primary-700">{effectiveStats.commissionPct}%</span>
+                <span className="font-bold text-primary-700">{stats.commissionPct}%</span>
               </div>
-              <ProgressBar value={effectiveStats.commissionPct} tone="primary" />
+              <ProgressBar value={stats.commissionPct} tone="primary" />
             </div>
             <p className="text-xs leading-relaxed text-muted">
               Commission is deducted per completed booking and already reflected in every net figure on this page.
@@ -302,7 +380,7 @@ export function EarningsPage() {
             </div>
             <div className="rounded-xl border border-line px-4 py-3 text-sm">
               <p className="text-muted">Linked bank account</p>
-              <p className="mt-0.5 font-semibold text-ink">HDFC •••• 4412</p>
+              <p className="mt-0.5 font-semibold text-ink">Registered Bank Account</p>
             </div>
             <Button variant="primary" icon={HandCoins} className="w-full" disabled={availableToWithdraw <= 0} onClick={() => setPayoutDialogOpen(true)}>
               Request payout
@@ -316,7 +394,7 @@ export function EarningsPage() {
         <SectionLabel
           hint="Every completed booking and its commission deduction."
           action={
-            <Button variant="outline" size="sm" icon={Download} onClick={handleExport}>
+            <Button variant="outline" size="sm" icon={Download} onClick={handleExport} disabled={filtered.length === 0}>
               Export CSV
             </Button>
           }
@@ -342,7 +420,7 @@ export function EarningsPage() {
           data={filtered}
           keyExtractor={(row) => row.id}
           emptyTitle="No transactions found"
-          emptyDescription="Try a different tab or search term."
+          emptyDescription={query || tab !== 'all' ? 'Try a different tab or search term.' : 'Completed bookings and payouts will appear here.'}
         />
       </section>
 
@@ -355,7 +433,7 @@ export function EarningsPage() {
         loading={isSubmittingPayout}
         tone="success"
         title="Request this payout?"
-        message={`${formatCurrency(availableToWithdraw)} will be queued for disbursal to your registered bank account. Financial transactions remain simulated in this environment.`}
+        message={`${formatCurrency(availableToWithdraw)} will be queued for disbursal to your registered bank account.`}
         confirmLabel="Request payout"
       />
     </div>

@@ -503,6 +503,35 @@ export const getBlacklistCandidates = async (search = '') => {
   return response?.data || []
 }
 
+/**
+ * Retrieves platform configuration, admin team accounts, and security indicators from MongoDB.
+ * @returns {Promise<{ settings: Object, team: Array, telemetry: Object }>}
+ */
+export const getAdminSettings = async () => {
+  const response = await apiClient.get('/admin/settings')
+  return response?.data || response
+}
+
+/**
+ * Updates platform configuration (general, fees, notifications, policy) in MongoDB.
+ * @param {Object} payload - { general?, fees?, notifications?, policy? }
+ * @returns {Promise<Object>}
+ */
+export const updateAdminSettings = async (payload) => {
+  const response = await apiClient.patch('/admin/settings', payload)
+  return response?.data || response
+}
+
+/**
+ * Invites and registers a new administrator account in MongoDB.
+ * @param {Object} payload - { name, email, role, message? }
+ * @returns {Promise<Object>}
+ */
+export const inviteAdminMember = async (payload) => {
+  const response = await apiClient.post('/admin/settings/team/invite', payload)
+  return response?.data || response
+}
+
 export const adminService = {
   getVerifications,
   getVerificationById,
@@ -531,8 +560,12 @@ export const adminService = {
   addToBlacklist,
   removeFromBlacklist,
   getBlacklistCandidates,
+  getAdminSettings,
+  updateAdminSettings,
+  inviteAdminMember,
 }
 
 export default adminService
+
 
 

@@ -117,6 +117,11 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    adminRole: {
+      type: String,
+      default: 'Administrator',
+      trim: true,
+    },
   },
   {
     timestamps: true,

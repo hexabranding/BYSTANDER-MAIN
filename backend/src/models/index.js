@@ -16,3 +16,4 @@ export { Review } from './Review.js';
 export { Transaction } from './Transaction.js';
 export { Payout } from './Payout.js';
 export { Blacklist } from './Blacklist.js';
+export { PlatformSettings } from './PlatformSettings.js';

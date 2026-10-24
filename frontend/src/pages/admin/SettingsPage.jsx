@@ -1,8 +1,22 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { AlertTriangle, Bell, Percent, RefreshCw, Save, Settings, ShieldCheck, UserPlus, Users } from 'lucide-react'
-import { useData } from '@/context/DataContext'
+import {
+  AlertTriangle,
+  Bell,
+  Database,
+  Eye,
+  EyeOff,
+  Lock,
+  Percent,
+  RefreshCw,
+  Save,
+  Server,
+  Settings,
+  ShieldCheck,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { CITIES } from '@/utils/constants'
@@ -13,10 +27,10 @@ import { Card, CardBody, CardFooter, CardHeader } from '@/components/common/Card
 import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { Modal } from '@/components/common/Modal'
-import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
 import { CheckOption } from '@/components/common/FilterPanel'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
+import { adminService } from '@/services/adminService'
 
 const TABS = [
   { id: 'general', label: 'General' },
@@ -36,12 +50,6 @@ const NOTIFICATIONS = [
   { key: 'complaint', label: 'Complaint escalations', hint: 'Complaints that move past their SLA or change stage.' },
   { key: 'digest', label: 'Daily digest', hint: 'One summary email each morning at 08:00 IST.' },
   { key: 'payout', label: 'Payout failures', hint: 'Failed or returned caretaker payout transfers.' },
-]
-
-const INITIAL_TEAM = [
-  { id: 'ad-1', name: 'Kavya Raman', role: 'Operations lead', lastActive: '2026-10-10T09:12:00' },
-  { id: 'ad-2', name: 'Rohit Sharma', role: 'Trust & safety', lastActive: '2026-10-09T18:40:00' },
-  { id: 'ad-3', name: 'Sandeep K.', role: 'Support specialist', lastActive: '2026-10-10T07:55:00' },
 ]
 
 function Toggle({ checked, onChange, label }) {
@@ -71,6 +79,11 @@ export function SettingsPage() {
   useDocumentTitle('Settings')
 
   const [tab, setTab] = useState('general')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isInviting, setIsInviting] = useState(false)
+  const [telemetry, setTelemetry] = useState(null)
+
   const [notif, setNotif] = useState({
     booking: true,
     verification: true,
@@ -79,15 +92,19 @@ export function SettingsPage() {
     digest: false,
     payout: true,
   })
+
   const [policy, setPolicy] = useState({
     police: true,
     bank: true,
     autoFace: false,
     students: true,
   })
+
   const [validity, setValidity] = useState('12 months')
-  const [team, setTeam] = useState(INITIAL_TEAM)
+  const [team, setTeam] = useState([])
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const general = useForm({
     mode: 'onTouched',
@@ -107,8 +124,16 @@ export function SettingsPage() {
 
   const invite = useForm({
     mode: 'onTouched',
-    defaultValues: { name: '', email: '', role: 'Support specialist' },
+    defaultValues: { name: '', email: '', role: 'Operations lead', password: '', confirmPassword: '' },
   })
+
+  const closeInviteModal = () => {
+    setInviteOpen(false)
+    invite.reset({ name: '', email: '', role: 'Operations lead', password: '', confirmPassword: '' })
+    setShowPassword(false)
+    setShowConfirmPassword(false)
+  }
+
 
   const commissionPct = Number(fees.watch('commission')) || 0
   const platformFee = Number(fees.watch('platformFee')) || 0
@@ -119,53 +144,196 @@ export function SettingsPage() {
   const exampleTax = Math.round(((exampleBase + platformFee) * gstPct) / 100)
   const exampleTotal = exampleBase + platformFee + exampleTax
 
-  const saveGeneral = (values) => {
-    toast.success('Settings saved', { description: `${values.platformName} platform configuration updated successfully.` })
+  // Fetch live settings and admin team from MongoDB
+  const loadSettings = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setIsLoading(true)
+    try {
+      const res = await adminService.getAdminSettings()
+      const bundle = res?.data || res
+
+      if (bundle?.settings) {
+        if (bundle.settings.general) {
+          general.reset({
+            platformName: bundle.settings.general.platformName || 'Bystander',
+            supportEmail: bundle.settings.general.supportEmail || 'support@bystander.care',
+            supportPhone: bundle.settings.general.supportPhone || '+91 22 4890 1122',
+            defaultCity: bundle.settings.general.defaultCity || CITIES[0],
+            timezone: bundle.settings.general.timezone || TIMEZONES[0],
+          })
+        }
+
+        if (bundle.settings.fees) {
+          fees.reset({
+            commission: bundle.settings.fees.commission ?? 12,
+            platformFee: bundle.settings.fees.platformFee ?? 49,
+            gst: bundle.settings.fees.gst ?? 18,
+          })
+        }
+
+        if (bundle.settings.notifications) {
+          setNotif((prev) => ({ ...prev, ...bundle.settings.notifications }))
+        }
+
+        if (bundle.settings.policy) {
+          setPolicy((prev) => ({
+            ...prev,
+            police: bundle.settings.policy.police ?? true,
+            bank: bundle.settings.policy.bank ?? true,
+            autoFace: bundle.settings.policy.autoFace ?? false,
+            students: bundle.settings.policy.students ?? true,
+          }))
+          if (bundle.settings.policy.validity) {
+            setValidity(bundle.settings.policy.validity)
+          }
+        }
+      }
+
+      if (Array.isArray(bundle?.team)) {
+        setTeam(bundle.team)
+      }
+
+      if (bundle?.telemetry) {
+        setTelemetry(bundle.telemetry)
+      }
+
+      if (isRefresh) {
+        toast.success('Settings synchronized with MongoDB')
+      }
+    } catch (err) {
+      toast.error('Unable to retrieve settings from server', {
+        description: err?.message || 'Please check backend connection.',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [general, fees])
+
+  useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
+
+  // Save General settings to MongoDB
+  const saveGeneral = async (values) => {
+    setIsSaving(true)
+    try {
+      await adminService.updateAdminSettings({ general: values })
+      toast.success('Settings saved', {
+        description: `${values.platformName} platform configuration updated in MongoDB.`,
+      })
+    } catch (err) {
+      toast.error('Failed to save settings', { description: err.message })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const saveFees = (values) => {
-    toast.success('Commission & fees saved', {
-      description: `${values.commission}% commission · ₹${values.platformFee} platform fee · ${values.gst}% GST.`,
-    })
+  // Save Commission & Fees to MongoDB
+  const saveFees = async (values) => {
+    setIsSaving(true)
+    try {
+      await adminService.updateAdminSettings({ fees: values })
+      toast.success('Commission & fees saved', {
+        description: `${values.commission}% commission · ₹${values.platformFee} platform fee · ${values.gst}% GST saved in MongoDB.`,
+      })
+    } catch (err) {
+      toast.error('Failed to save fees', { description: err.message })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const onInvite = (values) => {
-    setTeam((prev) => [
-      ...prev,
-      {
-        id: `ad-${prev.length + 1}`,
-        name: values.name.trim(),
+  // Save Notification preferences to MongoDB
+  const saveNotifications = async () => {
+    setIsSaving(true)
+    try {
+      await adminService.updateAdminSettings({ notifications: notif })
+      toast.success('Notification preferences saved', {
+        description: 'Operations alert routing rules updated in MongoDB.',
+      })
+    } catch (err) {
+      toast.error('Failed to save notification preferences', { description: err.message })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Save Verification Policy to MongoDB
+  const savePolicy = async () => {
+    setIsSaving(true)
+    try {
+      await adminService.updateAdminSettings({ policy: { ...policy, validity } })
+      toast.success('Verification policy saved', {
+        description: 'Caretaker verification requirements updated in MongoDB.',
+      })
+    } catch (err) {
+      toast.error('Failed to save verification policy', { description: err.message })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Invite Admin member into MongoDB
+  const onInvite = async (values) => {
+    setIsInviting(true)
+    try {
+      const res = await adminService.inviteAdminMember({
+        name: values.name,
+        email: values.email,
         role: values.role,
-        lastActive: '2026-10-10T10:00:00',
-        pending: true,
-      },
-    ])
-    toast.success(`Invitation sent to ${values.email.trim()}`, {
-      description: 'They will appear as pending until they accept.',
-    })
-    setInviteOpen(false)
-    invite.reset()
+        password: values.password,
+        message: values.message,
+      })
+      const bundle = res?.data || res
+      if (Array.isArray(bundle?.team)) {
+        setTeam(bundle.team)
+      } else if (bundle?.member) {
+        setTeam((prev) => [...prev, bundle.member])
+      }
+      toast.success(`Admin registered: ${values.name}`, {
+        description: `${values.email} can now sign in using the password you set.`,
+      })
+      closeInviteModal()
+    } catch (err) {
+      toast.error('Failed to add administrator', {
+        description: err?.message || 'Could not register administrator account.',
+      })
+    } finally {
+      setIsInviting(false)
+    }
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Settings"
-        subtitle="Platform configuration, fees, notification rules and the admin team."
+        subtitle="Live platform configuration, fees, notification rules and administrative team."
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={RefreshCw}
+            onClick={() => loadSettings(true)}
+            disabled={isLoading}
+          >
+            Sync with server
+          </Button>
+        }
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-500/30">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Production Mode Active
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            Live MongoDB Connected
           </span>
         }
       />
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
+      {/* ---------------- 1. GENERAL TAB ---------------- */}
       {tab === 'general' ? (
         <Card>
           <CardHeader
             title="General settings"
-            subtitle="Platform identity and the contact details customers see"
+            subtitle="Platform identity and the contact details customers and caregivers see"
             icon={Settings}
           />
           <CardBody>
@@ -225,18 +393,19 @@ export function SettingsPage() {
             </form>
           </CardBody>
           <CardFooter className="flex justify-end">
-            <Button type="submit" form="settings-general" icon={Save}>
-              Save changes
+            <Button type="submit" form="settings-general" icon={Save} loading={isSaving}>
+              Save changes to database
             </Button>
           </CardFooter>
         </Card>
       ) : null}
 
+      {/* ---------------- 2. FEES TAB ---------------- */}
       {tab === 'fees' ? (
         <Card>
           <CardHeader
             title="Commission & fees"
-            subtitle="Revenue settings applied to every booking on the platform"
+            subtitle="Authoritative platform rates applied to booking escrow and payouts"
             icon={Percent}
           />
           <CardBody>
@@ -252,7 +421,7 @@ export function SettingsPage() {
                   htmlFor="set-commission"
                   required
                   error={fees.formState.errors.commission?.message}
-                  hint="Deducted from caretaker earnings at payout time."
+                  hint="Deducted from caretaker earnings at payout calculation time."
                 >
                   <Input
                     id="set-commission"
@@ -274,7 +443,7 @@ export function SettingsPage() {
                   htmlFor="set-fee"
                   required
                   error={fees.formState.errors.platformFee?.message}
-                  hint="Flat handling charge added to every invoice."
+                  hint="Flat handling charge added to every tax invoice."
                 >
                   <Input
                     id="set-fee"
@@ -294,7 +463,7 @@ export function SettingsPage() {
                   htmlFor="set-gst"
                   required
                   error={fees.formState.errors.gst?.message}
-                  hint="Applied on the service value plus platform fee."
+                  hint="Applied on the care service value plus platform handling fee."
                 >
                   <Input
                     id="set-gst"
@@ -325,22 +494,23 @@ export function SettingsPage() {
                   tax={exampleTax}
                   commission={exampleCommission}
                   total={exampleTotal}
-                  currencyNote={`Recomputes live from your settings: ${commissionPct}% commission, ₹${platformFee} platform fee and ${gstPct}% GST.`}
+                  currencyNote={`Recomputes live from active settings: ${commissionPct}% commission, ₹${platformFee} platform fee and ${gstPct}% GST.`}
                 />
               </div>
             </div>
           </CardBody>
           <CardFooter className="flex justify-end">
-            <Button type="submit" form="settings-fees" icon={Save}>
-              Save changes
+            <Button type="submit" form="settings-fees" icon={Save} loading={isSaving}>
+              Save rates to database
             </Button>
           </CardFooter>
         </Card>
       ) : null}
 
+      {/* ---------------- 3. NOTIFICATIONS TAB ---------------- */}
       {tab === 'notifications' ? (
         <Card>
-          <CardHeader title="Notifications" subtitle="Choose which events alert the operations team" icon={Bell} />
+          <CardHeader title="Notifications" subtitle="Configure event triggers for operations desk alerts" icon={Bell} />
           <CardBody className="space-y-1">
             {NOTIFICATIONS.map((n) => (
               <div
@@ -360,18 +530,19 @@ export function SettingsPage() {
             ))}
           </CardBody>
           <CardFooter className="flex justify-end">
-            <Button icon={Save} onClick={() => toast.success('Notification preferences saved')}>
-              Save changes
+            <Button icon={Save} onClick={saveNotifications} loading={isSaving}>
+              Save notification preferences
             </Button>
           </CardFooter>
         </Card>
       ) : null}
 
+      {/* ---------------- 4. POLICY TAB ---------------- */}
       {tab === 'policy' ? (
         <Card>
           <CardHeader
             title="Verification policy"
-            subtitle="Documents and checks every caretaker must clear before going live"
+            subtitle="Compliance policies enforced on every caretaker prior to document approval"
             icon={ShieldCheck}
           />
           <CardBody className="space-y-5">
@@ -396,7 +567,7 @@ export function SettingsPage() {
                 <CheckOption
                   checked={policy.students}
                   onChange={() => setPolicy((p) => ({ ...p, students: !p.students }))}
-                  label="Allow nursing students to take jobs"
+                  label="Allow nursing students to accept shifts"
                 />
               </div>
 
@@ -404,7 +575,7 @@ export function SettingsPage() {
                 <FormField
                   label="Document validity period"
                   htmlFor="policy-validity"
-                  hint="Documents older than this are rejected on upload."
+                  hint="Documents issued earlier than this duration will require re-verification."
                 >
                   <Select id="policy-validity" value={validity} onChange={(e) => setValidity(e.target.value)}>
                     {['6 months', '12 months', '18 months', '24 months'].map((v) => (
@@ -415,77 +586,103 @@ export function SettingsPage() {
                   </Select>
                 </FormField>
 
-                <div className="rounded-xl border border-line bg-white p-4 text-xs leading-relaxed text-muted">
-                  <p className="font-semibold text-ink">Current policy in effect</p>
+                <div className="rounded-xl border border-line bg-white p-4 text-xs leading-relaxed text-muted shadow-sm">
+                  <p className="font-semibold text-ink">Active MongoDB Policy in Effect</p>
                   <p className="mt-1.5">
-                    Police clearance {policy.police ? 'required' : 'optional'} · Bank verification{' '}
-                    {policy.bank ? 'required' : 'optional'} · Face check {policy.autoFace ? 'auto-approved' : 'manually reviewed'} ·
-                    Nursing students {policy.students ? 'allowed' : 'blocked'} · Documents valid for {validity}.
+                    Police clearance {policy.police ? 'strictly required' : 'optional'} · Bank verification{' '}
+                    {policy.bank ? 'strictly required' : 'optional'} · Face check {policy.autoFace ? 'auto-approved' : 'manually reviewed'} ·
+                    Nursing students {policy.students ? 'permitted' : 'disallowed'} · Document validity window: {validity}.
                   </p>
                 </div>
               </div>
             </div>
           </CardBody>
           <CardFooter className="flex justify-end">
-            <Button icon={Save} onClick={() => toast.success('Verification policy saved')}>
-              Save changes
+            <Button icon={Save} onClick={savePolicy} loading={isSaving}>
+              Save verification policy
             </Button>
           </CardFooter>
         </Card>
       ) : null}
 
+      {/* ---------------- 5. TEAM TAB ---------------- */}
       {tab === 'team' ? (
         <Card>
           <CardHeader
             title="Admin team"
-            subtitle="People with access to this dashboard"
+            subtitle="Registered administrator accounts from MongoDB with dashboard credentials"
             icon={Users}
             action={
               <Button size="sm" icon={UserPlus} onClick={() => setInviteOpen(true)}>
-                Invite admin
+                Add administrator
               </Button>
             }
           />
           <CardBody className="divide-y divide-line p-0">
-            {team.map((member) => (
-              <div key={member.id} className="flex flex-wrap items-center gap-4 px-5 py-4 transition hover:bg-mint-50/60">
-                <Avatar name={member.name} size="md" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-display text-sm font-bold text-ink">{member.name}</p>
-                  <p className="truncate text-xs text-muted">{member.role}</p>
+            {team.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted">No admin accounts found in database.</div>
+            ) : (
+              team.map((member) => (
+                <div key={member.id} className="flex flex-wrap items-center gap-4 px-5 py-4 transition hover:bg-mint-50/60">
+                  <Avatar name={member.name} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-display text-sm font-bold text-ink">{member.name}</p>
+                      <span className="font-mono text-[11px] text-muted">({member.email})</span>
+                    </div>
+                    <p className="truncate text-xs text-muted mt-0.5">{member.role}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Last active</p>
+                    <p className="text-xs tabular-nums text-muted">{formatDateTime(member.lastActive)}</p>
+                  </div>
+                  {member.pending ? (
+                    <span className="rounded-full bg-warning-50 px-2.5 py-1 text-[11px] font-semibold text-warning-700 ring-1 ring-inset ring-warning-500/40">
+                      Pending review
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-success-50 px-2.5 py-1 text-[11px] font-semibold text-success-700 ring-1 ring-inset ring-success-500/40">
+                      Active
+                    </span>
+                  )}
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-faint">Last active</p>
-                  <p className="text-xs tabular-nums text-muted">{formatDateTime(member.lastActive)}</p>
-                </div>
-                {member.pending ? (
-                  <span className="rounded-full bg-warning-50 px-2.5 py-1 text-[11px] font-semibold text-warning-700 ring-1 ring-inset ring-warning-500/40">
-                    Invite pending
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-success-50 px-2.5 py-1 text-[11px] font-semibold text-success-700 ring-1 ring-inset ring-success-500/40">
-                    Active
-                  </span>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </CardBody>
         </Card>
       ) : null}
 
+      {/* ---------------- 6. SECURITY TAB ---------------- */}
       {tab === 'security' ? (
         <Card>
           <CardHeader
             title="Platform security & compliance"
-            subtitle="Authoritative server policies, cryptographic controls and audit trails"
+            subtitle="Live database telemetry, cryptographic controls, and audit integrity"
             icon={ShieldCheck}
           />
           <CardBody className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-line bg-slate-50 p-4">
-                <p className="text-sm font-bold text-ink">Data Encryption at Rest &amp; Transit</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-ink">MongoDB Database Connection</p>
+                  <Database className="h-4 w-4 text-primary-600" />
+                </div>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
-                  All databases and private document repositories are encrypted with AES-256. TLS 1.3 encryption is enforced on all external endpoints.
+                  Live state: <strong className="text-ink">{telemetry?.databaseStatus || 'Connected & Operational'}</strong>
+                </p>
+                <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  MongoDB Replica Active
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-line bg-slate-50 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-ink">Encryption Standard</p>
+                  <Lock className="h-4 w-4 text-primary-600" />
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  {telemetry?.encryptionStandard || 'AES-256 (Data at Rest) & TLS 1.3 (In Transit)'}
                 </p>
                 <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300">
                   Active &amp; Enforced
@@ -493,32 +690,28 @@ export function SettingsPage() {
               </div>
 
               <div className="rounded-xl border border-line bg-slate-50 p-4">
-                <p className="text-sm font-bold text-ink">Role-Based Access Control (RBAC)</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-ink">Authentication &amp; JWT Protection</p>
+                  <ShieldCheck className="h-4 w-4 text-primary-600" />
+                </div>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Strict boundaries isolate customer accounts, caregiver portfolios, and admin operations desk tools with zero cross-role leakage.
+                  {telemetry?.jwtProtection || 'HS-256 (HttpOnly Secure Cookie)'} with {telemetry?.passwordAlgorithm || 'Bcrypt (Salt Rounds: 12)'}
                 </p>
                 <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300">
-                  Active &amp; Enforced
+                  Protected Session
                 </span>
               </div>
 
               <div className="rounded-xl border border-line bg-slate-50 p-4">
-                <p className="text-sm font-bold text-ink">Audit Logging &amp; Immutability</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-ink">Server Uptime &amp; Audit Trail</p>
+                  <Server className="h-4 w-4 text-primary-600" />
+                </div>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Document approvals, blacklist events, and financial payouts are recorded in an append-only audit trail.
+                  Uptime: <strong className="text-ink">{telemetry?.uptime || 'Active'}</strong> · {telemetry?.auditRetention || '8-Year Continuous Append-Only Log'}
                 </p>
                 <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300">
-                  8-Year Retention
-                </span>
-              </div>
-
-              <div className="rounded-xl border border-line bg-slate-50 p-4">
-                <p className="text-sm font-bold text-ink">Escrow Safeguard Framework</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Customer payments are securely held in platform escrow until shifts are completed and verified without disputes.
-                </p>
-                <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300">
-                  Active &amp; Enforced
+                  Operational
                 </span>
               </div>
             </div>
@@ -526,28 +719,24 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
+      {/* ---------------- INVITE ADMIN MODAL ---------------- */}
       <Modal
         open={inviteOpen}
-        onClose={() => {
-          setInviteOpen(false)
-          invite.reset()
-        }}
-        title="Invite admin"
-        subtitle="They receive an email invitation to join the CareMate dashboard."
+        onClose={closeInviteModal}
+        title="Add administrator"
+        subtitle="Registers an administrator account directly in MongoDB with dashboard privileges."
         size="md"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="ghost"
-              onClick={() => {
-                setInviteOpen(false)
-                invite.reset()
-              }}
+              onClick={closeInviteModal}
+              disabled={isInviting}
             >
               Cancel
             </Button>
-            <Button type="submit" form="invite-admin-form" icon={UserPlus}>
-              Send invitation
+            <Button type="submit" form="invite-admin-form" icon={UserPlus} loading={isInviting}>
+              Register administrator
             </Button>
           </div>
         }
@@ -560,7 +749,7 @@ export function SettingsPage() {
               error={invite.formState.errors.name?.message}
               {...invite.register('name', {
                 required: 'Enter their name',
-                minLength: { value: 3, message: 'Name should be at least 3 characters' },
+                minLength: { value: 2, message: 'Name should be at least 2 characters' },
               })}
             />
           </FormField>
@@ -569,7 +758,7 @@ export function SettingsPage() {
             <Input
               id="invite-email"
               type="email"
-              placeholder="name@caremate.in"
+              placeholder="name@bystander.care"
               error={invite.formState.errors.email?.message}
               {...invite.register('email', {
                 required: 'Email is required',
@@ -578,9 +767,9 @@ export function SettingsPage() {
             />
           </FormField>
 
-          <FormField label="Role" htmlFor="invite-role" required error={invite.formState.errors.role?.message}>
+          <FormField label="Role / Department" htmlFor="invite-role" required error={invite.formState.errors.role?.message}>
             <Select id="invite-role" error={invite.formState.errors.role?.message} {...invite.register('role')}>
-              {['Operations lead', 'Trust & safety', 'Support specialist', 'Finance analyst'].map((r) => (
+              {['Operations lead', 'Trust & safety', 'Support specialist', 'Finance analyst', 'Platform administrator'].map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -588,17 +777,68 @@ export function SettingsPage() {
             </Select>
           </FormField>
 
-          <FormField label="Message (optional)" htmlFor="invite-message">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Create password" htmlFor="invite-password" required error={invite.formState.errors.password?.message}>
+              <div className="relative">
+                <Input
+                  id="invite-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Min. 6 characters"
+                  error={invite.formState.errors.password?.message}
+                  {...invite.register('password', {
+                    required: 'Password is required',
+                    minLength: { value: 6, message: 'Password must be at least 6 characters' },
+                  })}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink focus:outline-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </FormField>
+
+            <FormField label="Re-enter password" htmlFor="invite-confirm-password" required error={invite.formState.errors.confirmPassword?.message}>
+              <div className="relative">
+                <Input
+                  id="invite-confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Re-type password"
+                  error={invite.formState.errors.confirmPassword?.message}
+                  {...invite.register('confirmPassword', {
+                    required: 'Please confirm password',
+                    validate: (val) => val === invite.watch('password') || 'Passwords do not match',
+                  })}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink focus:outline-none"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </FormField>
+          </div>
+
+          <FormField label="Notes (optional)" htmlFor="invite-message">
             <Textarea
               id="invite-message"
-              rows={3}
-              placeholder="Welcome to CareMate ops — your access starts with the complaints queue."
+              rows={2}
+              placeholder="Operational responsibilities and desk assignment."
               {...invite.register('message')}
             />
           </FormField>
         </form>
       </Modal>
-
     </div>
   )
 }

@@ -122,3 +122,44 @@ export const sanitizeUser = (user) => {
   delete raw.__v;
   return raw;
 };
+
+/**
+ * Format a professional, user-facing error message for suspended or blocked accounts,
+ * dynamically incorporating review dates when configured.
+ *
+ * @param {object} user - User document
+ * @param {object|null} blacklistEntry - Active blacklist record if found
+ * @returns {string} Professional status explanation message
+ */
+export const formatAccountStatusMessage = (user, blacklistEntry = null) => {
+  const rawReview = user?.statusReviewAfter || blacklistEntry?.reviewAfter;
+
+  if (rawReview && typeof rawReview === 'string') {
+    const trimmed = rawReview.trim();
+    if (trimmed && trimmed.toLowerCase() !== 'permanent' && trimmed.toLowerCase() !== 'temporary') {
+      const dateObj = new Date(trimmed);
+      if (!Number.isNaN(dateObj.getTime())) {
+        const formattedDate = dateObj.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+
+        // Check if the review date has already passed
+        const endOfReviewDay = new Date(dateObj);
+        endOfReviewDay.setHours(23, 59, 59, 999);
+        if (Date.now() > endOfReviewDay.getTime()) {
+          return 'Your account suspension has reached its review date and is currently pending administrative review. Please contact platform support.';
+        }
+
+        return `Your account has been temporarily suspended until ${formattedDate}. Please contact platform support.`;
+      }
+    }
+  }
+
+  if (user?.status === 'blocked') {
+    return 'Your account has been blocked and permanently blacklisted. Please contact platform support.';
+  }
+
+  return 'Your account has been temporarily suspended. Please contact platform support.';
+};

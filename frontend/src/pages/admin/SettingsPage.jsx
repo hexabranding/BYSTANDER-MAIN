@@ -505,7 +505,7 @@ export function SettingsPage() {
               <div className="rounded-xl border border-line bg-slate-50 p-4">
                 <p className="text-sm font-bold text-ink">Audit Logging &amp; Immutability</p>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Document approvals, blacklist events, fraud resolutions, and financial payouts are recorded in an append-only audit trail.
+                  Document approvals, blacklist events, and financial payouts are recorded in an append-only audit trail.
                 </p>
                 <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300">
                   8-Year Retention

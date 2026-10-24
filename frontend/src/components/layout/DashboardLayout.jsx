@@ -7,7 +7,7 @@ import { Sidebar, MobileSidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 
 function useBadgeValues() {
-  const { conversations, jobs, verifications, sos, frauds, caregivers } = useData()
+  const { conversations, jobs, verifications, sos, caregivers } = useData()
 
   return useMemo(
     () => ({
@@ -16,10 +16,9 @@ function useBadgeValues() {
       openJobs: jobs.filter((j) => j.status === 'Open').length,
       pendingVerifications: verifications.filter((v) => v.status === 'Pending' || v.status === 'Under Review').length,
       activeSos: sos.filter((s) => s.status === 'Open' || s.status === 'Under Investigation').length,
-      openFrauds: frauds.filter((f) => f.status !== 'Resolved').length,
       pendingCaregivers: caregivers.filter((c) => !c.verified).length,
     }),
-    [conversations, jobs, verifications, sos, frauds, caregivers],
+    [conversations, jobs, verifications, sos, caregivers],
   )
 }
 

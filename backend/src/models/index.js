@@ -15,3 +15,4 @@ export { Complaint } from './Complaint.js';
 export { Review } from './Review.js';
 export { Transaction } from './Transaction.js';
 export { Payout } from './Payout.js';
+export { Blacklist } from './Blacklist.js';

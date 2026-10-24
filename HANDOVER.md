@@ -75,7 +75,7 @@ The application has 3 distinct authenticated roles, plus a public marketing webs
                          • 4-Step Verifications Desk
                          • 24/7 SOS Emergency Room
                          • Financials, Escrow & Payouts
-                         • Fraud & Blacklist Enforcement
+                         • Blacklist Enforcement
 ```
 
 ### A. Customer / Family Portal (`/customer/*`)
@@ -97,7 +97,7 @@ The application has 3 distinct authenticated roles, plus a public marketing webs
 2. **Verifications Desk (`/admin/verifications`):** Inspect submitted documents, compare live selfie with ID, verify council registration numbers, approve or reject with audit trail.
 3. **Emergency SOS Desk (`/admin/sos-alerts`):** High-priority operational triage with map coordinates, assigned desk agent, emergency contact dispatch status, and audit logs.
 4. **Finance & Escrow (`/admin/payments`, `/admin/commissions`, `/admin/payouts`, `/admin/invoices`):** Escrow management (held, released, disputed, refunded), 12% platform fee calculations, and caregiver bank transfers.
-5. **Trust & Safety (`/admin/fraud-alerts`, `/admin/blacklist`, `/admin/complaints`):** Detect off-platform communication flags, manage suspended profiles, arbitrate disputes with pro-rata refunds.
+5. **Trust & Safety (`/admin/blacklist`, `/admin/complaints`):** Manage suspended profiles, arbitrate disputes with pro-rata refunds.
 6. **Network Directory (`/admin/hospitals`, `/admin/nursing-students`, `/admin/customers`, `/admin/caregivers`):** Relationship directories for hospital partners and university nursing programs.
 
 ---
@@ -152,7 +152,7 @@ BYSTANDER-MAIN/
 │       │   ├── services.js     # 9 core care services & descriptions
 │       │   ├── caregivers.js   # Directory of 16+ vetted caregiver profiles
 │       │   ├── bookings.js     # Sample customer bookings & histories
-│       │   ├── operations.js   # Available jobs, complaints, SOS alerts, fraud, blacklist
+│       │   ├── operations.js   # Available jobs, complaints, SOS alerts, blacklist
 │       │   ├── finance.js      # Escrow transactions, payouts, earnings ledger
 │       │   ├── verifications.js# Document verification records & audit logs
 │       │   ├── messages.js     # Masked chat conversations

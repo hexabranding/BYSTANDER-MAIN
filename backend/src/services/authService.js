@@ -1,5 +1,6 @@
-import { User, CustomerProfile, CaregiverProfile, Document, Service } from '../models/index.js';
-import { hashPassword, comparePassword, generateToken, sanitizeUser } from '../utils/auth.js';
+import mongoose from 'mongoose';
+import { User, CustomerProfile, CaregiverProfile, Document, Service, Blacklist } from '../models/index.js';
+import { hashPassword, comparePassword, generateToken, sanitizeUser, formatAccountStatusMessage } from '../utils/auth.js';
 
 /**
  * Register a new Customer.
@@ -282,16 +283,46 @@ export const login = async (identifier, password) => {
     throw err;
   }
 
-  // Check account status
-  if (user.status === 'blocked') {
-    const err = new Error('Your account has been blocked. Please contact platform support.');
-    err.statusCode = 403;
-    err.name = 'ForbiddenError';
-    throw err;
+  // Check account status and blacklist registry
+  let activeBlacklist = null;
+  if (mongoose.connection?.readyState === 1) {
+    try {
+      if (user.status === 'blocked' || user.status === 'suspended' || !user.status) {
+        if (!user.statusReviewAfter) {
+          activeBlacklist = await Blacklist.findOne({
+            $or: [
+              { user: user._id },
+              ...(user.phone ? [{ phone: user.phone }] : []),
+              ...(user.email ? [{ email: user.email.toLowerCase() }] : []),
+            ],
+            status: 'active',
+          });
+        }
+      } else {
+        // Check if user was blacklisted in Blacklist ledger
+        activeBlacklist = await Blacklist.findOne({
+          $or: [
+            { user: user._id },
+            ...(user.phone ? [{ phone: user.phone }] : []),
+            ...(user.email ? [{ email: user.email.toLowerCase() }] : []),
+          ],
+          status: 'active',
+        });
+        if (activeBlacklist) {
+          user.status = 'blocked';
+          user.statusReason = activeBlacklist.reason;
+          user.statusReviewAfter = activeBlacklist.reviewAfter;
+          await user.save();
+        }
+      }
+    } catch {
+      activeBlacklist = null;
+    }
   }
 
-  if (user.status === 'suspended') {
-    const err = new Error('Your account has been temporarily suspended. Please contact platform support.');
+  if (user.status === 'blocked' || user.status === 'suspended' || activeBlacklist) {
+    const message = formatAccountStatusMessage(user, activeBlacklist);
+    const err = new Error(message);
     err.statusCode = 403;
     err.name = 'ForbiddenError';
     throw err;

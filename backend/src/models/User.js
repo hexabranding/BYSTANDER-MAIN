@@ -92,6 +92,11 @@ const userSchema = new mongoose.Schema(
       maxlength: [1000, 'Status reason cannot exceed 1000 characters'],
       default: null,
     },
+    statusReviewAfter: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     statusUpdatedAt: {
       type: Date,
       default: null,

@@ -20,6 +20,7 @@ import complaintRoutes from './routes/complaintRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import adminAnalyticsRoutes from './routes/adminAnalyticsRoutes.js';
 import adminFinanceRoutes from './routes/adminFinanceRoutes.js';
+import adminBlacklistRoutes from './routes/adminBlacklistRoutes.js';
 import caregiverSelfRoutes from './routes/caregiverSelfRoutes.js';
 import caregiverPublicRoutes from './routes/caregiverPublicRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
@@ -120,6 +121,7 @@ app.use('/api/admin/verifications', adminVerificationRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/messages', adminModerationRoutes);
 app.use('/api/admin/complaints', adminComplaintRoutes);
+app.use('/api/admin/blacklist', adminBlacklistRoutes);
 app.use('/api/admin/customers', (req, res, next) => {
   req.url = '/customers' + (req.url === '/' ? '' : req.url);
   adminUserRoutes(req, res, next);

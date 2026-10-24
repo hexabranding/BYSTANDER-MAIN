@@ -1,5 +1,7 @@
-import { verifyToken } from '../utils/auth.js';
+import mongoose from 'mongoose';
+import { verifyToken, formatAccountStatusMessage } from '../utils/auth.js';
 import { User } from '../models/User.js';
+import { Blacklist } from '../models/Blacklist.js';
 
 /**
  * Authentication Middleware:
@@ -54,19 +56,23 @@ export const authenticate = async (req, res, next) => {
     }
 
     // Check account status
-    if (user.status === 'blocked') {
+    if (user.status === 'blocked' || user.status === 'suspended') {
+      let activeBlacklist = null;
+      if (!user.statusReviewAfter && mongoose.connection?.readyState === 1) {
+        try {
+          activeBlacklist = await Blacklist.findOne({
+            user: user._id,
+            status: 'active',
+          });
+        } catch {
+          activeBlacklist = null;
+        }
+      }
+      const message = formatAccountStatusMessage(user, activeBlacklist);
       return res.status(403).json({
         success: false,
         error: 'Forbidden',
-        message: 'Your account has been blocked. Please contact platform support.',
-      });
-    }
-
-    if (user.status === 'suspended') {
-      return res.status(403).json({
-        success: false,
-        error: 'Forbidden',
-        message: 'Your account has been temporarily suspended. Please contact platform support.',
+        message,
       });
     }
 

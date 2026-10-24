@@ -458,6 +458,51 @@ export const updateAdminPayoutStatus = async (id, payload) => {
   return adaptPayout(rawData)
 }
 
+/**
+ * Retrieves paginated list of blacklist records with live summary statistics.
+ * @param {Object} [query={}] - Optional filters (search, type, page, limit)
+ * @returns {Promise<{ entries: Array, stats: Object, pagination: Object }>}
+ */
+export const getAdminBlacklist = async (query = {}) => {
+  const response = await apiClient.get('/admin/blacklist', { params: query })
+  return {
+    entries: response?.data || [],
+    stats: response?.stats || { total: 0, caregivers: 0, customers: 0, permanent: 0 },
+    pagination: response?.pagination || { total: 0, page: 1, limit: 50, totalPages: 1 },
+  }
+}
+
+/**
+ * Adds an account to the platform blacklist in MongoDB and blocks the user.
+ * @param {Object} payload - { name, type, reason, reviewAfter, userId, phone, email }
+ * @returns {Promise<Object>}
+ */
+export const addToBlacklist = async (payload) => {
+  const response = await apiClient.post('/admin/blacklist', payload)
+  return response?.data || response
+}
+
+/**
+ * Removes an account from the blacklist and restores account access in MongoDB.
+ * @param {string} id - Entry ID (BL-XXX) or MongoDB _id
+ * @param {Object} [payload={}] - { reason }
+ * @returns {Promise<Object>}
+ */
+export const removeFromBlacklist = async (id, payload = {}) => {
+  const response = await apiClient.delete(`/admin/blacklist/${id}`, { data: payload })
+  return response?.data || response
+}
+
+/**
+ * Searches registered candidates for quick blacklisting.
+ * @param {string} [search='']
+ * @returns {Promise<Array>}
+ */
+export const getBlacklistCandidates = async (search = '') => {
+  const response = await apiClient.get('/admin/blacklist/candidates', { params: { search } })
+  return response?.data || []
+}
+
 export const adminService = {
   getVerifications,
   getVerificationById,
@@ -482,7 +527,12 @@ export const adminService = {
   reconcileCommissions,
   getAdminPayouts,
   updateAdminPayoutStatus,
+  getAdminBlacklist,
+  addToBlacklist,
+  removeFromBlacklist,
+  getBlacklistCandidates,
 }
 
 export default adminService
+
 

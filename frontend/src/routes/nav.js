@@ -20,7 +20,6 @@ import {
   Percent,
   Banknote,
   Siren,
-  ShieldAlert,
   Ban,
   Settings,
   FileSpreadsheet,
@@ -124,7 +123,6 @@ export const ADMIN_NAV = [
   {
     section: 'Trust & Safety',
     items: [
-      { label: 'Fraud Alerts', to: '/admin/fraud-alerts', icon: ShieldAlert, badge: 'key:openFrauds' },
       { label: 'Blacklist', to: '/admin/blacklist', icon: Ban },
       { label: 'Ratings', to: '/admin/ratings', icon: Star },
     ],

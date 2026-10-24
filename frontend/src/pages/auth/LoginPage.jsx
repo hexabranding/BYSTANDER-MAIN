@@ -9,6 +9,7 @@ import {
   EyeOff,
   HeartHandshake,
   KeyRound,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Stethoscope,
@@ -66,6 +67,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(Boolean(rememberedEmail))
   const [showDemo, setShowDemo] = useState(false)
+  const [statusNotice, setStatusNotice] = useState(null)
 
   const activeRole = ROLE_OPTIONS.find((r) => r.id === role) || ROLE_OPTIONS[0]
 
@@ -83,10 +85,22 @@ export function LoginPage() {
   const onSubmit = async ({ email, password }) => {
     const result = await login({ email: email.trim(), password, role })
     if (!result.ok) {
-      toast.error(result.message)
-      setError('password', { type: 'server', message: result.message })
+      const isRestricted =
+        result.error?.status === 403 ||
+        /suspended|blocked|blacklist|prohibited/i.test(result.message)
+
+      if (isRestricted) {
+        setStatusNotice(result.message)
+        toast.error(result.message, { duration: 7000 })
+        setError('password', { type: 'server', message: result.message })
+      } else {
+        setStatusNotice(null)
+        toast.error(result.message)
+        setError('password', { type: 'server', message: result.message })
+      }
       return
     }
+    setStatusNotice(null)
     if (remember) setRememberedEmail(email.trim())
     else setRememberedEmail('')
     toast.success(`Welcome back, ${result.user.name}`)
@@ -97,6 +111,7 @@ export function LoginPage() {
   }
 
   const applyDemoAccount = (user) => {
+    setStatusNotice(null)
     setValue('email', user.email, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
     setValue('password', DEMO_PASSWORD, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
     setRole(user.role)
@@ -139,7 +154,10 @@ export function LoginPage() {
             <button
               key={option.id}
               type="button"
-              onClick={() => setRole(option.id)}
+              onClick={() => {
+                setRole(option.id)
+                setStatusNotice(null)
+              }}
               aria-pressed={selected}
               className={cn(
                 'flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-bold transition',
@@ -161,6 +179,35 @@ export function LoginPage() {
         noValidate
         className="space-y-4 rounded-card border border-line bg-white p-5 shadow-card sm:p-6"
       >
+        {statusNotice ? (
+          <div
+            role="alert"
+            className="rounded-2xl border border-danger-200 bg-danger-50/90 p-4 shadow-sm animate-in fade-in slide-in-from-top-1"
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-danger-100 text-danger-700">
+                <ShieldAlert className="h-4.5 w-4.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-wider text-danger-900">
+                  Account Access Restricted
+                </p>
+                <p className="mt-1 text-sm font-medium leading-relaxed text-danger-800">
+                  {statusNotice}
+                </p>
+                <div className="mt-2.5 flex items-center gap-3">
+                  <a
+                    href="mailto:support@bystander.com?subject=Account%20Suspension%20Inquiry"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-danger-700 hover:text-danger-900 hover:underline"
+                  >
+                    Contact platform support &rarr;
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <FormField label="Email address" htmlFor="login-email" required error={errors.email?.message}>
           <Input
             id="login-email"

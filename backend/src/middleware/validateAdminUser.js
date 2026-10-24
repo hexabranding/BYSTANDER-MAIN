@@ -211,6 +211,7 @@ export const validateUpdateUserStatus = (req, res, next) => {
   req.sanitizedStatusUpdate = {
     status: normalizedStatus,
     reason: reason.trim(),
+    reviewAfter: req.body.reviewAfter ? String(req.body.reviewAfter).trim() : undefined,
   };
 
   next();

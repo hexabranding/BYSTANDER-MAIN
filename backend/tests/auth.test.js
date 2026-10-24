@@ -8,6 +8,7 @@ import {
   verifyToken,
   getCookieOptions,
   sanitizeUser,
+  formatAccountStatusMessage,
 } from '../src/utils/auth.js';
 import {
   validateCustomerRegistration,
@@ -293,4 +294,59 @@ test('11: Login validation rejects missing identifier or password', () => {
   validateLogin(req3, res3, next3);
   assert.equal(getNextCalled(), true);
   assert.equal(req3.body.identifier, 'user@test.com');
+});
+
+// -----------------------------------------------------------------------------
+// Test 12: Professional Account Status & Dynamic Review Date Message Formatting
+// -----------------------------------------------------------------------------
+test('12: formatAccountStatusMessage outputs dynamic review date and professional status notices', () => {
+  // Case A: User with future review date formatted dynamically
+  const futureDate = new Date();
+  futureDate.setDate(futureDate.getDate() + 7);
+  const isoDate = futureDate.toISOString().slice(0, 10);
+  const expectedFormatted = futureDate.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  const msgWithDate = formatAccountStatusMessage({
+    status: 'suspended',
+    statusReviewAfter: isoDate,
+  });
+  assert.equal(
+    msgWithDate,
+    `Your account has been temporarily suspended until ${expectedFormatted}. Please contact platform support.`,
+  );
+
+  // Case B: Review date pulled from active blacklist entry fallback
+  const msgFromBlacklist = formatAccountStatusMessage(
+    { status: 'blocked', statusReviewAfter: null },
+    { reviewAfter: isoDate },
+  );
+  assert.equal(
+    msgFromBlacklist,
+    `Your account has been temporarily suspended until ${expectedFormatted}. Please contact platform support.`,
+  );
+
+  // Case C: Permanent blacklist ban
+  const msgPermanent = formatAccountStatusMessage({
+    status: 'blocked',
+    statusReviewAfter: 'Permanent',
+  });
+  assert.equal(
+    msgPermanent,
+    'Your account has been blocked and permanently blacklisted. Please contact platform support.',
+  );
+
+  // Case D: Past review date triggers pending administrative review notice
+  const pastDate = new Date('2020-01-01');
+  const msgPast = formatAccountStatusMessage({
+    status: 'suspended',
+    statusReviewAfter: '2020-01-01',
+  });
+  assert.equal(
+    msgPast,
+    'Your account suspension has reached its review date and is currently pending administrative review. Please contact platform support.',
+  );
 });

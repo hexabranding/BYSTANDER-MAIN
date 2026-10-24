@@ -34,7 +34,7 @@ import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
-import { FormField, Select, Textarea } from '@/components/forms/FormField'
+import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 
 const STATUS_TABS = ['All', 'Verified', 'Pending', 'Rejected']
 const PENDING_STATUSES = ['Pending', 'Under Review']
@@ -68,6 +68,7 @@ export function CaregiversPage() {
   // Status mutation state
   const [suspendTarget, setSuspendTarget] = useState(null)
   const [suspendReason, setSuspendReason] = useState('')
+  const [suspendReviewAfter, setSuspendReviewAfter] = useState('')
   const [reasonError, setReasonError] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
 
@@ -210,6 +211,7 @@ export function CaregiversPage() {
   const handleOpenSuspend = (caregiver) => {
     setSuspendTarget(caregiver)
     setSuspendReason('')
+    setSuspendReviewAfter('')
     setReasonError('')
   }
 
@@ -222,14 +224,19 @@ export function CaregiversPage() {
     }
 
     setIsUpdating(true)
-    const isCurrentlySuspended = suspendTarget.isSuspended
-    const nextStatus = isCurrentlySuspended ? 'active' : 'suspended'
+    const isCurrentlyBanned =
+      suspendTarget.isBlocked ||
+      suspendTarget.isSuspended ||
+      suspendTarget.status === 'blocked' ||
+      suspendTarget.status === 'suspended'
+    const nextStatus = isCurrentlyBanned ? 'active' : 'suspended'
     const targetUserId = suspendTarget.userId || suspendTarget.id
 
     try {
       await adminService.updateUserStatus(targetUserId, {
         status: nextStatus,
         reason: trimmedReason,
+        reviewAfter: suspendReviewAfter || 'Permanent',
       })
 
       // Update local state with server-confirmed status
@@ -239,7 +246,8 @@ export function CaregiversPage() {
             ? {
                 ...c,
                 isSuspended: nextStatus === 'suspended',
-                status: nextStatus === 'suspended' ? 'Suspended' : 'Active',
+                isBlocked: nextStatus === 'blocked',
+                status: nextStatus === 'active' ? 'Active' : (nextStatus === 'blocked' ? 'Blocked' : 'Suspended'),
                 accountStatus: nextStatus,
                 statusReason: trimmedReason,
                 statusUpdatedAt: new Date().toISOString(),
@@ -249,17 +257,18 @@ export function CaregiversPage() {
       )
 
       toast.success(
-        isCurrentlySuspended
-          ? `${suspendTarget.name} reinstated`
-          : `${suspendTarget.name} suspended`,
+        isCurrentlyBanned
+          ? `${suspendTarget.name} reinstated and unblocked`
+          : `${suspendTarget.name} suspended and blacklisted`,
         {
-          description: isCurrentlySuspended
-            ? 'Bookings and active availability resume as before.'
-            : 'Profile hidden from customers and new bookings paused.',
+          description: isCurrentlyBanned
+            ? 'Account restored and active across the platform.'
+            : 'Account blocked in MongoDB and added to the blacklist.',
         },
       )
       setSuspendTarget(null)
       setSuspendReason('')
+      setSuspendReviewAfter('')
     } catch (err) {
       toast.error(err.message || 'Failed to update caretaker account status', {
         description: 'Server rejected the status transition.',
@@ -309,20 +318,28 @@ export function CaregiversPage() {
     {
       key: 'name',
       header: 'Caretaker',
-      render: (c) => (
-        <div className="flex items-center gap-3">
-          <Avatar src={c.photo} name={c.name} size="sm" verified={c.verified} />
-          <div className="min-w-0">
-            <p className="truncate font-semibold text-ink">{c.name}</p>
-            <p className="truncate text-xs text-faint">{c.regNo}</p>
-            {c.isSuspended ? (
-              <span className="mt-0.5 inline-block rounded-full bg-danger-50 px-1.5 py-0.5 text-[10px] font-bold text-danger-600">
-                Suspended
-              </span>
-            ) : null}
+      render: (c) => {
+        const isBlacklisted = c.isBlocked || c.status === 'blocked'
+        const isBanned = isBlacklisted || c.isSuspended || c.status === 'suspended'
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar src={c.photo} name={c.name} size="sm" verified={c.verified} />
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-ink">{c.name}</p>
+              <p className="truncate text-xs text-faint">{c.regNo}</p>
+              {isBlacklisted ? (
+                <span className="mt-0.5 inline-block rounded-full bg-danger-100 px-1.5 py-0.5 text-[10px] font-bold text-danger-700">
+                  Blacklisted
+                </span>
+              ) : isBanned ? (
+                <span className="mt-0.5 inline-block rounded-full bg-danger-50 px-1.5 py-0.5 text-[10px] font-bold text-danger-600">
+                  Suspended
+                </span>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ),
+        )
+      },
     },
     { key: 'qualification', header: 'Qualification' },
     {
@@ -354,30 +371,44 @@ export function CaregiversPage() {
       render: (c) => <StatusBadge status={c.verificationStatus} size="sm" />,
     },
     {
+      key: 'accountStatus',
+      header: 'Account status',
+      render: (c) => {
+        const isBlacklisted = c.isBlocked || c.status === 'blocked'
+        const isSuspended = c.isSuspended || c.status === 'suspended'
+        if (isBlacklisted) return <StatusBadge status="Blacklisted" size="sm" />
+        if (isSuspended) return <StatusBadge status="Suspended" size="sm" />
+        return <StatusBadge status="Active" size="sm" />
+      },
+    },
+    {
       key: 'action',
       header: 'Action',
       align: 'right',
       sortable: false,
-      render: (c) => (
-        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <Button size="xs" variant="outline" icon={Eye} onClick={() => setViewingId(c.id)}>
-            View
-          </Button>
-          {c.verificationStatus !== 'Verified' ? (
-            <Button size="xs" variant="primary" icon={BadgeCheck} onClick={() => requestApprove(c)}>
-              Approve
+      render: (c) => {
+        const isBanned = c.isBlocked || c.isSuspended || c.status === 'blocked' || c.status === 'suspended'
+        return (
+          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <Button size="xs" variant="outline" icon={Eye} onClick={() => setViewingId(c.id)}>
+              View
             </Button>
-          ) : (
-            <Button
-              size="xs"
-              variant={c.isSuspended ? 'outline' : 'dangerGhost'}
-              onClick={() => handleOpenSuspend(c)}
-            >
-              {c.isSuspended ? 'Reinstate' : 'Suspend'}
-            </Button>
-          )}
-        </div>
-      ),
+            {c.verificationStatus !== 'Verified' && !isBanned ? (
+              <Button size="xs" variant="primary" icon={BadgeCheck} onClick={() => requestApprove(c)}>
+                Approve
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant={isBanned ? 'outline' : 'dangerGhost'}
+                onClick={() => handleOpenSuspend(c)}
+              >
+                {isBanned ? 'Reinstate' : 'Suspend'}
+              </Button>
+            )}
+          </div>
+        )
+      },
     },
   ]
 
@@ -527,10 +558,10 @@ export function CaregiversPage() {
           selected ? (
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button
-                variant={selected.isSuspended ? 'outline' : 'dangerGhost'}
+                variant={selected.isBlocked || selected.isSuspended ? 'outline' : 'dangerGhost'}
                 onClick={() => handleOpenSuspend(selected)}
               >
-                {selected.isSuspended ? 'Reinstate account' : 'Suspend account'}
+                {selected.isBlocked || selected.isSuspended ? 'Reinstate account' : 'Suspend account'}
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
@@ -540,7 +571,7 @@ export function CaregiversPage() {
                 >
                   Public profile
                 </Button>
-                {selected.verificationStatus !== 'Verified' ? (
+                {selected.verificationStatus !== 'Verified' && !selected.isBlocked && !selected.isSuspended ? (
                   <Button
                     variant="primary"
                     icon={BadgeCheck}
@@ -566,11 +597,13 @@ export function CaregiversPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-display text-lg font-bold text-ink">{selected.name}</h3>
                   <StatusBadge status={selected.verificationStatus} size="sm" />
-                  {selected.isSuspended ? (
-                    <span className="rounded-full bg-danger-50 px-2 py-0.5 text-xs font-bold text-danger-600">
-                      Suspended
-                    </span>
-                  ) : null}
+                  {selected.isBlocked ? (
+                    <StatusBadge status="Blacklisted" size="sm" />
+                  ) : selected.isSuspended ? (
+                    <StatusBadge status="Suspended" size="sm" />
+                  ) : (
+                    <StatusBadge status="Active" size="sm" />
+                  )}
                 </div>
                 <p className="mt-1 text-sm text-muted">
                   Council Reg: <span className="font-mono font-medium text-ink">{selected.regNo}</span> · {selected.city}
@@ -724,21 +757,26 @@ export function CaregiversPage() {
         confirmLabel="Approve application"
       />
 
-      {/* Suspend / Reinstate Dialog with Mandatory Reason */}
+      {/* Suspend / Reinstate Dialog with Mandatory Reason & Review Date */}
       <Modal
         open={Boolean(suspendTarget)}
         onClose={() => {
           if (!isUpdating) {
             setSuspendTarget(null)
             setSuspendReason('')
+            setSuspendReviewAfter('')
             setReasonError('')
           }
         }}
-        title={suspendTarget?.isSuspended ? 'Reinstate Caretaker Account' : 'Suspend Caretaker Account'}
+        title={
+          suspendTarget?.isBlocked || suspendTarget?.isSuspended
+            ? 'Reinstate Caretaker Account'
+            : 'Suspend Caretaker Account'
+        }
         description={
-          suspendTarget?.isSuspended
-            ? `Reinstate ${suspendTarget?.name}. Their profile will reappear in search and they can accept new bookings.`
-            : `Suspend ${suspendTarget?.name}. They will be hidden from customer discovery and cannot accept new bookings.`
+          suspendTarget?.isBlocked || suspendTarget?.isSuspended
+            ? `Reinstate ${suspendTarget?.name}. Their account will be unblocked and removed from the blacklist so they can accept bookings.`
+            : `Suspend ${suspendTarget?.name}. They will be placed on the blacklist and hidden from customer discovery.`
         }
       >
         <div className="space-y-4">
@@ -759,12 +797,35 @@ export function CaregiversPage() {
             />
           </FormField>
 
+          {!suspendTarget?.isBlocked && !suspendTarget?.isSuspended && (
+            <FormField
+              label="Review after"
+              htmlFor="suspend-review"
+              hint="Leave empty for a permanent ban."
+            >
+              <Input
+                id="suspend-review"
+                type="date"
+                value={suspendReviewAfter}
+                onChange={(e) => setSuspendReviewAfter(e.target.value)}
+                disabled={isUpdating}
+              />
+            </FormField>
+          )}
+
+          {!suspendTarget?.isBlocked && !suspendTarget?.isSuspended && (
+            <p className="rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
+              Blacklist actions are permanently recorded in MongoDB with your admin actor attribution and prevent login or job acceptance.
+            </p>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button
               variant="outline"
               onClick={() => {
                 setSuspendTarget(null)
                 setSuspendReason('')
+                setSuspendReviewAfter('')
                 setReasonError('')
               }}
               disabled={isUpdating}
@@ -772,13 +833,13 @@ export function CaregiversPage() {
               Cancel
             </Button>
             <Button
-              variant={suspendTarget?.isSuspended ? 'primary' : 'danger'}
+              variant={suspendTarget?.isBlocked || suspendTarget?.isSuspended ? 'primary' : 'danger'}
               onClick={confirmSuspend}
               disabled={isUpdating || suspendReason.trim().length < 3}
             >
               {isUpdating
                 ? 'Updating…'
-                : suspendTarget?.isSuspended
+                : suspendTarget?.isBlocked || suspendTarget?.isSuspended
                   ? 'Reinstate Caretaker'
                   : 'Suspend Caretaker'}
             </Button>

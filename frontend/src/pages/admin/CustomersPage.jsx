@@ -31,7 +31,7 @@ import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
-import { FormField, Select, Textarea } from '@/components/forms/FormField'
+import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 
 const STATUS_TABS = ['All', 'Active', 'Inactive']
 const DEFAULT_CITIES = ['All', 'Mumbai, MH', 'New Delhi, DL', 'Bengaluru, KA', 'Chennai, TN', 'Kolkata, WB', 'Hyderabad, TS', 'Pune, MH']
@@ -52,6 +52,7 @@ export function CustomersPage() {
   // Account status mutation dialog state
   const [suspendTarget, setSuspendTarget] = useState(null)
   const [suspendReason, setSuspendReason] = useState('')
+  const [suspendReviewAfter, setSuspendReviewAfter] = useState('')
   const [reasonError, setReasonError] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
 
@@ -154,6 +155,7 @@ export function CustomersPage() {
   const handleOpenSuspendModal = (targetCustomer) => {
     setSuspendTarget(targetCustomer)
     setSuspendReason('')
+    setSuspendReviewAfter('')
     setReasonError('')
   }
 
@@ -173,6 +175,7 @@ export function CustomersPage() {
       await adminService.updateUserStatus(suspendTarget.id, {
         status: nextStatus,
         reason: trimmedReason,
+        reviewAfter: suspendReviewAfter || 'Permanent',
       })
 
       // Update local state with the server-confirmed result
@@ -532,20 +535,21 @@ export function CustomersPage() {
         ) : null}
       </Modal>
 
-      {/* Account Status Transition Dialog with Mandatory Reason */}
+      {/* Suspend / Reinstate Dialog with Mandatory Reason & Review Date */}
       <Modal
         open={Boolean(suspendTarget)}
         onClose={() => {
           if (!isUpdating) {
             setSuspendTarget(null)
             setSuspendReason('')
+            setSuspendReviewAfter('')
             setReasonError('')
           }
         }}
         title={suspendTarget?.status === 'Active' ? 'Suspend Customer Account' : 'Reactivate Customer Account'}
         description={
           suspendTarget?.status === 'Active'
-            ? `Suspend ${suspendTarget?.name}. They will not be able to book caretakers or send new messages.`
+            ? `Suspend ${suspendTarget?.name}. They will be placed on the blacklist and cannot book services.`
             : `Reactivate ${suspendTarget?.name}'s account so they can resume normal access.`
         }
       >
@@ -567,12 +571,35 @@ export function CustomersPage() {
             />
           </FormField>
 
+          {suspendTarget?.status === 'Active' && (
+            <FormField
+              label="Review after"
+              htmlFor="customer-suspend-review"
+              hint="Leave empty for a permanent ban."
+            >
+              <Input
+                id="customer-suspend-review"
+                type="date"
+                value={suspendReviewAfter}
+                onChange={(e) => setSuspendReviewAfter(e.target.value)}
+                disabled={isUpdating}
+              />
+            </FormField>
+          )}
+
+          {suspendTarget?.status === 'Active' && (
+            <p className="rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
+              Blacklist actions are permanently recorded in MongoDB with your admin actor attribution and prevent login or job acceptance.
+            </p>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button
               variant="outline"
               onClick={() => {
                 setSuspendTarget(null)
                 setSuspendReason('')
+                setSuspendReviewAfter('')
                 setReasonError('')
               }}
               disabled={isUpdating}

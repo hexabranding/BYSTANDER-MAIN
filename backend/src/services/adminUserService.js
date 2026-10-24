@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import CustomerProfile from '../models/CustomerProfile.js';
 import CaregiverProfile from '../models/CaregiverProfile.js';
 import Booking from '../models/Booking.js';
+import Blacklist from '../models/Blacklist.js';
 
 /**
  * Sanitizes user entity for administrative views.
@@ -393,7 +394,7 @@ export const getUserById = async (id) => {
  * @returns {Promise<Object>} Updated user record
  */
 export const updateUserStatus = async (targetId, payload, actingAdmin) => {
-  const { status: newStatus, reason } = payload;
+  const { status: newStatus, reason, reviewAfter } = payload;
 
   if (!mongoose.Types.ObjectId.isValid(targetId)) {
     const err = new Error('Invalid user identifier format');
@@ -466,12 +467,15 @@ export const updateUserStatus = async (targetId, payload, actingAdmin) => {
     changedAt: new Date(),
   };
 
+  const effectiveReviewAfter = reviewAfter && reviewAfter !== 'Temporary' ? reviewAfter : 'Permanent';
+
   const updatedUser = await User.findOneAndUpdate(
     { _id: targetUser._id, status: previousStatus },
     {
       $set: {
         status: newStatus,
         statusReason: reason.trim(),
+        statusReviewAfter: ['suspended', 'blocked'].includes(newStatus) ? effectiveReviewAfter : null,
         statusUpdatedAt: auditEntry.changedAt,
       },
       $push: {
@@ -486,6 +490,74 @@ export const updateUserStatus = async (targetId, payload, actingAdmin) => {
     err.statusCode = 409;
     err.name = 'ConflictError';
     throw err;
+  }
+
+  // 6. Synchronize with active Blacklist ledger
+  try {
+    if (['suspended', 'blocked'].includes(newStatus)) {
+      const existingBl = await Blacklist.findOne({
+        user: targetUser._id,
+        status: 'active',
+      });
+
+      const targetType = targetUser.role === 'customer' ? 'Customer' : 'Caretaker';
+
+      if (existingBl) {
+        existingBl.reason = reason.trim();
+        existingBl.reviewAfter = effectiveReviewAfter;
+        existingBl.status = 'active';
+        existingBl.name = targetUser.fullName;
+        existingBl.type = targetType;
+        await existingBl.save();
+      } else {
+        const latestEntry = await Blacklist.findOne({}, {}, { sort: { createdAt: -1 } });
+        let nextNumber = 115;
+        if (latestEntry && latestEntry.entryId && latestEntry.entryId.startsWith('BL-')) {
+          const parsedNum = parseInt(latestEntry.entryId.replace('BL-', ''), 10);
+          if (!Number.isNaN(parsedNum)) {
+            nextNumber = parsedNum + 1;
+          }
+        }
+        const entryId = `BL-${nextNumber}`;
+        await Blacklist.create({
+          entryId,
+          name: targetUser.fullName,
+          type: targetType,
+          reason: reason.trim(),
+          user: targetUser._id,
+          phone: targetUser.phone,
+          email: targetUser.email,
+          addedOn: new Date(),
+          addedBy: actingAdmin?.fullName || 'Operations Administrator',
+          addedByAdmin: actingAdmin?._id || null,
+          reviewAfter: effectiveReviewAfter,
+          status: 'active',
+        });
+      }
+    } else if (newStatus === 'active') {
+      await Blacklist.updateMany(
+        {
+          status: 'active',
+          $or: [
+            { user: targetUser._id },
+            ...(targetUser.phone ? [{ phone: targetUser.phone }] : []),
+            ...(targetUser.email ? [{ email: targetUser.email.toLowerCase() }] : []),
+            ...(targetUser.fullName ? [{ name: new RegExp(`^${targetUser.fullName.trim()}$`, 'i') }] : []),
+          ],
+        },
+        {
+          $set: {
+            status: 'removed',
+            removedAt: new Date(),
+            removedBy: actingAdmin?.fullName || 'Operations Administrator',
+            removedByAdmin: actingAdmin?._id || null,
+            removalReason: reason.trim() || 'Reinstated by administrator',
+          },
+        }
+      );
+    }
+  } catch (syncErr) {
+    console.error('[Blacklist Sync Error]', syncErr);
   }
 
   const sanitized = sanitizeUserRecord(updatedUser);

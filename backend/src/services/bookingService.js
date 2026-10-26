@@ -1,11 +1,12 @@
 import mongoose from 'mongoose';
-import { Booking, CaregiverProfile, User, Service } from '../models/index.js';
+import { Booking, CaregiverProfile, User, Service, Transaction } from '../models/index.js';
 import {
   getLocalTimeInTimezone,
   calculateTotalHours,
 } from '../utils/bookingDateUtils.js';
 import { safeDispatchNotification } from './notificationService.js';
 import { recordBookingTransaction } from './adminFinanceService.js';
+import { getIO } from '../socket.js';
 
 /**
  * Check if the current MongoDB connection supports multi-document ACID transactions.
@@ -83,8 +84,9 @@ export const executeWithTransactionRetry = async (workFn, maxRetries = 3) => {
 
 /**
  * Create a new Booking request.
- * Enforces customer RBAC, caregiver verification, service validity,
- * availability matching in caregiver's timezone, and serialized double-booking conflict prevention.
+ * Supports:
+ * 1. Targeted Booking: If caregiverId is supplied, verifies caregiver verification, service offering, schedule fit, and serializes conflict lock.
+ * 2. On-Demand Broadcast Booking: If caregiverId is omitted, snapshot service catalog base rate, creates unassigned pending booking, and broadcasts real-time alerts to all active verified caregivers.
  */
 export const createBooking = async (customerId, bookingData) => {
   const { caregiverId, serviceId, startDateTime, endDateTime, timezone, location, patientDetails } =
@@ -99,56 +101,38 @@ export const createBooking = async (customerId, bookingData) => {
     throw err;
   }
 
-  // 2. Verify Caregiver Profile and User Account
-  const caregiver = await CaregiverProfile.findById(caregiverId).populate('user');
-  if (!caregiver) {
-    const err = new Error('Selected caregiver does not exist');
-    err.statusCode = 404;
-    err.name = 'NotFoundError';
-    throw err;
-  }
+  // 2. Targeted Booking Mode: Verify caregiver account & verification status first if caregiverId provided
+  let caregiver = null;
+  if (caregiverId) {
+    caregiver = await CaregiverProfile.findById(caregiverId).populate('user');
+    if (!caregiver) {
+      const err = new Error('Selected caregiver does not exist');
+      err.statusCode = 404;
+      err.name = 'NotFoundError';
+      throw err;
+    }
 
-  if (caregiver.verificationStatus !== 'verified') {
-    const err = new Error(
-      `Caregiver is not verified (status: ${caregiver.verificationStatus}) and cannot accept bookings`,
-    );
-    err.statusCode = 400;
-    err.name = 'ValidationError';
-    throw err;
-  }
+    if (caregiver.verificationStatus !== 'verified') {
+      const err = new Error(
+        `Caregiver is not verified (status: ${caregiver.verificationStatus}) and cannot accept bookings`,
+      );
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
 
-  if (!caregiver.user || caregiver.user.status !== 'active') {
-    const err = new Error('Caregiver account is currently suspended, blocked, or inactive');
-    err.statusCode = 400;
-    err.name = 'ValidationError';
-    throw err;
+    if (!caregiver.user || caregiver.user.status !== 'active') {
+      const err = new Error('Caregiver account is currently suspended, blocked, or inactive');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
   }
 
   // 3. Verify Service Catalog Record
   const service = await Service.findById(serviceId);
   if (!service || !service.isActive) {
     const err = new Error('Selected service is inactive or does not exist');
-    err.statusCode = 400;
-    err.name = 'ValidationError';
-    throw err;
-  }
-
-  // Verify Caregiver offers this specific service
-  const hasConfiguredServices =
-    (Array.isArray(caregiver.servicesOffered) && caregiver.servicesOffered.length > 0) ||
-    (Array.isArray(caregiver.services) && caregiver.services.length > 0);
-
-  const offersService = !hasConfiguredServices
-    ? true
-    : caregiver.servicesOffered?.some((sId) => String(sId) === String(service._id)) ||
-      caregiver.services?.some(
-        (s) =>
-          String(s).toLowerCase().trim() === service.name.toLowerCase().trim() ||
-          String(s).toLowerCase().trim() === (service.slug || '').toLowerCase().trim(),
-      );
-
-  if (!offersService) {
-    const err = new Error(`Caregiver does not offer the requested service: '${service.name}'`);
     err.statusCode = 400;
     err.name = 'ValidationError';
     throw err;
@@ -166,101 +150,148 @@ export const createBooking = async (customerId, bookingData) => {
     throw err;
   }
 
-  // 5. Evaluate Caregiver Availability in the Caregiver's Local Timezone
-  const caregiverTz = caregiver.timezone || 'Asia/Kolkata';
-  const localStart = getLocalTimeInTimezone(startDateTime, caregiverTz);
-  const localEnd = getLocalTimeInTimezone(endDateTime, caregiverTz);
+  // 5. Targeted Booking validation (schedule, offerings, conflict)
+  if (caregiver) {
 
-  // A. Check Date-Specific Exceptions first (leaves, custom shifts)
-  const dateException = caregiver.dateExceptions?.find((ex) => ex.date === localStart.dateStr);
+    const hasConfiguredServices =
+      (Array.isArray(caregiver.servicesOffered) && caregiver.servicesOffered.length > 0) ||
+      (Array.isArray(caregiver.services) && caregiver.services.length > 0);
 
-  if (dateException) {
-    if (!dateException.isAvailable) {
-      const err = new Error(
-        `Caregiver is unavailable on ${localStart.dateStr} due to a scheduled leave (${dateException.reason || 'Leave'})`,
-      );
+    const offersService = !hasConfiguredServices
+      ? true
+      : caregiver.servicesOffered?.some((sId) => String(sId) === String(service._id)) ||
+        caregiver.services?.some(
+          (s) =>
+            String(s).toLowerCase().trim() === service.name.toLowerCase().trim() ||
+            String(s).toLowerCase().trim() === (service.slug || '').toLowerCase().trim(),
+        );
+
+    if (!offersService) {
+      const err = new Error(`Caregiver does not offer the requested service: '${service.name}'`);
       err.statusCode = 400;
       err.name = 'ValidationError';
       throw err;
     }
 
-    // Must fit within custom slots on this date
-    const fitsExceptionSlot = dateException.slots?.some(
-      (slot) => slot.start <= localStart.timeStr && slot.end >= localEnd.timeStr,
-    );
-    if (!fitsExceptionSlot) {
-      const err = new Error(
-        `Requested shift [${localStart.timeStr} – ${localEnd.timeStr}] falls outside caregiver available slots on ${localStart.dateStr}`,
-      );
-      err.statusCode = 400;
-      err.name = 'ValidationError';
-      throw err;
-    }
-  } else {
-    // B. Check Weekly Recurring Schedule
-    const weekdaySchedule = caregiver.weeklySchedule?.find((w) => w.day === localStart.day);
+    const caregiverTz = caregiver.timezone || 'Asia/Kolkata';
+    const localStart = getLocalTimeInTimezone(startDateTime, caregiverTz);
+    const localEnd = getLocalTimeInTimezone(endDateTime, caregiverTz);
 
-    if (!weekdaySchedule || !weekdaySchedule.isAvailable) {
-      const err = new Error(
-        `Caregiver does not work on ${localStart.day}s according to their weekly schedule`,
+    const dateException = caregiver.dateExceptions?.find((ex) => ex.date === localStart.dateStr);
+
+    if (dateException) {
+      if (!dateException.isAvailable) {
+        const err = new Error(
+          `Caregiver is unavailable on ${localStart.dateStr} due to a scheduled leave (${dateException.reason || 'Leave'})`,
+        );
+        err.statusCode = 400;
+        err.name = 'ValidationError';
+        throw err;
+      }
+
+      const fitsExceptionSlot = dateException.slots?.some(
+        (slot) => slot.start <= localStart.timeStr && slot.end >= localEnd.timeStr,
       );
-      err.statusCode = 400;
-      err.name = 'ValidationError';
-      throw err;
+      if (!fitsExceptionSlot) {
+        const err = new Error(
+          `Requested shift [${localStart.timeStr} – ${localEnd.timeStr}] falls outside caregiver available slots on ${localStart.dateStr}`,
+        );
+        err.statusCode = 400;
+        err.name = 'ValidationError';
+        throw err;
+      }
+    } else {
+      const weekdaySchedule = caregiver.weeklySchedule?.find((w) => w.day === localStart.day);
+
+      if (!weekdaySchedule || !weekdaySchedule.isAvailable) {
+        const err = new Error(
+          `Caregiver does not work on ${localStart.day}s according to their weekly schedule`,
+        );
+        err.statusCode = 400;
+        err.name = 'ValidationError';
+        throw err;
+      }
+
+      const fitsRegularSlot = weekdaySchedule.slots?.some(
+        (slot) => slot.start <= localStart.timeStr && slot.end >= localEnd.timeStr,
+      );
+      if (!fitsRegularSlot) {
+        const err = new Error(
+          `Requested shift [${localStart.timeStr} – ${localEnd.timeStr}] falls outside caregiver regular working hours on ${localStart.day}s`,
+        );
+        err.statusCode = 400;
+        err.name = 'ValidationError';
+        throw err;
+      }
     }
 
-    const fitsRegularSlot = weekdaySchedule.slots?.some(
-      (slot) => slot.start <= localStart.timeStr && slot.end >= localEnd.timeStr,
-    );
-    if (!fitsRegularSlot) {
-      const err = new Error(
-        `Requested shift [${localStart.timeStr} – ${localEnd.timeStr}] falls outside caregiver regular working hours on ${localStart.day}s`,
+    const hourlyRate = caregiver.hourlyRate;
+    const totalAmount = Math.round(hourlyRate * durationHours);
+
+    return executeWithTransactionRetry(async (session) => {
+      await CaregiverProfile.updateOne(
+        { _id: caregiver._id },
+        { $inc: { bookingLockVersion: 1 } },
+        { session },
       );
-      err.statusCode = 400;
-      err.name = 'ValidationError';
-      throw err;
-    }
+
+      const conflict = await Booking.findOne({
+        caregiver: caregiver._id,
+        status: { $in: ['pending', 'confirmed', 'in_progress'] },
+        startDateTime: { $lt: endDateTime },
+        endDateTime: { $gt: startDateTime },
+      }).session(session);
+
+      if (conflict) {
+        const conflictErr = new Error(
+          'Caregiver already has a confirmed or pending booking (or shift in-progress) during this scheduled interval',
+        );
+        conflictErr.statusCode = 409;
+        conflictErr.name = 'ConflictError';
+        throw conflictErr;
+      }
+
+      const [createdBooking] = await Booking.create(
+        [
+          {
+            customer: customerId,
+            caregiver: caregiver._id,
+            caregiverUser: caregiver.user._id,
+            service: service._id,
+            serviceName: service.name,
+            serviceCategory: service.category,
+            hourlyRate,
+            totalHours: durationHours,
+            totalAmount,
+            currency: 'INR',
+            startDateTime,
+            endDateTime,
+            timezone: timezone || caregiverTz,
+            location,
+            patientDetails,
+            status: 'pending',
+          },
+        ],
+        { session },
+      );
+
+      await recordBookingTransaction(createdBooking, 'escrow_held', { session });
+      return createdBooking;
+    });
   }
 
-  // 6. Calculate Immutable Pricing Snapshot (Server-Derived)
-  const hourlyRate = caregiver.hourlyRate;
+  // 5. On-Demand Broadcast Booking Mode (Swiggy / Uber delivery style)
+  // Derive transparent canonical hourly rate from Service Catalog
+  const hourlyRate = service.baseHourlyRate || 499;
   const totalAmount = Math.round(hourlyRate * durationHours);
 
-  // 7. Atomic Concurrency Control: Serialize booking creation via caregiver document mutation
-  // inside an ACID multi-document transaction with automatic transient conflict retry.
-  return executeWithTransactionRetry(async (session) => {
-    // Mutate the caregiver document within the transaction to acquire WiredTiger write lock
-    // on this caregiver and serialize competing reservations
-    await CaregiverProfile.updateOne(
-      { _id: caregiver._id },
-      { $inc: { bookingLockVersion: 1 } },
-      { session },
-    );
-
-    // Active conflict check: pending, confirmed, and in_progress bookings block reservations
-    // (cancelled, rejected, completed do NOT block)
-    const conflict = await Booking.findOne({
-      caregiver: caregiver._id,
-      status: { $in: ['pending', 'confirmed', 'in_progress'] },
-      startDateTime: { $lt: endDateTime },
-      endDateTime: { $gt: startDateTime },
-    }).session(session);
-
-    if (conflict) {
-      const conflictErr = new Error(
-        'Caregiver already has a confirmed or pending booking (or shift in-progress) during this scheduled interval',
-      );
-      conflictErr.statusCode = 409;
-      conflictErr.name = 'ConflictError';
-      throw conflictErr;
-    }
-
-    const [createdBooking] = await Booking.create(
+  const createdBooking = await executeWithTransactionRetry(async (session) => {
+    const [created] = await Booking.create(
       [
         {
           customer: customerId,
-          caregiver: caregiver._id,
-          caregiverUser: caregiver.user._id,
+          caregiver: null,
+          caregiverUser: null,
           service: service._id,
           serviceName: service.name,
           serviceCategory: service.category,
@@ -270,7 +301,7 @@ export const createBooking = async (customerId, bookingData) => {
           currency: 'INR',
           startDateTime,
           endDateTime,
-          timezone: timezone || caregiverTz,
+          timezone: timezone || 'Asia/Kolkata',
           location,
           patientDetails,
           status: 'pending',
@@ -279,11 +310,35 @@ export const createBooking = async (customerId, bookingData) => {
       { session },
     );
 
-    // Record initial escrow holding in the financial audit ledger within the transaction
-    await recordBookingTransaction(createdBooking, 'escrow_held', { session });
-
-    return createdBooking;
+    await recordBookingTransaction(created, 'escrow_held', { session });
+    return created;
   });
+
+  // Real-time broadcast: Emit Socket.IO event and dispatch alerts to active verified caregivers
+  try {
+    const io = getIO();
+    if (io) {
+      io.emit('booking:broadcast', createdBooking);
+    }
+
+    const verifiedCaregivers = await CaregiverProfile.find({ verificationStatus: 'verified' })
+      .select('user')
+      .lean();
+
+    for (const cg of verifiedCaregivers) {
+      if (cg.user) {
+        safeDispatchNotification(cg.user, 'booking_requested', {
+          bookingId: createdBooking._id,
+          serviceName: service.name,
+          city: location?.city || '',
+        });
+      }
+    }
+  } catch (notifyErr) {
+    console.error('Broadcast notification dispatch error:', notifyErr.message);
+  }
+
+  return createdBooking;
 };
 
 /**
@@ -301,7 +356,21 @@ export const getBookings = async (user, query = {}) => {
   if (user.role === 'customer') {
     filter.customer = user._id;
   } else if (user.role === 'caregiver') {
-    filter.caregiverUser = user._id;
+    // Caregivers see bookings assigned to them OR open broadcast requests available for claiming (excluding ones they declined)
+    if (status === 'pending') {
+      filter.$or = [
+        { caregiverUser: user._id, status: 'pending' },
+        { caregiver: null, status: 'pending', declinedByCaregivers: { $ne: user._id } },
+      ];
+    } else if (status) {
+      filter.caregiverUser = user._id;
+      filter.status = status;
+    } else {
+      filter.$or = [
+        { caregiverUser: user._id },
+        { caregiver: null, status: 'pending', declinedByCaregivers: { $ne: user._id } },
+      ];
+    }
   } else if (user.role === 'admin') {
     if (query.customerId && mongoose.Types.ObjectId.isValid(query.customerId)) {
       filter.customer = query.customerId;
@@ -315,7 +384,9 @@ export const getBookings = async (user, query = {}) => {
   }
 
   if (status && ['pending', 'confirmed', 'cancelled', 'rejected', 'completed'].includes(status)) {
-    filter.status = status;
+    if (user.role !== 'caregiver') {
+      filter.status = status;
+    }
   }
 
   const parsedPage = Math.max(1, parseInt(page, 10) || 1);
@@ -377,10 +448,13 @@ export const getBookingById = async (user, bookingId) => {
 
   // Object-Level Authorization Check
   const isCustomer = booking.customer._id.toString() === user._id.toString();
-  const isCaregiver = booking.caregiverUser.toString() === user._id.toString();
+  const isAssignedCaregiver = Boolean(
+    booking.caregiverUser && booking.caregiverUser.toString() === user._id.toString(),
+  );
+  const isBroadcastOpen = !booking.caregiver && booking.status === 'pending' && user.role === 'caregiver';
   const isAdmin = user.role === 'admin';
 
-  if (!isCustomer && !isCaregiver && !isAdmin) {
+  if (!isCustomer && !isAssignedCaregiver && !isBroadcastOpen && !isAdmin) {
     const err = new Error('You are not authorized to view this booking record');
     err.statusCode = 403;
     err.name = 'ForbiddenError';
@@ -391,10 +465,10 @@ export const getBookingById = async (user, bookingId) => {
 };
 
 /**
- * Assigned caregiver accepts a pending booking request.
+ * Caregiver accepts a pending booking request.
  * Concurrency protected: Mutates caregiver document inside an ACID transaction
  * to serialize competing acceptances, rechecks for conflicting confirmed bookings,
- * and atomically updates status to confirmed.
+ * and atomically updates status to confirmed with compare-and-swap (CAS).
  */
 export const acceptBooking = async (user, bookingId) => {
   if (!mongoose.Types.ObjectId.isValid(bookingId)) {
@@ -414,15 +488,7 @@ export const acceptBooking = async (user, bookingId) => {
       throw err;
     }
 
-    // 2. Only assigned caregiver can accept
-    if (booking.caregiverUser.toString() !== user._id.toString()) {
-      const err = new Error('Only the assigned caregiver can accept this booking request');
-      err.statusCode = 403;
-      err.name = 'ForbiddenError';
-      throw err;
-    }
-
-    // 3. State machine transition check
+    // 2. State machine transition check
     if (booking.status !== 'pending') {
       const err = new Error(
         `Cannot accept booking with status '${booking.status}'. Only pending requests can be accepted.`,
@@ -432,10 +498,31 @@ export const acceptBooking = async (user, bookingId) => {
       throw err;
     }
 
-    // 4. Verify caregiver is still active and verified
-    const caregiver = await CaregiverProfile.findById(booking.caregiver)
-      .populate('user')
-      .session(session);
+    // 3. Resolve accepting caregiver profile
+    let caregiver = null;
+    if (booking.caregiver) {
+      // Targeted booking: Only the assigned caregiver can accept
+      if (!booking.caregiverUser || booking.caregiverUser.toString() !== user._id.toString()) {
+        const err = new Error('Only the assigned caregiver can accept this booking request');
+        err.statusCode = 403;
+        err.name = 'ForbiddenError';
+        throw err;
+      }
+      caregiver = await CaregiverProfile.findById(booking.caregiver)
+        .populate('user')
+        .session(session);
+    } else {
+      // Broadcast booking: Any active, verified caregiver can claim
+      if (user.role !== 'caregiver') {
+        const err = new Error('Only registered caregivers can accept open care requests');
+        err.statusCode = 403;
+        err.name = 'ForbiddenError';
+        throw err;
+      }
+      caregiver = await CaregiverProfile.findOne({ user: user._id })
+        .populate('user')
+        .session(session);
+    }
 
     if (
       !caregiver ||
@@ -451,17 +538,17 @@ export const acceptBooking = async (user, bookingId) => {
       throw err;
     }
 
-    // 5. Mutate caregiver document to serialize competing acceptances and bookings for this caregiver
+    // 4. Mutate caregiver document to serialize competing acceptances and bookings for this caregiver
     await CaregiverProfile.updateOne(
       { _id: caregiver._id },
       { $inc: { bookingLockVersion: 1 } },
       { session },
     );
 
-    // 6. Recheck for overlapping active (confirmed or in_progress) bookings inside transaction
+    // 5. Recheck for overlapping active (confirmed or in_progress) bookings for this caregiver inside transaction
     const conflict = await Booking.findOne({
       _id: { $ne: booking._id },
-      caregiver: booking.caregiver,
+      caregiver: caregiver._id,
       status: { $in: ['confirmed', 'in_progress'] },
       startDateTime: { $lt: booking.endDateTime },
       endDateTime: { $gt: booking.startDateTime },
@@ -476,11 +563,19 @@ export const acceptBooking = async (user, bookingId) => {
       throw conflictErr;
     }
 
-    // 7. Atomic transition from pending to confirmed with conditional update
+    // 6. ATOMIC COMPARE-AND-SWAP (CAS)
+    // If broadcast booking, query enforces { caregiver: null, status: 'pending' }
+    // If 100 caretakers click Accept in the same millisecond, exactly 1 wins; other 99 get null updated
+    const filterQuery = booking.caregiver
+      ? { _id: booking._id, status: 'pending' }
+      : { _id: booking._id, status: 'pending', caregiver: null };
+
     const updated = await Booking.findOneAndUpdate(
-      { _id: booking._id, status: 'pending' },
+      filterQuery,
       {
         $set: {
+          caregiver: caregiver._id,
+          caregiverUser: caregiver.user._id,
           status: 'confirmed',
           acceptedAt: new Date(),
         },
@@ -489,14 +584,49 @@ export const acceptBooking = async (user, bookingId) => {
     );
 
     if (!updated) {
-      // Racing cancellation or transition occurred
+      // Racing cancellation or another caretaker claimed it
       const freshBooking = await Booking.findById(booking._id).session(session);
+      if (freshBooking && freshBooking.caregiver) {
+        const conflictErr = new Error(
+          'This booking request has already been claimed by another caretaker.',
+        );
+        conflictErr.statusCode = 409;
+        conflictErr.name = 'ConflictError';
+        throw conflictErr;
+      }
       const conflictErr = new Error(
         `Cannot accept booking: status changed concurrently to '${freshBooking ? freshBooking.status : 'unknown'}'`,
       );
       conflictErr.statusCode = 409;
       conflictErr.name = 'ConflictError';
       throw conflictErr;
+    }
+
+    // 7. Update transaction ledger with the winning caregiver
+    if (mongoose.connection?.readyState !== 0 || Object.prototype.hasOwnProperty.call(Transaction, 'updateOne')) {
+      await Transaction.updateOne(
+        { booking: booking._id },
+        { $set: { caregiver: caregiver._id, caregiverUser: caregiver.user._id } },
+        { session },
+      ).catch(() => {});
+    }
+
+    // 8. Real-time broadcast and customer notification
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('booking:claimed', {
+          bookingId: booking._id.toString(),
+          caregiverId: caregiver._id.toString(),
+          caregiverName: caregiver.name || user.name,
+        });
+      }
+      safeDispatchNotification(booking.customer, 'booking_confirmed', {
+        bookingId: booking._id,
+        caregiverName: caregiver.name || user.name,
+      });
+    } catch (notifErr) {
+      console.error('Acceptance notification error:', notifErr.message);
     }
 
     return updated.populate([
@@ -529,7 +659,9 @@ export const cancelBooking = async (user, bookingId, cancellationReason) => {
 
   // Authorization: Participant (Customer or Caregiver) or Admin
   const isCustomer = booking.customer.toString() === user._id.toString();
-  const isCaregiver = booking.caregiverUser.toString() === user._id.toString();
+  const isCaregiver = Boolean(
+    booking.caregiverUser && booking.caregiverUser.toString() === user._id.toString(),
+  );
   const isAdmin = user.role === 'admin';
 
   if (!isCustomer && !isCaregiver && !isAdmin) {
@@ -676,15 +808,30 @@ export const rejectBooking = async (user, bookingId, rejectionReason = '') => {
     throw err;
   }
 
-  // Authorization: Assigned caregiver or admin only
-  const isCaregiver = booking.caregiverUser.toString() === user._id.toString();
+  // Authorization: Assigned caregiver, prospective caregiver on broadcast, or admin
+  const isAssignedCaregiver = Boolean(
+    booking.caregiverUser && booking.caregiverUser.toString() === user._id.toString(),
+  );
+  const isBroadcastOpen = !booking.caregiver && !booking.caregiverUser && user.role === 'caregiver';
   const isAdmin = user.role === 'admin';
 
-  if (!isCaregiver && !isAdmin) {
+  if (!isAssignedCaregiver && !isBroadcastOpen && !isAdmin) {
     const err = new Error('You are not authorized to reject this booking request');
     err.statusCode = 403;
     err.name = 'ForbiddenError';
     throw err;
+  }
+
+  // If this is a broadcast job and an individual caregiver declines it,
+  // we add them to declinedByCaregivers so it hides from their feed without canceling it for others!
+  if (isBroadcastOpen && !isAdmin) {
+    if (mongoose.connection?.readyState !== 0 || Object.prototype.hasOwnProperty.call(Booking, 'updateOne')) {
+      await Booking.updateOne(
+        { _id: booking._id },
+        { $addToSet: { declinedByCaregivers: user._id } },
+      ).catch(() => {});
+    }
+    return { ...(booking.toObject ? booking.toObject() : booking), status: 'rejected' };
   }
 
   // Lifecycle check: only pending bookings can be rejected

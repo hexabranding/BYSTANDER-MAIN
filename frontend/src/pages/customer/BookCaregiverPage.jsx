@@ -168,13 +168,6 @@ export function BookCaregiverPage() {
     }
   }, [preselectedId, selectedCaregiverId])
 
-  useEffect(() => {
-    // If no caretaker was provided in URL query and caretakers are ready, redirect to Find Caretaker page
-    if (!preselectedId && !loadingCaregivers && availableCaregivers.length > 0) {
-      navigate('/customer/caregivers', { replace: true })
-    }
-  }, [preselectedId, loadingCaregivers, availableCaregivers, navigate])
-
   const [form, setForm] = useState(() => ({
     service: null,
     patientName: patientInfo?.name || '',
@@ -210,36 +203,32 @@ export function BookCaregiverPage() {
       )
       if (picked) return picked
     }
-    if (!form.service) return null
-    return (
-      availableCaregivers.find((c) => c.verified && c.services?.includes(form.service.name)) ||
-      availableCaregivers.find((c) => c.services?.includes(form.service.name)) ||
-      availableCaregivers[0] ||
-      null
-    )
-  }, [availableCaregivers, form.service, selectedCaregiverId, preselectedId])
+    return null
+  }, [availableCaregivers, selectedCaregiverId, preselectedId])
 
-  // Dynamically configure steps: omit redundant caretakers selection if caregiver is already picked
-  const steps = useMemo(() => {
-    const list = [
+  // Direct On-Demand Broadcast Flow:
+  // Customer enters requirements, and request is broadcast to all active caretakers
+  const steps = useMemo(
+    () => [
       { id: 'service', label: 'Care service' },
       { id: 'patient', label: 'Patient' },
       { id: 'setting', label: 'Care setting' },
       { id: 'schedule', label: 'Schedule' },
-      { id: 'instructions', label: 'Instructions' },
-    ]
-    if (!selectedCaregiverId && !preselectedId) {
-      list.push({ id: 'caretakers', label: 'Caretakers' })
-    }
-    list.push({ id: 'price', label: 'Price' })
-    list.push({ id: 'confirm', label: 'Confirm' })
-    return list
-  }, [selectedCaregiverId, preselectedId])
+      { id: 'instructions', label: 'Directives' },
+      { id: 'price', label: 'Pricing' },
+      { id: 'confirm', label: 'Confirm & Broadcast' },
+    ],
+    [],
+  )
 
   const currentStep = steps[step] || steps[0]
   const currentStepId = currentStep?.id || 'service'
 
-  const rate = matchedCaregiver?.hourlyRate || form.service?.startingPrice || 399
+  const rate =
+    form.service?.baseHourlyRate ||
+    form.service?.startingPrice ||
+    matchedCaregiver?.hourlyRate ||
+    499
   const hours = Number(form.hours) || 0
   const subtotal = rate * hours
   const platformFee = PLATFORM_FEE
@@ -265,8 +254,6 @@ export function BookCaregiverPage() {
         return Boolean(form.date) && Boolean(form.startTime) && Number(form.hours) > 0
       case 'instructions':
         return true
-      case 'caretakers':
-        return Boolean(matchedCaregiver)
       case 'price':
         return true
       case 'confirm':
@@ -325,23 +312,7 @@ export function BookCaregiverPage() {
     setSubmitting(true)
 
     try {
-      // 1. Resolve Caregiver ObjectId
-      let caregiverId = matchedCaregiver?._id || matchedCaregiver?.id
-      if (!isMongoObjectId(caregiverId)) {
-        const found =
-          availableCaregivers.find(
-            (c) =>
-              isMongoObjectId(c._id || c.id) &&
-              (c.name === matchedCaregiver?.name ||
-                c.id === matchedCaregiver?.id ||
-                c.name?.toLowerCase() === matchedCaregiver?.name?.toLowerCase()),
-          ) || availableCaregivers.find((c) => isMongoObjectId(c._id || c.id))
-        if (found) {
-          caregiverId = found._id || found.id
-        }
-      }
-
-      // 2. Resolve Service ObjectId
+      // 1. Resolve Service ObjectId
       let serviceId = form.service?._id || form.service?.id
       if (!isMongoObjectId(serviceId)) {
         const found =
@@ -357,13 +328,13 @@ export function BookCaregiverPage() {
         }
       }
 
-      if (!isMongoObjectId(caregiverId) || !isMongoObjectId(serviceId)) {
+      if (!isMongoObjectId(serviceId)) {
         throw new Error(
-          'Please ensure a registered caregiver and valid service from the system catalog are selected.',
+          'Please ensure a valid service from the system catalog is selected.',
         )
       }
 
-      // 3. Temporal bounds
+      // 2. Temporal bounds
       if (!form.date || !form.startTime) {
         throw new Error('Please select both a service date and start time.')
       }
@@ -385,8 +356,8 @@ export function BookCaregiverPage() {
       const hoursNum = Math.max(0.5, Math.min(24, Number(form.hours) || 1))
       const localEndDate = new Date(localStartDate.getTime() + hoursNum * 60 * 60 * 1000)
 
+      // Broadcast payload: No caregiverId required. The request broadcasts to all active caretakers!
       const payload = {
-        caregiverId,
         serviceId,
         startDateTime: localStartDate.toISOString(),
         endDateTime: localEndDate.toISOString(),
@@ -410,6 +381,10 @@ export function BookCaregiverPage() {
         },
       }
 
+      if (isMongoObjectId(preselectedId)) {
+        payload.caregiverId = preselectedId
+      }
+
       const booking = await bookingService.createBooking(payload)
 
       if (createBooking) {
@@ -421,8 +396,8 @@ export function BookCaregiverPage() {
       }
 
       setCreated(booking)
-      toast.success('Booking request sent', {
-        description: `Reference ${booking.ref} — ${matchedCaregiver?.name || 'Your caretaker'} has been notified.`,
+      toast.success('Booking broadcasted successfully', {
+        description: `Reference ${booking.ref} — all active caretakers in ${form.city} have been notified.`,
       })
     } catch (err) {
       toast.error('Booking creation failed', {
@@ -467,24 +442,14 @@ export function BookCaregiverPage() {
             </div>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row">
               <Button size="lg" onClick={() => navigate(`/customer/bookings/${created.id}`)} iconRight={ArrowRight}>
-                View booking
+                View live status
               </Button>
-              <Button size="lg" variant="outline" onClick={() => navigate('/customer/caregivers')}>
-                Browse caretakers
+              <Button size="lg" variant="outline" onClick={() => navigate('/customer/dashboard')}>
+                Back to dashboard
               </Button>
             </div>
           </CardBody>
         </Card>
-
-        <div>
-          <h3 className="font-display text-base font-bold text-ink">Caretakers we recommend</h3>
-          <p className="mt-0.5 text-sm text-muted">Verified professionals matching your care needs.</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {stripCaregivers.map((cg) => (
-              <CaregiverCard key={cg.id} caregiver={cg} actionLabel="View profile" />
-            ))}
-          </div>
-        </div>
       </div>
     )
   }
@@ -495,7 +460,7 @@ export function BookCaregiverPage() {
     <div className="space-y-6">
       <PageHeader
         title="Book a caretaker"
-        subtitle="Answer a few quick questions and we'll match you with a verified professional."
+        subtitle="Submit your care details. Your booking will be instantly broadcasted to all active caretakers."
         action={
           <Button to="/customer/bookings" variant="ghost" size="sm">
             My bookings
@@ -503,48 +468,30 @@ export function BookCaregiverPage() {
         }
       />
 
-      {matchedCaregiver ? (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-primary-200 bg-mint-50/70 p-4 shadow-sm sm:p-5">
-          <div className="flex items-center gap-3.5">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary-700 font-display text-base font-extrabold text-white shadow-sm">
-              {matchedCaregiver.name
-                .split(' ')
-                .map((p) => p[0])
-                .slice(0, 2)
-                .join('')}
-            </span>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-display text-base font-bold text-ink">{matchedCaregiver.name}</span>
-                {matchedCaregiver.verified ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-bold text-success-700 border border-success-200">
-                    <ShieldCheck className="h-3 w-3" /> Verified Caretaker
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-0.5 text-xs text-muted">
-                {matchedCaregiver.qualification || 'Professional Caretaker'} · {matchedCaregiver.experienceYears || 3} yrs exp · {matchedCaregiver.area || matchedCaregiver.city}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-left sm:text-right">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-faint">Hourly Rate</span>
-              <span className="font-display text-base font-extrabold text-primary-800">
-                {formatCurrency(matchedCaregiver.hourlyRate)}/hr
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-primary-200 bg-mint-50/70 p-4 shadow-sm sm:p-5">
+        <div className="flex items-center gap-3.5">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary-700 font-display text-base font-extrabold text-white shadow-sm">
+            <Sparkles className="h-6 w-6 text-white" />
+          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-display text-base font-bold text-ink">On-Demand Caretaker Dispatch</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-bold text-success-700 border border-success-200">
+                <ShieldCheck className="h-3 w-3" /> Live Broadcast
               </span>
             </div>
-            <Button
-              to="/customer/caregivers"
-              variant="outline"
-              size="sm"
-              className="text-xs"
-            >
-              Change caretaker
-            </Button>
+            <p className="mt-0.5 text-xs text-muted">
+              Your request will be sent to all qualified caretakers across the app. The first available caretaker will accept and be assigned immediately.
+            </p>
           </div>
         </div>
-      ) : null}
+        <div className="text-left sm:text-right">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-faint">Hourly Rate</span>
+          <span className="font-display text-base font-extrabold text-primary-800">
+            {formatCurrency(rate)}/hr
+          </span>
+        </div>
+      </div>
 
       <Card>
         <CardBody className="py-4">
@@ -969,101 +916,7 @@ export function BookCaregiverPage() {
                 </Card>
               ) : null}
 
-              {currentStepId === 'caretakers' ? (
-                <Card>
-                  <CardHeader
-                    title="Choose your caretaker"
-                    subtitle="Pick a verified professional, or let Bystander assign the best match for your shift."
-                  />
-                  <CardBody className="space-y-3">
-                    {loadingCaregivers ? (
-                      <CardSkeleton count={3} />
-                    ) : availableCaregivers.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/60 p-6 text-center">
-                        <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-amber-100 text-amber-800">
-                          <UserRound className="h-6 w-6" />
-                        </div>
-                        <h3 className="mt-3 text-base font-bold text-ink">No Caretakers Currently Registered</h3>
-                        <p className="mt-1 text-sm text-muted max-w-md mx-auto">
-                          There are currently no verified caretakers active in the database. Caretakers must register and be verified by Operations before bookings can be scheduled.
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        {stripCaregivers.length === 0 ? (
-                          <p className="text-sm text-muted">
-                            No matching caretakers found for this service. You can select another service or let Bystander assign a caretaker.
-                          </p>
-                        ) : null}
-                        {stripCaregivers.map((cg) => {
-                          const selected =
-                            matchedCaregiver?.id === cg.id ||
-                            (matchedCaregiver?._id && (matchedCaregiver._id === cg._id || matchedCaregiver._id === cg.id))
-                          const cgIdentifier = cg._id || cg.id
-                          return (
-                            <button
-                              key={cgIdentifier}
-                              type="button"
-                              onClick={() => setSelectedCaregiverId(cgIdentifier)}
-                              className={cn(
-                                'flex w-full items-center gap-4 rounded-card border p-4 text-left transition',
-                                selected
-                                  ? 'border-primary-600 bg-mint-50 ring-2 ring-primary-200'
-                                  : 'border-line bg-white hover:border-primary-200 hover:shadow-card',
-                              )}
-                            >
-                              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-mint-100 font-display text-sm font-extrabold text-primary-800">
-                                {cg.name
-                                  .split(' ')
-                                  .map((p) => p[0])
-                                  .slice(0, 2)
-                                  .join('')}
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span className="flex flex-wrap items-center gap-2">
-                                  <span className="truncate text-sm font-bold text-ink">{cg.name}</span>
-                                  {cg.verified ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[10px] font-bold text-success-700">
-                                      <ShieldCheck className="h-3 w-3" /> Verified
-                                    </span>
-                                  ) : null}
-                                </span>
-                                <span className="mt-0.5 block truncate text-xs text-muted">
-                                  {cg.qualification} · {cg.experienceYears} yrs · {cg.area || cg.city}
-                                </span>
-                                <span className="mt-1 flex items-center gap-2">
-                                  <RatingStars value={cg.rating} size={11} showValue />
-                                  <span className="text-xs font-semibold text-primary-700">{formatCurrency(cg.hourlyRate)}/hr</span>
-                                </span>
-                              </span>
-                              <span
-                                className={cn(
-                                  'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2',
-                                  selected ? 'border-primary-700 bg-primary-700 text-white' : 'border-line-strong bg-white',
-                                )}
-                              >
-                                {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
-                              </span>
-                            </button>
-                          )
-                        })}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCaregiverId('')}
-                          className={cn(
-                            'w-full rounded-card border border-dashed p-3.5 text-left text-sm font-semibold transition',
-                            selectedCaregiverId === ''
-                              ? 'border-primary-400 bg-mint-50 text-primary-800'
-                              : 'border-line-strong text-muted hover:border-primary-300',
-                          )}
-                        >
-                          Let Bystander assign the best available match automatically
-                        </button>
-                      </>
-                    )}
-                  </CardBody>
-                </Card>
-              ) : null}
+
 
               {currentStepId === 'price' ? (
                 <div className="space-y-6">
@@ -1128,7 +981,7 @@ export function BookCaregiverPage() {
                           label: 'Schedule',
                           value: `${formatDate(form.date, { long: true })} · ${form.startTime} · ${formatDuration(form.hours)}`,
                         },
-                        { icon: Clock, label: 'Estimated caretaker', value: matchedCaregiver?.name || 'To be assigned' },
+                        { icon: Sparkles, label: 'Dispatch mechanism', value: 'Instant Platform Broadcast (First-come acceptance)' },
                         {
                           icon: ShieldCheck,
                           label: 'Care requirements',
@@ -1141,6 +994,17 @@ export function BookCaregiverPage() {
                         },
                       ]}
                     />
+
+                    <div className="flex items-start gap-3 rounded-xl border border-primary-200 bg-mint-50/70 p-4">
+                      <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary-700" />
+                      <div className="text-xs leading-relaxed text-ink">
+                        <p className="font-bold text-primary-900">On-Demand Caretaker Broadcast</p>
+                        <p className="mt-0.5 text-muted">
+                          When you confirm, your request is broadcasted simultaneously to all verified caretakers in {form.city}. The first available caretaker will accept the request and be assigned immediately.
+                        </p>
+                      </div>
+                    </div>
+
                     <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3.5">
                       <input
                         type="checkbox"
@@ -1178,7 +1042,7 @@ export function BookCaregiverPage() {
               </Button>
             ) : (
               <Button onClick={handleConfirm} disabled={!terms || submitting} loading={submitting} icon={CheckCircle2}>
-                Confirm booking request
+                Confirm & broadcast request
               </Button>
             )}
           </div>

@@ -145,6 +145,36 @@ export const onMessagesRead = (callback) => {
   };
 };
 
+/**
+ * Listen for newly broadcasted jobs across the platform.
+ * @param {Function} callback
+ * @returns {Function} Unsubscribe function
+ */
+export const onBookingBroadcast = (callback) => {
+  const s = socket || initSocketConnection();
+  if (!s || typeof callback !== 'function') return () => {};
+
+  s.on('booking:broadcast', callback);
+  return () => {
+    s.off('booking:broadcast', callback);
+  };
+};
+
+/**
+ * Listen for claimed broadcast jobs so they can be immediately removed from open feeds.
+ * @param {Function} callback
+ * @returns {Function} Unsubscribe function
+ */
+export const onBookingClaimed = (callback) => {
+  const s = socket || initSocketConnection();
+  if (!s || typeof callback !== 'function') return () => {};
+
+  s.on('booking:claimed', callback);
+  return () => {
+    s.off('booking:claimed', callback);
+  };
+};
+
 export default {
   initSocketConnection,
   getSocket,
@@ -155,4 +185,6 @@ export default {
   onNewMessage,
   onTyping,
   onMessagesRead,
+  onBookingBroadcast,
+  onBookingClaimed,
 };

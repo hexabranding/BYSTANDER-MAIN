@@ -314,9 +314,10 @@ test('Step 7 - 5: validateCreateBooking validates references, future times, and 
   customerOnly(reqCaregiver, resCaregiver, nextCaregiver);
   assert.equal(resCaregiver.statusCode, 403);
 
-  // Missing caregiverId -> 400
+  // Invalid caregiverId format -> 400
   const { req: req1, res: res1, next: next1 } = createMockReqRes({
     body: {
+      caregiverId: 'invalid-non-hex-id',
       serviceId: new mongoose.Types.ObjectId().toString(),
       startDateTime: '2028-11-05T09:00:00.000Z',
       endDateTime: '2028-11-05T17:00:00.000Z',
@@ -326,7 +327,20 @@ test('Step 7 - 5: validateCreateBooking validates references, future times, and 
   });
   validateCreateBooking(req1, res1, next1);
   assert.equal(res1.statusCode, 400);
-  assert.ok(res1.jsonData.message.includes('caregiverId is required'));
+  assert.ok(res1.jsonData.message.includes('caregiverId must be a valid'));
+
+  // Missing serviceId -> 400
+  const { req: req1b, res: res1b, next: next1b } = createMockReqRes({
+    body: {
+      startDateTime: '2028-11-05T09:00:00.000Z',
+      endDateTime: '2028-11-05T17:00:00.000Z',
+      location: { addressLine: '123 Marine Drive', city: 'Mumbai' },
+      patientDetails: { name: 'Grandmother', age: 78 },
+    },
+  });
+  validateCreateBooking(req1b, res1b, next1b);
+  assert.equal(res1b.statusCode, 400);
+  assert.ok(res1b.jsonData.message.includes('serviceId is required'));
 
   // Past start time -> 400
   const { req: req2, res: res2, next: next2 } = createMockReqRes({

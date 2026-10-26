@@ -16,7 +16,13 @@ import { SearchBar } from '@/components/common/SearchBar'
 import { EmptyState, ErrorState } from '@/components/common/States'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Select } from '@/components/forms/FormField'
-import { bookingService, adaptBookingToJob, isMongoObjectId } from '@/services'
+import {
+  bookingService,
+  adaptBookingToJob,
+  isMongoObjectId,
+  onBookingBroadcast,
+  onBookingClaimed,
+} from '@/services'
 
 export function JobsPage() {
   useDocumentTitle('Jobs')
@@ -56,6 +62,40 @@ export function JobsPage() {
   useEffect(() => {
     fetchJobs(true)
   }, [fetchJobs])
+
+  // Real-time On-Demand Broadcast & Atomic CAS Claim Listener
+  useEffect(() => {
+    const unsubBroadcast = onBookingBroadcast((newBooking) => {
+      if (!newBooking) return
+      setRealBookings((prev) => {
+        const id = newBooking._id || newBooking.id
+        if (!prev) return [newBooking]
+        if (prev.some((b) => (b._id || b.id) === id)) return prev
+        return [newBooking, ...prev]
+      })
+      toast.info('New Caretaker Job Available!', {
+        description: `${newBooking.serviceName || 'Patient Care'} in ${newBooking.location?.city || 'your area'}.`,
+      })
+    })
+
+    const unsubClaimed = onBookingClaimed((claimData) => {
+      if (!claimData?.bookingId) return
+      setRealBookings((prev) => {
+        if (!prev) return []
+        const myCaregiverId = caregiver?._id || caregiver?.id
+        // If claimed by another caretaker, remove it immediately from open list
+        if (claimData.caregiverId && String(claimData.caregiverId) !== String(myCaregiverId)) {
+          return prev.filter((b) => (b._id || b.id) !== claimData.bookingId)
+        }
+        return prev
+      })
+    })
+
+    return () => {
+      unsubBroadcast()
+      unsubClaimed()
+    }
+  }, [caregiver])
 
   const myJobs = useMemo(() => {
     if (!realBookings) return []

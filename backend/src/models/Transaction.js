@@ -31,13 +31,15 @@ const transactionSchema = new mongoose.Schema(
     caregiver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'CaregiverProfile',
-      required: [true, 'Caregiver profile reference is required'],
+      required: false,
+      default: null,
       index: true,
     },
     caregiverUser: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'Caregiver user reference is required'],
+      required: false,
+      default: null,
       index: true,
     },
     serviceName: {

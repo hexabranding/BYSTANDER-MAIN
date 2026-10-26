@@ -103,7 +103,7 @@ export function AppRoutes() {
         <Route path="book-caregiver" element={<BookCaregiverPage />} />
         <Route path="bookings" element={<CustomerBookings />} />
         <Route path="bookings/:id" element={<CustomerBookingDetails />} />
-        <Route path="caregivers" element={<CustomerCaregivers />} />
+        <Route path="caregivers" element={<Navigate to="/customer/book-caregiver" replace />} />
         <Route path="payments" element={<CustomerPayments />} />
         <Route path="invoices" element={<CustomerInvoices />} />
         <Route path="messages" element={<CustomerMessages />} />

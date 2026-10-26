@@ -17,15 +17,23 @@ const bookingSchema = new mongoose.Schema(
     caregiver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'CaregiverProfile',
-      required: [true, 'Caregiver profile reference is required'],
+      required: false,
+      default: null,
       index: true,
     },
     caregiverUser: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'Caregiver user account reference is required'],
+      required: false,
+      default: null,
       index: true,
     },
+    declinedByCaregivers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
 
     // Service reference & immutable snapshot
     service: {

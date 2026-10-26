@@ -372,8 +372,8 @@ export function MessagesPage() {
             title="No conversations yet"
             description="Once a caretaker is assigned to your booking, your chats will appear here."
             action={
-              <Button to="/customer/caregivers" icon={MessageSquare}>
-                Find a caretaker
+              <Button to="/customer/book-caregiver" icon={MessageSquare}>
+                Book a caretaker
               </Button>
             }
           />

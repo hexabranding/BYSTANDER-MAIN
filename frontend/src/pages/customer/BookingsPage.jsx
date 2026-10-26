@@ -285,7 +285,7 @@ export function BookingsPage() {
         title="My bookings"
         subtitle="Track every care visit — from request to completion."
         action={
-          <Button to="/customer/caregivers" icon={Plus}>
+          <Button to="/customer/book-caregiver" icon={Plus}>
             New booking
           </Button>
         }
@@ -351,8 +351,8 @@ export function BookingsPage() {
                   Clear filters
                 </Button>
               ) : (
-                <Button to="/customer/caregivers" icon={CalendarDays}>
-                  Find a caretaker
+                <Button to="/customer/book-caregiver" icon={CalendarDays}>
+                  Book a caretaker
                 </Button>
               )
             }

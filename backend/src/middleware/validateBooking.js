@@ -27,9 +27,11 @@ export const validateCreateBooking = (req, res, next) => {
 
   const errors = [];
 
-  // 1. Validate Caregiver Reference
-  if (!caregiverId || !mongoose.Types.ObjectId.isValid(String(caregiverId))) {
-    errors.push('caregiverId is required and must be a valid 24-character hexadecimal ObjectId');
+  // 1. Validate Caregiver Reference (Optional for broadcast bookings, validated if provided)
+  if (caregiverId !== undefined && caregiverId !== null && caregiverId !== '') {
+    if (!mongoose.Types.ObjectId.isValid(String(caregiverId))) {
+      errors.push('caregiverId must be a valid 24-character hexadecimal ObjectId');
+    }
   }
 
   // 2. Validate Service Reference

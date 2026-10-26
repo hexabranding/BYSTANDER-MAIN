@@ -203,8 +203,8 @@ export function AboutPage() {
         items={[{ label: 'About' }]}
         actions={
           <>
-            <Button to="/caregivers" size="lg" iconRight={ArrowRight}>
-              Browse caretakers
+            <Button to="/book-caregiver" size="lg" iconRight={ArrowRight}>
+              Book a caretaker
             </Button>
             <Button
               to="/register/caregiver"
@@ -453,8 +453,8 @@ export function AboutPage() {
           </div>
 
           <motion.div {...reveal} className="mt-6 flex flex-wrap items-center gap-3">
-            <Button to="/caregivers" iconRight={ArrowRight}>
-              Browse the network
+            <Button to="/book-caregiver" iconRight={ArrowRight}>
+              Book a caretaker
             </Button>
             <Button to="/services" variant="outline">
               See every service
@@ -602,8 +602,8 @@ export function AboutPage() {
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
-            <Button to="/caregivers" size="lg" iconRight={ArrowRight}>
-              Find care
+            <Button to="/book-caregiver" size="lg" iconRight={ArrowRight}>
+              Book a caretaker
             </Button>
             <Button
               to="/register/caregiver"

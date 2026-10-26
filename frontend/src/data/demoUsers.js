@@ -59,6 +59,27 @@ export const DEMO_USERS = [
     designation: 'Head of Operations',
     joinedOn: '2023-01-05',
   },
+  {
+    id: 'amb-001',
+    role: 'ambulance',
+    name: 'Rajesh Patil',
+    email: 'rajesh.ambulance@bystander.org',
+    phone: '+919820112233',
+    password: DEMO_PASSWORD,
+    avatar: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=160&auto=format&fit=crop&q=80',
+    vehicleNumber: 'MH 02 CZ 4421',
+    ambulanceType: 'ICU on Wheels',
+    baseHospital: 'Lilavati Hospital & Research Centre',
+    city: 'Mumbai',
+    area: 'Bandra West',
+    isAvailable: true,
+    verificationStatus: 'verified',
+    oxygenFitted: true,
+    ventilatorFitted: true,
+    stretcherAvailable: true,
+    emergencyCallCount: 18,
+    joinedOn: '2024-03-10',
+  },
 ]
 
 export const findDemoUser = (email) =>

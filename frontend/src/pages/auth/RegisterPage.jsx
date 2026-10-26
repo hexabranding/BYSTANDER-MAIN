@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ArrowRight, HeartHandshake, ShieldCheck, ShieldUser, Stethoscope } from 'lucide-react'
+import { ArrowRight, HeartHandshake, ShieldCheck, ShieldUser, Siren, Stethoscope } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { Button } from '@/components/common/Button'
 
@@ -34,13 +34,27 @@ const OPTIONS = [
     cta: 'Apply as caretaker',
   },
   {
+    id: 'ambulance',
+    icon: Siren,
+    eyebrow: 'For emergency responders',
+    title: 'Register as an Ambulance Driver',
+    description: 'Connect your vehicle to local families and caretakers for instant emergency dispatch.',
+    bullets: [
+      'Direct 1-tap dialer for families and bedside caretakers',
+      'Toggle live availability (Available / Off-Duty)',
+      'Free community emergency network — zero commission',
+    ],
+    to: '/register/ambulance',
+    cta: 'Register your ambulance',
+  },
+  {
     id: 'admin',
     icon: ShieldUser,
     eyebrow: 'Demo access',
     title: 'Explore the admin console',
     description: 'Tour CareMate operations with a seeded admin demo account.',
     bullets: [
-      'Review caretaker verifications',
+      'Review caretaker verifications & ambulance fleet',
       'Monitor bookings, payouts and commissions',
       'Handle complaints and SOS alerts',
     ],

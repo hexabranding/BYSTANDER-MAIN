@@ -5,12 +5,11 @@ import { AuthLayout } from '@/layouts/AuthLayout'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { ProtectedRoute } from '@/components/common/ProtectedRoute'
 import { CaregiverVerifiedRoute } from '@/components/common/CaregiverVerifiedRoute'
-import { CUSTOMER_NAV, CAREGIVER_NAV, ADMIN_NAV } from '@/routes/nav'
+import { CUSTOMER_NAV, CAREGIVER_NAV, ADMIN_NAV, AMBULANCE_NAV } from '@/routes/nav'
 
 import { HomePage } from '@/pages/public/HomePage'
 import { ServicesPage } from '@/pages/public/ServicesPage'
-import { CaregiversPage } from '@/pages/public/CaregiversPage'
-import { CaregiverDetailsPage } from '@/pages/public/CaregiverDetailsPage'
+import { BookCaregiverPage as PublicBookCaregiverPage } from '@/pages/public/BookCaregiverPage'
 import { AboutPage } from '@/pages/public/AboutPage'
 import { ContactPage } from '@/pages/public/ContactPage'
 import { LegalPage } from '@/pages/public/LegalPage'
@@ -20,6 +19,7 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { RegisterCustomerPage } from '@/pages/auth/RegisterCustomerPage'
 import { RegisterCaregiverPage } from '@/pages/auth/RegisterCaregiverPage'
+import { RegisterAmbulancePage } from '@/pages/auth/RegisterAmbulancePage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 import { VerifyOtpPage } from '@/pages/auth/VerifyOtpPage'
@@ -35,6 +35,7 @@ import { MessagesPage as CustomerMessages } from '@/pages/customer/MessagesPage'
 import { ComplaintsPage as CustomerComplaints } from '@/pages/customer/ComplaintsPage'
 import { ReviewsPage as CustomerReviewsPage } from '@/pages/customer/ReviewsPage'
 import { ProfilePage as CustomerProfile } from '@/pages/customer/ProfilePage'
+import { CustomerAmbulancesPage } from '@/pages/customer/AmbulancesPage'
 
 import { DashboardPage as CaregiverDashboard } from '@/pages/caregiver/DashboardPage'
 import { JobsPage } from '@/pages/caregiver/JobsPage'
@@ -45,6 +46,7 @@ import { ReviewsPage } from '@/pages/caregiver/ReviewsPage'
 import { MessagesPage as CaregiverMessages } from '@/pages/caregiver/MessagesPage'
 import { DocumentsPage } from '@/pages/caregiver/DocumentsPage'
 import { ProfilePage as CaregiverProfile } from '@/pages/caregiver/ProfilePage'
+import { CaregiverAmbulancesPage } from '@/pages/caregiver/AmbulancesPage'
 
 import { DashboardPage as AdminDashboard } from '@/pages/admin/DashboardPage'
 import { CustomersPage } from '@/pages/admin/CustomersPage'
@@ -63,6 +65,10 @@ import { BlacklistPage } from '@/pages/admin/BlacklistPage'
 import { RatingsPage } from '@/pages/admin/RatingsPage'
 import { ReportsPage } from '@/pages/admin/ReportsPage'
 import { SettingsPage } from '@/pages/admin/SettingsPage'
+import { AdminAmbulancesPage } from '@/pages/admin/AmbulancesPage'
+
+import { AmbulanceDashboardPage } from '@/pages/ambulance/DashboardPage'
+import { AmbulanceProfilePage } from '@/pages/ambulance/ProfilePage'
 
 export function AppRoutes() {
   return (
@@ -70,8 +76,9 @@ export function AppRoutes() {
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/services" element={<ServicesPage />} />
-        <Route path="/caregivers" element={<CaregiversPage />} />
-        <Route path="/caregivers/:id" element={<CaregiverDetailsPage />} />
+        <Route path="/book-caregiver" element={<PublicBookCaregiverPage />} />
+        <Route path="/caregivers" element={<PublicBookCaregiverPage />} />
+        <Route path="/caregivers/:id" element={<PublicBookCaregiverPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/legal/:doc" element={<LegalPage />} />
@@ -84,6 +91,7 @@ export function AppRoutes() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/register/customer" element={<RegisterCustomerPage />} />
         <Route path="/register/caregiver" element={<RegisterCaregiverPage />} />
+        <Route path="/register/ambulance" element={<RegisterAmbulancePage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-otp" element={<VerifyOtpPage />} />
@@ -108,6 +116,7 @@ export function AppRoutes() {
         <Route path="messages" element={<CustomerMessages />} />
         <Route path="complaints" element={<CustomerComplaints />} />
         <Route path="reviews" element={<CustomerReviewsPage />} />
+        <Route path="ambulances" element={<CustomerAmbulancesPage />} />
         <Route path="profile" element={<CustomerProfile />} />
       </Route>
 
@@ -181,6 +190,7 @@ export function AppRoutes() {
             </CaregiverVerifiedRoute>
           }
         />
+        <Route path="ambulances" element={<CaregiverAmbulancesPage />} />
         <Route path="profile" element={<CaregiverProfile />} />
       </Route>
 
@@ -196,6 +206,7 @@ export function AppRoutes() {
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="caregivers" element={<AdminCaregivers />} />
+        <Route path="ambulances" element={<AdminAmbulancesPage />} />
         <Route path="nursing-students" element={<NursingStudentsPage />} />
         <Route path="hospitals" element={<HospitalsPage />} />
         <Route path="verifications" element={<VerificationsPage />} />
@@ -212,6 +223,19 @@ export function AppRoutes() {
         <Route path="ratings" element={<RatingsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+      </Route>
+
+      <Route
+        path="/ambulance"
+        element={
+          <ProtectedRoute roles={['ambulance']}>
+            <DashboardLayout nav={AMBULANCE_NAV} variant="ambulance" />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="/ambulance/dashboard" replace />} />
+        <Route path="dashboard" element={<AmbulanceDashboardPage />} />
+        <Route path="profile" element={<AmbulanceProfilePage />} />
       </Route>
     </Routes>
   )

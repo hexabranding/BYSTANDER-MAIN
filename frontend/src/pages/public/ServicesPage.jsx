@@ -219,7 +219,7 @@ export function ServicesPage() {
                     </p>
                     <p className="text-[11px] uppercase tracking-wide text-faint">per {svc.unit}</p>
                   </div>
-                  <Button to="/caregivers" size="sm">
+                  <Button to={`/book-caregiver?service=${svc.id}`} size="sm">
                     Book Now
                   </Button>
                 </div>
@@ -288,8 +288,8 @@ export function ServicesPage() {
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
-            <Button to="/caregivers" size="lg" iconRight={ArrowRight}>
-              Browse caretakers
+            <Button to="/book-caregiver" size="lg" iconRight={ArrowRight}>
+              Book a caretaker
             </Button>
             <Button
               to="/contact"

@@ -6,6 +6,7 @@ import { DataProvider } from '@/context/DataContext'
 import { AppRoutes } from '@/routes'
 import { ScrollToHash, ScrollToTop } from '@/routes/ScrollHelpers'
 import { ScrollProgress } from '@/components/common/ScrollProgress'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 
 export default function App() {
   return (
@@ -18,7 +19,9 @@ export default function App() {
             <ScrollToTop />
             <ScrollToHash />
             <ScrollProgress />
-            <AppRoutes />
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
             <Toaster
               position="top-right"
               toastOptions={{

@@ -29,6 +29,7 @@ import sosRoutes from './routes/sosRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
+import ambulanceRoutes from './routes/ambulanceRoutes.js';
 import testPaymentRoutes from './routes/testPaymentRoutes.js';
 import { assertValidJwtSecret } from './utils/auth.js';
 import { assertValidOtpSecret } from './utils/otpUtils.js';
@@ -135,6 +136,7 @@ app.use('/api/admin/caregivers', (req, res, next) => {
 app.use('/api/customer', customerRoutes);
 app.use('/api/caregiver', caregiverSelfRoutes);
 app.use('/api/caregivers', caregiverPublicRoutes);
+app.use('/api/ambulances', ambulanceRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/sos', sosRoutes);
 app.use('/api/messages', messageRoutes);
@@ -165,6 +167,12 @@ export const startServer = async () => {
 
     // 2. Connect to MongoDB Atlas
     await connectDB();
+
+    // 3. Ensure sample ambulance drivers exist
+    try {
+      const { seedAmbulances } = await import('./scripts/seedAmbulances.js');
+      seedAmbulances().catch((e) => console.log('[Ambulance Seed]', e.message));
+    } catch (_) {}
 
     const httpServer = http.createServer(app);
     initSocket(httpServer, CLIENT_URL);

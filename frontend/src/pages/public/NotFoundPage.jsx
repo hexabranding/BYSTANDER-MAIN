@@ -13,7 +13,7 @@ export function NotFoundPage() {
   const onSearch = (event) => {
     event.preventDefault()
     const q = term.trim()
-    navigate(q ? `/caregivers?q=${encodeURIComponent(q)}` : '/caregivers')
+    navigate('/book-caregiver')
   }
 
   return (
@@ -73,8 +73,8 @@ export function NotFoundPage() {
           </div>
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-line pt-6 text-xs text-muted">
-            <Link to="/caregivers" className="transition hover:text-primary-700">
-              Find a caretaker
+            <Link to="/book-caregiver" className="transition hover:text-primary-700">
+              Book a caretaker
             </Link>
             <Link to="/contact" className="transition hover:text-primary-700">
               Contact support

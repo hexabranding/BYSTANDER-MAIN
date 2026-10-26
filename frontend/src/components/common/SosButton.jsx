@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AlertCircle, AlertTriangle, CheckCircle2, MapPin, Phone, Siren, ShieldAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
@@ -64,6 +65,7 @@ function captureLocation() {
 }
 
 export function SosButton({ bookingId: explicitBookingId, className }) {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { sos: localSosList, createSos: localCreateSos } = useData()
 
@@ -210,9 +212,21 @@ export function SosButton({ bookingId: explicitBookingId, className }) {
         subtitle="SOS emergency alerts are linked to active care engagements"
         size="md"
         footer={
-          <Button variant="primary" onClick={() => setNoBookingOpen(false)}>
-            Understood
-          </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setNoBookingOpen(false)}>
+              Understood
+            </Button>
+            <Button
+              variant="danger"
+              icon={Siren}
+              onClick={() => {
+                setNoBookingOpen(false)
+                navigate(user?.role === 'caregiver' ? '/caregiver/ambulances' : '/customer/ambulances')
+              }}
+            >
+              Call Local Ambulance
+            </Button>
+          </div>
         }
       >
         <div className="space-y-4 py-2">
@@ -228,7 +242,7 @@ export function SosButton({ bookingId: explicitBookingId, className }) {
           <div className="rounded-xl border border-line bg-slate-50 p-4 text-xs text-muted">
             <p className="font-semibold text-ink">Need immediate emergency response?</p>
             <p className="mt-1">
-              For life-threatening medical emergencies or immediate police assistance in India, please dial <strong>112</strong> directly from your phone.
+              For life-threatening medical emergencies or immediate police assistance in India, please dial <strong>112</strong> directly or call a registered ambulance driver nearby.
             </p>
           </div>
         </div>
@@ -252,6 +266,16 @@ export function SosButton({ bookingId: explicitBookingId, className }) {
               onClick={() => toast.info('Care helpline simulated (+91 22 4890 1100). Telephony integration not configured.')}
             >
               Helpline info
+            </Button>
+            <Button
+              variant="danger"
+              icon={Siren}
+              onClick={() => {
+                setStatusOpen(false)
+                navigate(user?.role === 'caregiver' ? '/caregiver/ambulances' : '/customer/ambulances')
+              }}
+            >
+              Call Local Ambulance
             </Button>
           </div>
         }

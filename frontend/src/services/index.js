@@ -28,6 +28,9 @@ export { default as messageService } from './messageService.js'
 export * from './notificationService.js'
 export { default as notificationService } from './notificationService.js'
 
+export * from './ambulanceService.js'
+export { default as ambulanceService } from './ambulanceService.js'
+
 export * from './sosService.js'
 export { default as sosService } from './sosService.js'
 

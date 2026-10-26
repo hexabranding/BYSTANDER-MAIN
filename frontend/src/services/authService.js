@@ -64,6 +64,7 @@ export const normalizeUser = (user, profile = {}) => {
 
   const prof = profile || {};
   const isCaregiver = user.role === 'caregiver';
+  const isAmbulance = user.role === 'ambulance';
 
   // Address assembly
   let formattedAddress = '';
@@ -114,7 +115,11 @@ export const normalizeUser = (user, profile = {}) => {
     experienceYears: prof.experienceYears ?? 0,
     hourlyRate: prof.hourlyRate ?? 0,
     verificationStatus: prof.verificationStatus || (isCaregiver ? 'Pending' : 'Verified'),
-    verified: prof.verificationStatus === 'verified' || !isCaregiver,
+    verified: prof.verificationStatus === 'verified' || (!isCaregiver && !isAmbulance) || prof.verificationStatus === 'verified',
+    vehicleNumber: prof.vehicleNumber || '',
+    ambulanceType: prof.ambulanceType || '',
+    baseHospital: prof.baseHospital || '',
+    isAvailable: prof.isAvailable ?? true,
     joinedOn: user.createdAt
       ? new Date(user.createdAt).toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10),

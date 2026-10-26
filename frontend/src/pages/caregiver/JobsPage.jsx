@@ -393,7 +393,7 @@ export function JobsPage() {
                   Clear search & filters
                 </Button>
               ) : (
-                <Button variant="primary" onClick={loadJobs}>
+                <Button variant="primary" onClick={() => fetchJobs(true)}>
                   Check for new jobs
                 </Button>
               )

@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { useData } from '@/context/DataContext'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { SosButton } from '@/components/common/SosButton'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { Sidebar, MobileSidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 
@@ -59,7 +60,9 @@ export function DashboardLayout({ nav, variant = 'customer', sidebarFooter, topb
           title={title.replace(/\b\w/g, (c) => c.toUpperCase())}
         />
         <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
 

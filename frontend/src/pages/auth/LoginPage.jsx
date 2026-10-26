@@ -11,6 +11,7 @@ import {
   KeyRound,
   ShieldAlert,
   ShieldCheck,
+  Siren,
   Sparkles,
   Stethoscope,
 } from 'lucide-react'
@@ -41,6 +42,14 @@ const ROLE_OPTIONS = [
     demoEmail: 'ananya.deshmukh@example.com',
   },
   {
+    id: 'ambulance',
+    label: 'Ambulance',
+    icon: Siren,
+    heading: 'Ambulance Driver sign-in',
+    subtitle: 'Manage your emergency on-call status and vehicle details.',
+    demoEmail: 'rajesh.ambulance@bystander.org',
+  },
+  {
     id: 'admin',
     label: 'Admin',
     icon: ShieldCheck,
@@ -51,7 +60,13 @@ const ROLE_OPTIONS = [
 ]
 
 const homeFor = (role) =>
-  role === 'admin' ? '/admin/dashboard' : role === 'caregiver' ? '/caregiver/dashboard' : '/customer/dashboard'
+  role === 'admin'
+    ? '/admin/dashboard'
+    : role === 'caregiver'
+    ? '/caregiver/dashboard'
+    : role === 'ambulance'
+    ? '/ambulance/dashboard'
+    : '/customer/dashboard'
 
 export function LoginPage() {
   useDocumentTitle('Sign in')
@@ -146,7 +161,7 @@ export function LoginPage() {
       <div
         role="group"
         aria-label="Choose account type"
-        className="grid grid-cols-3 gap-1.5 rounded-card border border-line bg-slate-100/80 p-1.5"
+        className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-card border border-line bg-slate-100/80 p-1.5"
       >
         {ROLE_OPTIONS.map((option) => {
           const selected = option.id === role
@@ -346,6 +361,12 @@ export function LoginPage() {
           Are you a caretaker or nurse?{' '}
           <Link to="/register/caregiver" className="font-semibold text-primary-700 hover:text-primary-800">
             Apply to join
+          </Link>
+        </p>
+        <p className="mt-2 text-muted">
+          Ambulance driver or emergency service?{' '}
+          <Link to="/register/ambulance" className="font-semibold text-primary-700 hover:text-primary-800">
+            Register your ambulance &rarr;
           </Link>
         </p>
       </div>

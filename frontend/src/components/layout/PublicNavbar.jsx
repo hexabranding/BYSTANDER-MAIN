@@ -10,7 +10,7 @@ const links = [
   { label: 'Home', to: '/' },
   { label: 'About', to: '/about' },
   { label: 'Services', to: '/services' },
-  { label: 'Find Caretaker', to: '/caregivers' },
+  { label: 'Book Caretaker', to: '/book-caregiver' },
   { label: 'Trust & safety', to: '/#trust' },
   { label: 'Contact', to: '/contact' },
 ]

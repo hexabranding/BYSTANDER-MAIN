@@ -29,12 +29,17 @@ export function Sidebar({ nav, collapsed = false, onToggle, values = {}, footer,
     >
       <div
         className={cn(
-          'flex items-center border-b border-line px-4',
-          largeLogo ? 'h-24' : 'h-16',
-          collapsed && 'justify-center px-0',
+          'flex items-center justify-center border-b border-line px-4 py-2 text-center',
+          largeLogo ? 'h-28' : 'h-24',
+          collapsed ? 'px-0 h-20' : 'w-full',
         )}
       >
-        <Logo compact={collapsed} size={logoSize} markClass={largeLogo ? 'h-14 w-14' : undefined} />
+        <Logo
+          compact={collapsed}
+          size={collapsed ? 'md' : 'lg'}
+          markClass={largeLogo ? 'h-14 w-14' : 'h-11 w-11'}
+          className="w-full justify-center"
+        />
       </div>
 
       <nav className="thin-scrollbar flex-1 space-y-5 overflow-y-auto px-3 py-5">
@@ -155,15 +160,15 @@ export function MobileSidebar({ open, onClose, nav, values = {}, header, footer,
       >
         <div
           className={cn(
-            'flex items-center justify-between border-b border-line px-4',
-            largeLogo ? 'h-24' : 'h-16',
+            'relative flex items-center justify-center border-b border-line px-4 py-2',
+            largeLogo ? 'h-28' : 'h-24',
           )}
         >
-          {header ?? <Logo size={logoSize} />}
+          {header ?? <Logo size="lg" className="justify-center" />}
           <button
             type="button"
             onClick={onClose}
-            className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-slate-100"
+            className="absolute right-4 grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-slate-100"
             aria-label="Close navigation"
           >
             <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2">

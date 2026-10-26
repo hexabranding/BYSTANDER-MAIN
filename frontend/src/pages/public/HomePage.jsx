@@ -142,7 +142,7 @@ export function HomePage() {
     const params = new URLSearchParams()
     if (city) params.set('city', city)
     if (service) params.set('service', service)
-    navigate(`/caregivers?${params.toString()}`)
+    navigate(`/book-caregiver?${params.toString()}`)
   }
 
   return (
@@ -216,12 +216,12 @@ export function HomePage() {
 
               <div className="hero-actions mt-7 flex flex-wrap gap-3">
                 <Button
-                  to="/caregivers"
+                  to="/book-caregiver"
                   size="lg"
                   iconRight={ArrowRight}
                   className="shadow-[0_18px_35px_-16px_rgba(15,118,110,0.85)] transition-all hover:-translate-y-0.5"
                 >
-                  Find a Caretaker
+                  Book a Caretaker
                 </Button>
                 <Button
                   to="/register/caregiver"
@@ -436,8 +436,8 @@ export function HomePage() {
                   <p className="font-display text-lg font-extrabold text-ink">{formatCurrency(svc.startingPrice)}</p>
                   <p className="text-[11px] uppercase tracking-wide text-faint">per {svc.unit}</p>
                 </div>
-                <Button to={`/caregivers?service=${svc.id}`} variant="outline" size="sm" iconRight={ArrowRight}>
-                  View caretakers
+                <Button to={`/book-caregiver?service=${svc.id}`} variant="outline" size="sm" iconRight={ArrowRight}>
+                  Book now
                 </Button>
               </div>
             </motion.article>
@@ -455,8 +455,8 @@ export function HomePage() {
               title="Verified professionals families book again"
               description="Ranked by rating, response rate and repeat bookings — all identities and registrations confirmed by our operations team."
               action={
-                <Button to="/caregivers" variant="outline" size="sm" iconRight={ArrowRight}>
-                  View all caretakers
+                <Button to="/book-caregiver" variant="outline" size="sm" iconRight={ArrowRight}>
+                  Book a caretaker
                 </Button>
               }
             />
@@ -536,8 +536,8 @@ export function HomePage() {
                 <Button to="/about" size="lg" iconRight={Sparkles}>
                   About us now
                 </Button>
-                <Button to="/caregivers" variant="outline" size="lg" iconRight={ArrowRight}>
-                  Browse caretakers
+                <Button to="/book-caregiver" variant="outline" size="lg" iconRight={ArrowRight}>
+                  Book a caretaker
                 </Button>
               </div>
 
@@ -807,8 +807,8 @@ export function HomePage() {
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
-            <Button to="/caregivers" size="lg" iconRight={ArrowRight}>
-              Find a Caretaker
+            <Button to="/book-caregiver" size="lg" iconRight={ArrowRight}>
+              Book a Caretaker
             </Button>
             <Button to="/register/caregiver" variant="secondary" size="lg">
               Become a Caretaker

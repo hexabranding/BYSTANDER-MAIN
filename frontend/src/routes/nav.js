@@ -52,6 +52,10 @@ export const CUSTOMER_NAV = [
     ],
   },
   {
+    section: 'Emergency',
+    items: [{ label: 'Ambulance Help', to: '/customer/ambulances', icon: Siren, tone: 'danger' }],
+  },
+  {
     section: 'Account',
     items: [{ label: 'Profile', to: '/customer/profile', icon: UserRound }],
   },
@@ -77,6 +81,10 @@ export const CAREGIVER_NAV = [
     ],
   },
   {
+    section: 'Emergency',
+    items: [{ label: 'Ambulance Dispatch', to: '/caregiver/ambulances', icon: Siren, tone: 'danger' }],
+  },
+  {
     section: 'Account',
     items: [
       { label: 'Messages', to: '/caregiver/messages', icon: MessageSquare, badge: 'key:unreadCaregiver' },
@@ -96,6 +104,7 @@ export const ADMIN_NAV = [
     items: [
       { label: 'Customers', to: '/admin/customers', icon: Users },
       { label: 'Caretakers', to: '/admin/caregivers', icon: Briefcase },
+      { label: 'Ambulances', to: '/admin/ambulances', icon: Siren },
       { label: 'Nursing Students', to: '/admin/nursing-students', icon: GraduationCap },
       { label: 'Hospitals', to: '/admin/hospitals', icon: Building2 },
     ],
@@ -134,8 +143,20 @@ export const ADMIN_NAV = [
   },
 ]
 
+export const AMBULANCE_NAV = [
+  {
+    section: 'Overview',
+    items: [{ label: 'Dashboard', to: '/ambulance/dashboard', icon: LayoutDashboard }],
+  },
+  {
+    section: 'Account',
+    items: [{ label: 'Vehicle Profile', to: '/ambulance/profile', icon: UserRound }],
+  },
+]
+
 export const HOME_FOR_ROLE = {
   customer: '/customer/dashboard',
   caregiver: '/caregiver/dashboard',
   admin: '/admin/dashboard',
+  ambulance: '/ambulance/dashboard',
 }

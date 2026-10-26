@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { User, CustomerProfile, CaregiverProfile, Document, Service, Blacklist } from '../models/index.js';
+import { User, CustomerProfile, CaregiverProfile, Document, Service, Blacklist, Ambulance } from '../models/index.js';
 import { hashPassword, comparePassword, generateToken, sanitizeUser, formatAccountStatusMessage } from '../utils/auth.js';
 
 /**
@@ -338,6 +338,8 @@ export const login = async (identifier, password) => {
     profile = await CustomerProfile.findOne({ user: user._id });
   } else if (user.role === 'caregiver') {
     profile = await CaregiverProfile.findOne({ user: user._id });
+  } else if (user.role === 'ambulance') {
+    profile = await Ambulance.findOne({ user: user._id });
   }
 
   // Generate token
@@ -367,6 +369,8 @@ export const getCurrentUser = async (userId) => {
     profile = await CustomerProfile.findOne({ user: user._id });
   } else if (user.role === 'caregiver') {
     profile = await CaregiverProfile.findOne({ user: user._id });
+  } else if (user.role === 'ambulance') {
+    profile = await Ambulance.findOne({ user: user._id });
   }
 
   return {

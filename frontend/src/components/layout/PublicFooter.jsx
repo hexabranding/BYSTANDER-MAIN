@@ -54,7 +54,7 @@ const columns = [
     title: 'Platform',
     links: [
       { label: 'Browse services', to: '/services' },
-      { label: 'Find a caretaker', to: '/caregivers' },
+      { label: 'Book a caretaker', to: '/book-caregiver' },
       { label: 'Trust & safety', to: '/#trust' },
     ],
   },
@@ -192,8 +192,8 @@ export function PublicFooter() {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-3">
-            <Button to="/caregivers" iconRight={ArrowRight}>
-              Find a caretaker
+            <Button to="/book-caregiver" iconRight={ArrowRight}>
+              Book a caretaker
             </Button>
             <Button to="/contact" variant="outline" icon={Phone}>
               Talk to us

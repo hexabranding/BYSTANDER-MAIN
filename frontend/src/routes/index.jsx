@@ -60,7 +60,6 @@ import { CommissionsPage } from '@/pages/admin/CommissionsPage'
 import { PayoutsPage } from '@/pages/admin/PayoutsPage'
 import { InvoicesPage as AdminInvoices } from '@/pages/admin/InvoicesPage'
 import { ComplaintsPage as AdminComplaints } from '@/pages/admin/ComplaintsPage'
-import { SosAlertsPage } from '@/pages/admin/SosAlertsPage'
 import { BlacklistPage } from '@/pages/admin/BlacklistPage'
 import { RatingsPage } from '@/pages/admin/RatingsPage'
 import { ReportsPage } from '@/pages/admin/ReportsPage'
@@ -217,7 +216,7 @@ export function AppRoutes() {
         <Route path="invoices" element={<AdminInvoices />} />
         <Route path="complaints" element={<AdminComplaints />} />
         <Route path="complaints/:id" element={<AdminComplaints />} />
-        <Route path="sos-alerts" element={<SosAlertsPage />} />
+        <Route path="sos-alerts" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="fraud-alerts" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="blacklist" element={<BlacklistPage />} />
         <Route path="ratings" element={<RatingsPage />} />

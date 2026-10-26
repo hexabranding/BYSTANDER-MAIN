@@ -213,9 +213,9 @@ export function DashboardPage() {
               note: 'Pending and processing',
             },
             {
-              label: 'Open SOS incidents',
-              value: activeSos.length,
-              note: activeSos.length ? 'On-call desk is engaged' : 'No live escalations',
+              label: 'Ambulances',
+              value: '6',
+              note: 'Verified in emergency network',
             },
           ].map((metric, i) => (
             <div
@@ -627,47 +627,27 @@ export function DashboardPage() {
 
           <Card className="overflow-hidden">
             <CardHeader
-              title="Active SOS incidents"
-              subtitle="Escalations that need the ops desk"
+              title="Emergency ambulances"
+              subtitle="Quick emergency response fleet"
               action={
-                <Button to="/admin/sos-alerts" variant="link" size="sm" iconRight={ArrowRight}>
-                  Open desk
+                <Button to="/admin/ambulances" variant="link" size="sm" iconRight={ArrowRight}>
+                  View fleet
                 </Button>
               }
             />
             <CardBody className="space-y-3 p-4">
-              {activeSos.length ? (
-                activeSos.map((s) => (
-                  <Link
-                    key={s.id}
-                    to="/admin/sos-alerts"
-                    className="block rounded-xl border border-danger-100 border-l-4 border-l-danger-500 bg-danger-50/50 px-4 py-3 transition hover:bg-danger-50"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-danger-600 shadow-card">
-                        <Siren className="h-4.5 w-4.5" size={18} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-display text-sm font-bold text-ink">{s.id}</p>
-                          <StatusBadge status={s.priority} size="sm" />
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">{s.summary}</p>
-                        <p className="mt-1.5 text-[11px] font-semibold text-danger-600">
-                          {s.location?.label} · reported {relativeTime(s.reportedAt)}
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <EmptyState
-                  icon={Siren}
-                  title="No active incidents"
-                  description="Resolved alerts stay in the SOS archive."
-                  className="py-8"
-                />
-              )}
+              <div className="flex items-center gap-3 rounded-xl border border-line bg-slate-50 p-3.5">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-100 text-red-600">
+                  <Siren className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-ink">On-Call Ambulance Network</p>
+                  <p className="text-xs text-muted">Direct 1-tap dispatch for families & bedside caretakers</p>
+                </div>
+                <Button to="/admin/ambulances" variant="secondary" size="xs">
+                  Manage
+                </Button>
+              </div>
             </CardBody>
           </Card>
 

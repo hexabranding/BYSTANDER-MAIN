@@ -115,7 +115,6 @@ export const ADMIN_NAV = [
       { label: 'Verifications', to: '/admin/verifications', icon: ShieldCheck, badge: 'key:pendingVerifications' },
       { label: 'Bookings', to: '/admin/bookings', icon: ClipboardList },
       { label: 'Complaints', to: '/admin/complaints', icon: LifeBuoy },
-      { label: 'SOS Alerts', to: '/admin/sos-alerts', icon: Siren, badge: 'key:activeSos', tone: 'danger' },
     ],
   },
   {

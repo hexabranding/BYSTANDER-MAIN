@@ -485,8 +485,8 @@ export function DashboardPage() {
             subtitle={`Next ${Math.min(3, upcoming.length)} scheduled visits`}
             icon={CalendarCheck}
             action={
-              <Button variant="link" size="sm" to="/caregiver/schedule">
-                Full schedule
+              <Button variant="link" size="sm" to="/caregiver/bookings">
+                All bookings
               </Button>
             }
           />

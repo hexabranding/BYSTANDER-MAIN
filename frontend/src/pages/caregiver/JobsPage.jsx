@@ -377,7 +377,7 @@ export function JobsPage() {
             title={tab === 'open' ? 'No open jobs right now' : `No ${tab} jobs`}
             description={
               tab === 'open'
-                ? 'New requests matching your qualification will appear here. Keep your availability up to date for the best matches.'
+                ? 'New broadcast requests will appear here in real time. When a customer submits a booking, it will show up for instant claim.'
                 : 'Try a different tab or adjust your search and filters.'
             }
             action={
@@ -393,8 +393,8 @@ export function JobsPage() {
                   Clear search & filters
                 </Button>
               ) : (
-                <Button variant="primary" to="/caregiver/schedule">
-                  Update availability
+                <Button variant="primary" onClick={loadJobs}>
+                  Check for new jobs
                 </Button>
               )
             }

@@ -40,7 +40,6 @@ import { DashboardPage as CaregiverDashboard } from '@/pages/caregiver/Dashboard
 import { JobsPage } from '@/pages/caregiver/JobsPage'
 import { JobDetailsPage } from '@/pages/caregiver/JobDetailsPage'
 import { BookingsPage as CaregiverBookings } from '@/pages/caregiver/BookingsPage'
-import { SchedulePage } from '@/pages/caregiver/SchedulePage'
 import { EarningsPage } from '@/pages/caregiver/EarningsPage'
 import { ReviewsPage } from '@/pages/caregiver/ReviewsPage'
 import { MessagesPage as CaregiverMessages } from '@/pages/caregiver/MessagesPage'
@@ -157,14 +156,7 @@ export function AppRoutes() {
             </CaregiverVerifiedRoute>
           }
         />
-        <Route
-          path="schedule"
-          element={
-            <CaregiverVerifiedRoute>
-              <SchedulePage />
-            </CaregiverVerifiedRoute>
-          }
-        />
+        <Route path="schedule" element={<Navigate to="/caregiver/bookings" replace />} />
         <Route
           path="earnings"
           element={

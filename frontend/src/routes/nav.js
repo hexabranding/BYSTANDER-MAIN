@@ -10,7 +10,6 @@ import {
   UserRound,
   Briefcase,
   ClipboardList,
-  CalendarClock,
   Star,
   FileCheck2,
   Building2,
@@ -68,7 +67,6 @@ export const CAREGIVER_NAV = [
     items: [
       { label: 'Available Jobs', to: '/caregiver/jobs', icon: Briefcase, badge: 'key:openJobs' },
       { label: 'My Bookings', to: '/caregiver/bookings', icon: ClipboardList },
-      { label: 'Schedule', to: '/caregiver/schedule', icon: CalendarClock },
     ],
   },
   {

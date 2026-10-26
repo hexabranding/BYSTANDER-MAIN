@@ -87,8 +87,7 @@ The application has 3 distinct authenticated roles, plus a public marketing webs
 
 ### B. Caregiver / Bystander Portal (`/caregiver/*`)
 1. **Job Board (`/caregiver/jobs`):** Browse open requests with patient background, required shifts, address distance, and transparent net payout.
-2. **Active Shift Execution (`/caregiver/bookings/:id`):** Geolocation check-in, shift vitals logging, customer signature/OTP verification, and check-out notes.
-3. **Schedule & Availability (`/caregiver/schedule`):** Weekly grid configuration (morning, afternoon, night, or blocked).
+3. **My Bookings (`/caregiver/bookings`):** Active, confirmed, and past visits tracking with quick actions.
 4. **Earnings & Payouts (`/caregiver/earnings`):** Shift breakdown, platform commission (12%) deduction, pending bank transfers, and withdrawal triggers.
 5. **Documents & Credentials (`/caregiver/documents`):** Upload Aadhaar/PAN, State Nursing Council registration, PCC, or Nursing College ID with live status badges.
 

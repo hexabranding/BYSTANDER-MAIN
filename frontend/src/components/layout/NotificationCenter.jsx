@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bell, CheckCheck, Inbox, Loader2 } from 'lucide-react'
+import { Bell, CheckCheck, Inbox, Loader2, Trash2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/utils/cn'
 import { relativeTime } from '@/utils/format'
-import { useData } from '@/context/DataContext'
 import { useAuth } from '@/context/AuthContext'
 import { useClickOutside } from '@/hooks/useUi'
 import { notificationService } from '@/services'
+import { onNewNotification } from '@/services/socket'
+import { adaptNotification } from '@/services/adapters'
 
 const toneMap = {
   success: 'bg-success-500',
@@ -23,7 +24,6 @@ export function NotificationCenter() {
   const [loading, setLoading] = useState(false)
   const ref = useRef(null)
 
-  const { notifications: localNotifications, markNotificationRead: localMarkRead, markAllNotificationsRead: localMarkAll } = useData()
   const { user } = useAuth()
 
   useClickOutside(ref, () => setOpen(false), open)
@@ -37,7 +37,9 @@ export function NotificationCenter() {
         notificationService.getUnreadCount(),
       ])
       setApiNotifications(listResult.notifications || [])
-      setUnreadCount(countResult.count ?? (listResult.notifications || []).filter((n) => !n.read).length)
+      setUnreadCount(
+        countResult.count ?? (listResult.notifications || []).filter((n) => !n.read).length,
+      )
     } catch {
       // In case of unauthenticated or network error, keep current state safely
     } finally {
@@ -45,9 +47,28 @@ export function NotificationCenter() {
     }
   }, [user])
 
+  // Fetch notifications on mount and whenever user changes
   useEffect(() => {
     fetchNotifications()
   }, [fetchNotifications])
+
+  // Real-time notification sync via Socket.IO
+  useEffect(() => {
+    if (!user) return
+
+    const unsubscribe = onNewNotification((newNotif) => {
+      const adapted = adaptNotification(newNotif)
+      setApiNotifications((prev) => {
+        if (prev.some((n) => n.id === adapted.id)) return prev
+        return [adapted, ...prev]
+      })
+      setUnreadCount((c) => c + 1)
+    })
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [user])
 
   const handleOpenToggle = () => {
     const next = !open
@@ -65,8 +86,15 @@ export function NotificationCenter() {
     } catch {
       // Ignore background error
     }
-    if (typeof localMarkAll === 'function') {
-      localMarkAll()
+  }
+
+  const handleClearAll = async () => {
+    setApiNotifications([])
+    setUnreadCount(0)
+    try {
+      await notificationService.clearAllNotifications()
+    } catch {
+      // Ignore background error
     }
   }
 
@@ -78,22 +106,26 @@ export function NotificationCenter() {
     } catch {
       // Ignore background error
     }
-    if (typeof localMarkRead === 'function') {
-      localMarkRead(id)
-    }
     setOpen(false)
   }
 
-  // Display real notifications if available, otherwise fallback to local notifications for demo
-  const visible = useMemo(() => {
-    if (apiNotifications.length > 0) return apiNotifications
-    if (!user) return localNotifications || []
-    return (localNotifications || []).filter((n) => !n.audience || n.audience.includes(user.role))
-  }, [apiNotifications, localNotifications, user])
+  const handleDeleteOne = async (e, id) => {
+    e.stopPropagation()
+    const target = apiNotifications.find((n) => n.id === id)
+    setApiNotifications((prev) => prev.filter((n) => n.id !== id))
+    if (target && !target.read) {
+      setUnreadCount((c) => Math.max(0, c - 1))
+    }
+    try {
+      await notificationService.deleteOneNotification(id)
+    } catch {
+      // Ignore background error
+    }
+  }
 
-  const displayUnread = apiNotifications.length > 0
-    ? unreadCount
-    : visible.filter((n) => !n.read).length
+  // Sole source of truth: strictly real notifications from the API/database (zero mock fallback)
+  const visible = apiNotifications
+  const displayUnread = unreadCount
 
   return (
     <div className="relative" ref={ref}>
@@ -126,33 +158,54 @@ export function NotificationCenter() {
                 <p className="font-display text-sm font-bold text-ink">Notifications</p>
                 {loading ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : null}
               </div>
-              <button
-                type="button"
-                onClick={handleMarkAllRead}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:underline"
-              >
-                <CheckCheck className="h-3.5 w-3.5" /> Mark all read
-              </button>
+              {visible.length > 0 ? (
+                <div className="flex items-center gap-2.5">
+                  {unreadCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:underline"
+                    >
+                      <CheckCheck className="h-3.5 w-3.5" /> Read
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Clear all
+                  </button>
+                </div>
+              ) : null}
             </div>
             <div className="thin-scrollbar max-h-80 overflow-y-auto">
               {visible.length ? (
                 visible.slice(0, 10).map((n) => (
-                  <button
+                  <div
                     key={n.id}
-                    type="button"
                     onClick={() => handleMarkOneRead(n.id)}
                     className={cn(
-                      'flex w-full gap-3 border-b border-line px-4 py-3 text-left transition last:border-0 hover:bg-slate-50',
+                      'group relative flex w-full cursor-pointer items-start gap-3 border-b border-line px-4 py-3 text-left transition last:border-0 hover:bg-slate-50',
                       !n.read && 'bg-mint-50/60',
                     )}
                   >
                     <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', toneMap[n.tone] || toneMap.info)} />
-                    <span className="min-w-0 flex-1">
+                    <span className="min-w-0 flex-1 pr-6">
                       <span className="block text-sm font-semibold text-ink">{n.title}</span>
                       <span className="mt-0.5 block text-xs leading-relaxed text-muted">{n.body || n.message}</span>
                       <span className="mt-1 block text-[11px] text-faint">{relativeTime(n.time || n.createdAt)}</span>
                     </span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteOne(e, n.id)}
+                      title="Dismiss notification"
+                      aria-label="Dismiss notification"
+                      className="absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-md text-faint opacity-0 transition group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 ))
               ) : (
                 <div className="px-4 py-10 text-center">

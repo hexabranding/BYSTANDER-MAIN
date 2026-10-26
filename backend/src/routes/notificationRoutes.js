@@ -24,4 +24,11 @@ router.get('/', validateGetNotifications, notificationController.getNotification
 // 4. Mark single notification as read
 router.patch('/:id/read', validateNotificationId, notificationController.markOneAsRead);
 
+// 5. Clear all notifications for authenticated user
+router.delete('/', notificationController.clearAllNotifications);
+router.delete('/clear-all', notificationController.clearAllNotifications);
+
+// 6. Delete single notification
+router.delete('/:id', validateNotificationId, notificationController.deleteOneNotification);
+
 export default router;

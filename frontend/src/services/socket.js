@@ -175,6 +175,21 @@ export const onBookingClaimed = (callback) => {
   };
 };
 
+/**
+ * Subscribes to real-time notification alerts.
+ * @param {Function} callback
+ * @returns {Function} Unsubscribe function
+ */
+export const onNewNotification = (callback) => {
+  const s = socket || initSocketConnection();
+  if (!s || typeof callback !== 'function') return () => {};
+
+  s.on('new_notification', callback);
+  return () => {
+    s.off('new_notification', callback);
+  };
+};
+
 export default {
   initSocketConnection,
   getSocket,
@@ -187,4 +202,5 @@ export default {
   onMessagesRead,
   onBookingBroadcast,
   onBookingClaimed,
+  onNewNotification,
 };

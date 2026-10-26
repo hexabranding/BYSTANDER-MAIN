@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Notification } from '../models/index.js';
+import { getIO } from '../socket.js';
 
 /**
  * Structured External Provider Interfaces for future integrations.
@@ -108,7 +109,19 @@ export const safeDispatchNotification = async (notificationData) => {
     ) {
       return null;
     }
-    return await createNotification(notificationData);
+    const doc = await createNotification(notificationData);
+    if (doc) {
+      try {
+        const io = getIO();
+        if (io) {
+          const raw = doc.toObject ? doc.toObject() : doc;
+          io.to(`user:${raw.recipient}`).emit('new_notification', raw);
+        }
+      } catch (socketErr) {
+        // Safe socket emission failure
+      }
+    }
+    return doc;
   } catch (err) {
     console.error(`[Notification Warning] Failed to dispatch in-app notification: ${err.message}`);
     return null;
@@ -208,4 +221,42 @@ export const markAllAsRead = async (user) => {
   return {
     modifiedCount: result.modifiedCount || 0,
   };
+};
+
+/**
+ * Delete all notifications for the authenticated user.
+ * Atomic deleteMany scoped to recipient: user._id.
+ */
+export const clearAllNotifications = async (user) => {
+  const result = await Notification.deleteMany({ recipient: user._id });
+
+  return {
+    deletedCount: result.deletedCount || 0,
+  };
+};
+
+/**
+ * Delete a single notification scoped to recipient user.
+ */
+export const deleteOneNotification = async (user, notificationId) => {
+  if (!notificationId || !mongoose.Types.ObjectId.isValid(notificationId)) {
+    const err = new Error('Invalid notification identifier');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  const notification = await Notification.findOneAndDelete({
+    _id: notificationId,
+    recipient: user._id,
+  });
+
+  if (!notification) {
+    const err = new Error('Notification not found or access denied');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  return notification;
 };

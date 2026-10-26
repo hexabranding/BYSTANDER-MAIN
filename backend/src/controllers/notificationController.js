@@ -28,7 +28,11 @@ export const getUnreadCount = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: result,
+      data: {
+        ...result,
+        count: result.unreadCount,
+        unreadCount: result.unreadCount,
+      },
     });
   } catch (error) {
     next(error);
@@ -65,6 +69,43 @@ export const markAllAsRead = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Notifications marked as read',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/notifications
+ * Delete all notifications for the authenticated user.
+ */
+export const clearAllNotifications = async (req, res, next) => {
+  try {
+    const result = await notificationService.clearAllNotifications(req.user);
+
+    res.status(200).json({
+      success: true,
+      message: 'All notifications cleared',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/notifications/:id
+ * Delete a single notification for the authenticated user.
+ */
+export const deleteOneNotification = async (req, res, next) => {
+  try {
+    const notificationId = req.validatedNotificationId || req.params.id;
+    const result = await notificationService.deleteOneNotification(req.user, notificationId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification deleted',
       data: result,
     });
   } catch (error) {

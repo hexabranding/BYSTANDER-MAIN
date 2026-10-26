@@ -36,7 +36,12 @@ export const getNotifications = async (query = {}) => {
  */
 export const getUnreadCount = async () => {
   const response = await apiClient.get('/notifications/unread')
-  const count = response?.data?.count ?? response?.count ?? 0
+  const count =
+    response?.data?.unreadCount ??
+    response?.data?.count ??
+    response?.unreadCount ??
+    response?.count ??
+    0
   return { count: typeof count === 'number' ? count : 0 }
 }
 
@@ -64,11 +69,36 @@ export const markAllAsRead = async () => {
   return response?.data || { modifiedCount: 0 }
 }
 
+/**
+ * Permanently deletes all notifications for the authenticated user.
+ * @returns {Promise<{ deletedCount: number }>}
+ */
+export const clearAllNotifications = async () => {
+  const response = await apiClient.delete('/notifications')
+  return response?.data || { deletedCount: 0 }
+}
+
+/**
+ * Permanently deletes a single notification.
+ * @param {string} id - Notification MongoDB ObjectId
+ * @returns {Promise<Object>}
+ */
+export const deleteOneNotification = async (id) => {
+  if (!id || !isMongoObjectId(id)) {
+    throw new Error('A valid notification identifier (ObjectId) is required')
+  }
+
+  const response = await apiClient.delete(`/notifications/${id}`)
+  return response?.data || response
+}
+
 export const notificationService = {
   getNotifications,
   getUnreadCount,
   markOneAsRead,
   markAllAsRead,
+  clearAllNotifications,
+  deleteOneNotification,
 }
 
 export default notificationService

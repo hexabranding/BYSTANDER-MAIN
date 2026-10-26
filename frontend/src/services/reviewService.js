@@ -41,6 +41,25 @@ export const getCaregiverReviews = async (caregiverId, query = {}) => {
 }
 
 /**
+ * Retrieves reviews written by caregivers for a specific customer.
+ * @param {string} customerId - Customer user ObjectId
+ * @param {Object} [query={}] - Optional pagination { page, limit }
+ * @returns {Promise<{ reviews: Array, pagination: Object }>}
+ */
+export const getCustomerReviews = async (customerId, query = {}) => {
+  if (!customerId) {
+    throw new Error('A customer identifier is required')
+  }
+
+  const response = await apiClient.get(`/reviews/customer/${customerId}`, { params: query })
+  const data = response?.data || response
+  return {
+    reviews: data?.reviews || [],
+    pagination: data?.pagination || { total: 0, page: 1, limit: 10, pages: 1 },
+  }
+}
+
+/**
  * Caregiver replies to a review on their profile.
  * @param {string} reviewId - Review ObjectId
  * @param {string} reply - Caregiver response text
@@ -59,8 +78,8 @@ export const replyToReview = async (reviewId, reply) => {
 }
 
 /**
- * Retrieves reviews written by the currently authenticated customer.
- * @param {Object} [query={}] - Optional pagination { page, limit }
+ * Retrieves reviews written by or received by the currently authenticated user.
+ * @param {Object} [query={}] - Optional pagination { page, limit, type }
  * @returns {Promise<{ reviews: Array, pagination: Object }>}
  */
 export const getMyReviews = async (query = {}) => {
@@ -75,6 +94,7 @@ export const getMyReviews = async (query = {}) => {
 export const reviewService = {
   submitReview,
   getCaregiverReviews,
+  getCustomerReviews,
   getMyReviews,
   replyToReview,
 }

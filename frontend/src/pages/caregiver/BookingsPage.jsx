@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { CalendarCheck, CheckCircle2, ClipboardList, Clock, LogIn, LogOut, QrCode, RotateCw, Search, ShieldCheck, Wallet } from 'lucide-react'
+import { CalendarCheck, CheckCircle2, ClipboardList, Clock, LogIn, LogOut, QrCode, RotateCw, Search, ShieldCheck, Star, Wallet } from 'lucide-react'
 
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -23,7 +23,8 @@ import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/State
 import { BookingCard } from '@/components/booking/BookingCard'
 import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePrice'
 import { CheckInOutModal } from '@/components/booking/CheckInOutModal'
-import { bookingService } from '@/services'
+import { RatingModal, CUSTOMER_CRITERIA } from '@/components/booking/RatingModal'
+import { bookingService, reviewService } from '@/services'
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -48,6 +49,7 @@ export function BookingsPage() {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(null)
   const [checkFlow, setCheckFlow] = useState(null)
+  const [rateTarget, setRateTarget] = useState(null)
 
   const fetchBookings = useCallback(async () => {
     setLoading(true)
@@ -158,6 +160,40 @@ export function BookingsPage() {
     setCheckFlow(null)
   }
 
+  const canRate = (b) => b && (b.status === 'Completed' || b.status === 'completed') && !b.caregiverRating
+
+  const handleRateCustomerSubmit = async ({ criteria, average, comment }) => {
+    if (!rateTarget) return
+    const targetBookingId = rateTarget.id || rateTarget._id
+
+    try {
+      await reviewService.submitReview({
+        bookingId: targetBookingId,
+        rating: average,
+        criteria,
+        comment,
+      })
+      const ratingData = { ...criteria, average, at: new Date().toISOString(), comment }
+      setRealBookings((prev) =>
+        (prev || []).map((b) =>
+          b.id === rateTarget.id ? { ...b, caregiverRating: ratingData } : b,
+        ),
+      )
+      if (advanceBooking) {
+        advanceBooking(rateTarget.id, 'rate', ratingData)
+      }
+      toast.success('Thank you for rating this customer!', {
+        description: `Your feedback for ${getCustomerById(rateTarget.customerId)?.name || rateTarget.customerName || 'the customer'} has been recorded.`,
+      })
+    } catch (err) {
+      toast.error('Unable to submit review', {
+        description: err.message || 'Please check your connection and try again.',
+      })
+    } finally {
+      setRateTarget(null)
+    }
+  }
+
   const columns = [
     {
       key: 'id',
@@ -205,16 +241,31 @@ export function BookingsPage() {
       sortable: false,
       align: 'right',
       render: (row) => (
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={(e) => {
-            e.stopPropagation()
-            setSelected(row)
-          }}
-        >
-          View Details
-        </Button>
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {canRate(row) ? (
+            <Button
+              variant="outline"
+              size="xs"
+              icon={Star}
+              onClick={(e) => {
+                e.stopPropagation()
+                setRateTarget(row)
+              }}
+            >
+              Rate customer
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={(e) => {
+              e.stopPropagation()
+              setSelected(row)
+            }}
+          >
+            View Details
+          </Button>
+        </div>
       ),
     },
   ]
@@ -266,9 +317,22 @@ export function BookingsPage() {
                 customerName={getCustomerById(booking.customerId)?.name}
                 to={`/caregiver/bookings/${booking.id}`}
                 actions={
-                  <Button variant="primary" size="sm" className="flex-1" onClick={() => setSelected(booking)}>
-                    View details
-                  </Button>
+                  <div className="flex w-full gap-2">
+                    {canRate(booking) ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={Star}
+                        className="flex-1"
+                        onClick={() => setRateTarget(booking)}
+                      >
+                        Rate customer
+                      </Button>
+                    ) : null}
+                    <Button variant="primary" size="sm" className="flex-1" onClick={() => setSelected(booking)}>
+                      View details
+                    </Button>
+                  </div>
                 }
               />
             ))}
@@ -330,6 +394,19 @@ export function BookingsPage() {
             {selected?.status === 'In Progress' ? (
               <Button variant="primary" icon={LogOut} onClick={() => openCheckFlow(selected, 'checkout')}>
                 Check out & complete
+              </Button>
+            ) : null}
+            {selected?.status === 'Completed' && canRate(selected) ? (
+              <Button
+                variant="primary"
+                icon={Star}
+                onClick={() => {
+                  const b = selected
+                  setSelected(null)
+                  setRateTarget(b)
+                }}
+              >
+                Rate customer
               </Button>
             ) : null}
           </div>
@@ -418,6 +495,15 @@ export function BookingsPage() {
         mode={checkFlow?.mode || 'checkin'}
         booking={checkFlow?.booking || null}
         onConfirm={handleCheckConfirm}
+      />
+
+      <RatingModal
+        open={Boolean(rateTarget)}
+        onClose={() => setRateTarget(null)}
+        title="Rate this customer"
+        subjectName={rateTarget ? getCustomerById(rateTarget.customerId)?.name || rateTarget.customerName || 'the customer' : ''}
+        criteria={CUSTOMER_CRITERIA}
+        onSubmit={handleRateCustomerSubmit}
       />
     </div>
   )

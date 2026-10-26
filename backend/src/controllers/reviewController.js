@@ -25,6 +25,18 @@ export const getCaregiverReviews = async (req, res, next) => {
   }
 };
 
+export const getCustomerReviews = async (req, res, next) => {
+  try {
+    const result = await reviewService.getCustomerReviews(req.params.customerId, req.query);
+    return res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getMyReviews = async (req, res, next) => {
   try {
     const result = await reviewService.getMyCustomerReviews(req.user, req.query);
@@ -53,6 +65,7 @@ export const addCaregiverReply = async (req, res, next) => {
 export const reviewController = {
   createReview,
   getCaregiverReviews,
+  getCustomerReviews,
   getMyReviews,
   addCaregiverReply,
 };

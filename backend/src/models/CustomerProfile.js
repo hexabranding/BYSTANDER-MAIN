@@ -83,6 +83,19 @@ const customerProfileSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    rating: {
+      average: {
+        type: Number,
+        default: 5.0,
+        min: 1,
+        max: 5,
+      },
+      count: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+    },
   },
   {
     timestamps: true,

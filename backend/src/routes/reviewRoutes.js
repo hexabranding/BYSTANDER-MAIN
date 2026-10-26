@@ -7,15 +7,15 @@ const router = express.Router();
 
 /**
  * @route   POST /api/reviews
- * @desc    Submit a review for a completed booking engagement
- * @access  Private (Customer only)
+ * @desc    Submit a review for a completed booking engagement (Customer or Caregiver)
+ * @access  Private (Participants of booking)
  */
 router.post('/', authenticate, validateCreateReview, reviewController.createReview);
 
 /**
  * @route   GET /api/reviews/my
- * @desc    Retrieve reviews submitted by the authenticated customer
- * @access  Private (Customer)
+ * @desc    Retrieve reviews submitted by or received by the authenticated user
+ * @access  Private (Customer or Caregiver)
  */
 router.get('/my', authenticate, reviewController.getMyReviews);
 
@@ -25,6 +25,13 @@ router.get('/my', authenticate, reviewController.getMyReviews);
  * @access  Public
  */
 router.get('/caregiver/:caregiverId', reviewController.getCaregiverReviews);
+
+/**
+ * @route   GET /api/reviews/customer/:customerId
+ * @desc    Retrieve reviews left by caregivers for a customer
+ * @access  Public
+ */
+router.get('/customer/:customerId', reviewController.getCustomerReviews);
 
 /**
  * @route   POST /api/reviews/:id/reply

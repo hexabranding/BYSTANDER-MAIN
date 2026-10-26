@@ -29,15 +29,8 @@ import { EmptyState, ErrorState } from '@/components/common/States'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { BookingTimeline } from '@/components/common/TimelinePrice'
 import { CheckInOutModal } from '@/components/booking/CheckInOutModal'
-import { RatingModal } from '@/components/booking/RatingModal'
-import { bookingService, adaptBookingToJob, isMongoObjectId } from '@/services'
-
-const CUSTOMER_CRITERIA = [
-  { key: 'cooperation', label: 'Cooperation' },
-  { key: 'clarity', label: 'Clarity of instructions' },
-  { key: 'punctuality', label: 'Handover punctuality' },
-  { key: 'overall', label: 'Overall experience' },
-]
+import { RatingModal, CUSTOMER_CRITERIA } from '@/components/booking/RatingModal'
+import { bookingService, reviewService, adaptBookingToJob, isMongoObjectId } from '@/services'
 
 export function JobDetailsPage() {
   const { id } = useParams()
@@ -187,12 +180,33 @@ export function JobDetailsPage() {
     setCheckFlow(null)
   }
 
-  const handleRateCustomer = ({ criteria, average, comment }) => {
-    updateBooking(booking.id, {
-      caregiverRating: { ...criteria, average, at: new Date().toISOString(), comment },
-    })
+  const handleRateCustomer = async ({ criteria, average, comment }) => {
+    const targetBookingId = booking?.id || booking?._id || id
+    if (isMongoObjectId(targetBookingId)) {
+      try {
+        await reviewService.submitReview({
+          bookingId: targetBookingId,
+          rating: average,
+          criteria,
+          comment,
+        })
+      } catch (err) {
+        toast.error('Unable to submit review', {
+          description: err.message || 'Please verify the booking status and try again.',
+        })
+        return
+      }
+    }
+
+    const ratingData = { ...criteria, average, at: new Date().toISOString(), comment }
+    if (updateBooking && booking?.id) {
+      updateBooking(booking.id, { caregiverRating: ratingData })
+    }
+    if (realBooking) {
+      setRealBooking((prev) => (prev ? { ...prev, caregiverRating: ratingData } : prev))
+    }
     toast.success('Thanks for rating this customer', {
-      description: `${booking.patient?.name || 'The patient'}'s family received ${average} stars.`,
+      description: `${booking?.patient?.name || 'The patient'}'s family received ${average} stars.`,
     })
   }
 

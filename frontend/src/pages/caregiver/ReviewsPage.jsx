@@ -11,16 +11,23 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
+import { Tabs } from '@/components/common/Tabs'
 import { Modal } from '@/components/common/Modal'
 import { EmptyState, ErrorState, CardSkeleton } from '@/components/common/States'
 import { Textarea } from '@/components/forms/FormField'
 import { reviewService, bookingService, isMongoObjectId } from '@/services'
+
+const CAREGIVER_REVIEW_TABS = [
+  { id: 'received', label: 'Reviews from customers' },
+  { id: 'written', label: 'Reviews I gave customers' },
+]
 
 export function ReviewsPage() {
   useDocumentTitle('Reviews')
 
   const { user } = useAuth()
 
+  const [activeTab, setActiveTab] = useState('received')
   const [realReviews, setRealReviews] = useState([])
   const [repeatClientsCount, setRepeatClientsCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -34,57 +41,77 @@ export function ReviewsPage() {
 
   // 1. Fetch genuine reviews and booking statistics from API
   const fetchCaregiverReviews = useCallback(async () => {
-    const targetId = user?.caregiverId || user?.rawProfile?._id || user?._id || user?.id
-    if (!targetId) {
-      setLoading(false)
-      return
-    }
-
     setLoading(true)
     setError(null)
 
     try {
-      // Parallel fetch: reviews for this caregiver & bookings to compute repeat clients
-      const [reviewsRes, bookingsRes] = await Promise.all([
-        isMongoObjectId(targetId)
-          ? reviewService.getCaregiverReviews(targetId, { limit: 50 }).catch(() => ({ reviews: [] }))
-          : Promise.resolve({ reviews: [] }),
-        bookingService.getBookings({ limit: 100 }).catch(() => ({ bookings: [] })),
-      ])
-
-      const rawList = Array.isArray(reviewsRes?.reviews) ? reviewsRes.reviews : []
-      const loaded = rawList.map((r) => ({
-        id: String(r._id || r.id),
-        customerName: r.customer?.fullName || r.customerName || 'Verified Client',
-        customerAvatar: r.customer?.avatar || '',
-        rating: Number(r.rating || 5),
-        comment: r.comment || '',
-        date: r.createdAt || r.date,
-        reply: r.reply || '',
-        replyAt: r.replyAt || null,
-      }))
-      setRealReviews(loaded)
-
-      // Calculate repeat clients truthfully from booking history
-      const bookings = bookingsRes?.bookings || []
-      const customerCounts = {}
-      bookings.forEach((b) => {
-        const cId =
-          b.customerId ||
-          (typeof b.customer === 'string' ? b.customer : b.customer?._id || b.customer?.id)
-        if (cId) {
-          customerCounts[cId] = (customerCounts[cId] || 0) + 1
+      if (activeTab === 'written') {
+        const res = await reviewService.getMyReviews({ type: 'written' })
+        const rawList = Array.isArray(res?.reviews) ? res.reviews : []
+        const loaded = rawList.map((r) => ({
+          id: String(r._id || r.id),
+          customerName: r.customer?.fullName || r.customerName || 'Verified Customer',
+          customerAvatar: r.customer?.avatar || '',
+          bookingName: r.booking?.serviceName || 'Care shift',
+          rating: Number(r.rating || 5),
+          criteria: r.criteria || {},
+          comment: r.comment || '',
+          date: r.createdAt || r.date,
+          reply: '',
+          replyAt: null,
+        }))
+        setRealReviews(loaded)
+      } else {
+        const targetId = user?.caregiverId || user?.rawProfile?._id || user?._id || user?.id
+        if (!targetId) {
+          setLoading(false)
+          return
         }
-      })
-      const repeats = Object.values(customerCounts).filter((cnt) => cnt > 1).length
-      setRepeatClientsCount(repeats)
+
+        // Parallel fetch: reviews for this caregiver & bookings to compute repeat clients
+        const [reviewsRes, bookingsRes] = await Promise.all([
+          isMongoObjectId(targetId)
+            ? reviewService.getCaregiverReviews(targetId, { limit: 50 }).catch(() => ({ reviews: [] }))
+            : Promise.resolve({ reviews: [] }),
+          bookingService.getBookings({ limit: 100 }).catch(() => ({ bookings: [] })),
+        ])
+
+        const rawList = Array.isArray(reviewsRes?.reviews) ? reviewsRes.reviews : []
+        const loaded = rawList.map((r) => ({
+          id: String(r._id || r.id),
+          customerName: r.customer?.fullName || r.customerName || 'Verified Client',
+          customerAvatar: r.customer?.avatar || '',
+          bookingName: r.booking?.serviceName || 'Care visit',
+          rating: Number(r.rating || 5),
+          criteria: r.criteria || {},
+          comment: r.comment || '',
+          date: r.createdAt || r.date,
+          reply: r.reply || '',
+          replyAt: r.replyAt || null,
+        }))
+        setRealReviews(loaded)
+
+        // Calculate repeat clients truthfully from booking history
+        const bookings = bookingsRes?.bookings || []
+        const customerCounts = {}
+        bookings.forEach((b) => {
+          const cId =
+            b.customerId ||
+            (typeof b.customer === 'string' ? b.customer : b.customer?._id || b.customer?.id)
+          if (cId) {
+            customerCounts[cId] = (customerCounts[cId] || 0) + 1
+          }
+        })
+        const repeats = Object.values(customerCounts).filter((cnt) => cnt > 1).length
+        setRepeatClientsCount(repeats)
+      }
     } catch (err) {
       setError(err?.message || 'Failed to load verified reviews')
       setRealReviews([])
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, activeTab])
 
   useEffect(() => {
     fetchCaregiverReviews()
@@ -182,11 +209,15 @@ export function ReviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reviews & ratings"
-        subtitle="What customers say after every shift — and how your rating stacks up across the platform."
+        subtitle={
+          activeTab === 'received'
+            ? 'What customers say after every shift — and how your rating stacks up across the platform.'
+            : 'Ratings and feedback you have submitted for customers after completing shifts.'
+        }
         meta={
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted">
-              {myReviews.length} review{myReviews.length === 1 ? '' : 's'} collected
+              {myReviews.length} {activeTab === 'received' ? 'review' : 'review'}{myReviews.length === 1 ? '' : 's'}
             </span>
             <Button
               variant="ghost"
@@ -199,6 +230,16 @@ export function ReviewsPage() {
             </Button>
           </div>
         }
+      />
+
+      <Tabs
+        tabs={CAREGIVER_REVIEW_TABS.map((t) => ({ ...t, count: t.id === activeTab ? myReviews.length : undefined }))}
+        active={activeTab}
+        onChange={(tabId) => {
+          setActiveTab(tabId)
+          setQuery('')
+          setRatingFilter('All')
+        }}
       />
 
       {/* Aggregate Rating Summary Card */}
@@ -305,7 +346,7 @@ export function ReviewsPage() {
                       <div>
                         <p className="font-display text-sm font-bold text-ink">{review.customerName}</p>
                         <p className="text-xs text-muted">
-                          {formatDate(review.date, { long: true })}
+                          {review.bookingName ? `${review.bookingName} · ` : ''}{formatDate(review.date, { long: true })}
                         </p>
                       </div>
                     </div>
@@ -316,32 +357,45 @@ export function ReviewsPage() {
                     {review.comment}
                   </p>
 
-                  {review.reply ? (
-                    <div className="rounded-xl border border-primary-200 bg-mint-50 p-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-primary-700">
-                          Your reply
-                        </p>
-                        {review.replyAt ? (
-                          <span className="text-[11px] text-faint">
-                            {formatDate(review.replyAt)}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1.5 text-sm leading-relaxed text-primary-900/90">
-                        {review.reply}
-                      </p>
+                  {review.criteria && typeof review.criteria === 'object' && Object.keys(review.criteria).length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(review.criteria).map(([k, v]) => (
+                        <span key={k} className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-ink-soft">
+                          <span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>:
+                          <span className="font-bold text-amber-600">{v}★</span>
+                        </span>
+                      ))}
                     </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon={MessageSquareReply}
-                      onClick={() => openReply(review)}
-                    >
-                      Reply to this review
-                    </Button>
-                  )}
+                  ) : null}
+
+                  {activeTab === 'received' ? (
+                    review.reply ? (
+                      <div className="rounded-xl border border-primary-200 bg-mint-50 p-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-primary-700">
+                            Your reply
+                          </p>
+                          {review.replyAt ? (
+                            <span className="text-[11px] text-faint">
+                              {formatDate(review.replyAt)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1.5 text-sm leading-relaxed text-primary-900/90">
+                          {review.reply}
+                        </p>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={MessageSquareReply}
+                        onClick={() => openReply(review)}
+                      >
+                        Reply to this review
+                      </Button>
+                    )
+                  ) : null}
                 </CardBody>
               </Card>
             )
@@ -351,8 +405,12 @@ export function ReviewsPage() {
         <Card>
           <EmptyState
             icon={Star}
-            title="No verified reviews yet"
-            description="Reviews and ratings from families will appear here after you complete shifts and clients submit feedback."
+            title={activeTab === 'written' ? "You haven't reviewed any customers yet" : "No verified reviews yet"}
+            description={
+              activeTab === 'written'
+                ? "Once a shift completes, rate your customer from the bookings page to help keep the platform trustworthy."
+                : "Reviews and ratings from families will appear here after you complete shifts and clients submit feedback."
+            }
           />
         </Card>
       ) : (

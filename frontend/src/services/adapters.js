@@ -566,6 +566,8 @@ export const adaptBooking = (raw) => {
     timeline: Array.isArray(raw.timeline) && raw.timeline.length > 0
       ? raw.timeline
       : buildBookingTimeline(raw, normalizedStatus),
+    caregiverRating: raw.caregiverRating || null,
+    customerRating: raw.customerRating || null,
   }
 }
 
@@ -589,6 +591,7 @@ export const adaptCustomerProfile = (raw) => {
     phone: user.phone || '',
     avatar: user.avatar || '',
     role: 'customer',
+    rating: raw.rating || { average: 5.0, count: 0 },
     defaultAddress: raw.defaultAddress || {
       addressLine: user.address || '',
       city: user.city || '',

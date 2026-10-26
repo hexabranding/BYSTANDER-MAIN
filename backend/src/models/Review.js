@@ -23,6 +23,30 @@ const ratingCriteriaSchema = new mongoose.Schema(
       max: [5, 'Rating cannot exceed 5'],
       default: 5,
     },
+    communication: {
+      type: Number,
+      min: [1, 'Rating must be at least 1'],
+      max: [5, 'Rating cannot exceed 5'],
+      default: 5,
+    },
+    cooperation: {
+      type: Number,
+      min: [1, 'Rating must be at least 1'],
+      max: [5, 'Rating cannot exceed 5'],
+      default: 5,
+    },
+    clarity: {
+      type: Number,
+      min: [1, 'Rating must be at least 1'],
+      max: [5, 'Rating cannot exceed 5'],
+      default: 5,
+    },
+    workingConditions: {
+      type: Number,
+      min: [1, 'Rating must be at least 1'],
+      max: [5, 'Rating cannot exceed 5'],
+      default: 5,
+    },
     overall: {
       type: Number,
       min: [1, 'Rating must be at least 1'],
@@ -30,11 +54,12 @@ const ratingCriteriaSchema = new mongoose.Schema(
       default: 5,
     },
   },
-  { _id: false },
+  { _id: false, strict: false },
 );
 
 /**
- * Review Schema — Represents formal feedback left by an authenticated customer
+ * Review Schema — Represents formal feedback left by an authenticated participant
+ * (Customer reviewing Caretaker, or Caretaker reviewing Customer)
  * following a completed booking engagement.
  */
 const reviewSchema = new mongoose.Schema(
@@ -43,7 +68,18 @@ const reviewSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
       required: [true, 'Booking reference is required'],
-      unique: true,
+      index: true,
+    },
+    reviewerRole: {
+      type: String,
+      enum: ['customer', 'caregiver'],
+      default: 'customer',
+      required: true,
+      index: true,
+    },
+    reviewer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
       index: true,
     },
     customer: {
@@ -102,10 +138,14 @@ const reviewSchema = new mongoose.Schema(
   },
 );
 
-// Indexes for caregiver discovery and profile performance
-reviewSchema.index({ caregiver: 1, isPublic: 1, createdAt: -1 });
-reviewSchema.index({ caregiverUser: 1, createdAt: -1 });
-reviewSchema.index({ customer: 1, createdAt: -1 });
+// Compound unique index ensuring only 1 review per role per booking
+reviewSchema.index({ booking: 1, reviewerRole: 1 }, { unique: true });
+
+// Indexes for caregiver and customer review discovery
+reviewSchema.index({ caregiver: 1, reviewerRole: 1, isPublic: 1, createdAt: -1 });
+reviewSchema.index({ caregiverUser: 1, reviewerRole: 1, createdAt: -1 });
+reviewSchema.index({ customer: 1, reviewerRole: 1, createdAt: -1 });
+reviewSchema.index({ reviewer: 1, createdAt: -1 });
 
 export const Review = mongoose.model('Review', reviewSchema);
 export default Review;

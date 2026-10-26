@@ -28,11 +28,10 @@ export const validateCreateReview = (req, res, next) => {
 
   let sanitizedCriteria = null;
   if (criteria && typeof criteria === 'object') {
-    const validKeys = ['serviceQuality', 'behaviour', 'punctuality', 'overall'];
     sanitizedCriteria = {};
-    for (const key of validKeys) {
-      if (criteria[key] !== undefined && criteria[key] !== null) {
-        const score = Number(criteria[key]);
+    for (const [key, val] of Object.entries(criteria)) {
+      if (val !== undefined && val !== null) {
+        const score = Number(val);
         if (isNaN(score) || score < 1 || score > 5) {
           return res.status(400).json({
             error: 'ValidationError',
@@ -40,8 +39,6 @@ export const validateCreateReview = (req, res, next) => {
           });
         }
         sanitizedCriteria[key] = Math.round(score);
-      } else {
-        sanitizedCriteria[key] = finalRating ? Math.round(finalRating) : 5;
       }
     }
 

@@ -12,6 +12,13 @@ export const DEFAULT_CRITERIA = [
   { key: 'overall', label: 'Overall experience' },
 ]
 
+export const CUSTOMER_CRITERIA = [
+  { key: 'cooperation', label: 'Cooperation & Respect' },
+  { key: 'clarity', label: 'Clarity of instructions' },
+  { key: 'punctuality', label: 'Handover & Schedule punctuality' },
+  { key: 'overall', label: 'Overall experience' },
+]
+
 function StarRow({ value, onChange, label }) {
   return (
     <div className="flex items-center justify-between gap-4">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageSquare, Star, ThumbsUp } from 'lucide-react'
+import { Award, MessageSquare, Star, ThumbsUp } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -11,14 +11,21 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
+import { Tabs } from '@/components/common/Tabs'
 import { EmptyState, ErrorState, CardSkeleton } from '@/components/common/States'
 import { reviewService } from '@/services/reviewService'
+
+const REVIEW_TABS = [
+  { id: 'written', label: "Reviews I've written" },
+  { id: 'received', label: 'Feedback from caretakers' },
+]
 
 export function ReviewsPage() {
   useDocumentTitle('My reviews')
 
   const { user } = useAuth()
   const { caregivers, bookings } = useData()
+  const [activeTab, setActiveTab] = useState('written')
   const [realReviews, setRealReviews] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -29,7 +36,7 @@ export function ReviewsPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await reviewService.getMyReviews()
+      const res = await reviewService.getMyReviews({ type: activeTab })
       setRealReviews(res.reviews || [])
     } catch (err) {
       setError(err?.message || 'Unable to load reviews from server')
@@ -37,7 +44,7 @@ export function ReviewsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeTab])
 
   useEffect(() => {
     fetchReviews()
@@ -85,25 +92,39 @@ export function ReviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="My reviews"
-        subtitle="Every rating you have left after a care visit, and what happened next."
+        subtitle={
+          activeTab === 'written'
+            ? 'Every rating you have left after a care visit, and what happened next.'
+            : 'Ratings and feedback caretakers left about you after completing shifts.'
+        }
         meta={
           <span className="text-sm text-muted">
-            {mine.length} review{mine.length === 1 ? '' : 's'} written
+            {mine.length} {activeTab === 'written' ? 'review' : 'caretaker review'}{mine.length === 1 ? '' : 's'}
           </span>
         }
       />
 
+      <Tabs
+        tabs={REVIEW_TABS.map((t) => ({ ...t, count: t.id === activeTab ? mine.length : undefined }))}
+        active={activeTab}
+        onChange={(tabId) => {
+          setActiveTab(tabId)
+          setQuery('')
+          setRatingFilter('All')
+        }}
+      />
+
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
-          label="Average rating given"
+          label={activeTab === 'written' ? 'Average rating given' : 'Average rating from caretakers'}
           value={mine.length ? avg.toFixed(1) : '—'}
           icon={Star}
           tone="accent"
-          hint="Across all your reviews"
+          hint={activeTab === 'written' ? 'Across all your reviews' : 'Rated by verified caretakers'}
           delay={0}
         />
         <StatCard
-          label="Would recommend"
+          label={activeTab === 'written' ? 'Would recommend' : 'Positive experiences'}
           value={mine.length ? `${recommendPct}%` : '—'}
           icon={ThumbsUp}
           tone="success"
@@ -111,11 +132,11 @@ export function ReviewsPage() {
           delay={0.05}
         />
         <StatCard
-          label="Bookings reviewed"
-          value={`${mine.length} / ${completedBookingsCount}`}
-          icon={MessageSquare}
+          label={activeTab === 'written' ? 'Bookings reviewed' : 'Visits rated'}
+          value={activeTab === 'written' ? `${mine.length} / ${completedBookingsCount}` : `${mine.length} / ${completedBookingsCount}`}
+          icon={activeTab === 'written' ? MessageSquare : Award}
           tone="primary"
-          hint="Completed visits rated"
+          hint={activeTab === 'written' ? 'Completed visits rated' : 'Visits with caretaker review'}
           delay={0.1}
         />
       </div>
@@ -204,6 +225,17 @@ export function ReviewsPage() {
                     {review.comment}
                   </p>
 
+                  {review.criteria && typeof review.criteria === 'object' && Object.keys(review.criteria).length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(review.criteria).map(([k, v]) => (
+                        <span key={k} className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-ink-soft">
+                          <span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>:
+                          <span className="font-bold text-amber-600">{v}★</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
                   {review.reply ? (
                     <div className="rounded-xl border border-primary-200 bg-mint-50 p-4">
                       <p className="text-[11px] font-bold uppercase tracking-wider text-primary-700">
@@ -238,11 +270,19 @@ export function ReviewsPage() {
         <Card>
           <EmptyState
             icon={Star}
-            title={mine.length ? 'No reviews match' : 'You have not reviewed a visit yet'}
+            title={
+              mine.length
+                ? 'No reviews match'
+                : activeTab === 'received'
+                  ? 'No reviews from caretakers yet'
+                  : 'You have not reviewed a visit yet'
+            }
             description={
               mine.length
                 ? 'Try a different search term or rating filter.'
-                : 'Once a booking is marked Completed you can rate your caretaker from the booking page. Reviews help other families choose with confidence.'
+                : activeTab === 'received'
+                  ? 'Once a caretaker completes a shift, their feedback and ratings about their visit experience will appear here.'
+                  : 'Once a booking is marked Completed you can rate your caretaker from the booking page. Reviews help other families choose with confidence.'
             }
             action={
               mine.length ? (

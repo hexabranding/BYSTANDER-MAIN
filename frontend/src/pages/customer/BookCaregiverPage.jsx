@@ -36,7 +36,6 @@ import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
-import { CaregiverCard } from '@/components/caregiver/CaregiverCard'
 import { RatingStars } from '@/components/common/RatingStars'
 import { CardSkeleton } from '@/components/common/States'
 import { bookingService, servicesService, caregiversService, isMongoObjectId } from '@/services'
@@ -234,13 +233,6 @@ export function BookCaregiverPage() {
   const platformFee = PLATFORM_FEE
   const tax = Math.round((subtotal + platformFee) * GST_RATE)
   const total = subtotal + platformFee + tax
-
-  const stripCaregivers = useMemo(() => {
-    const pool = form.service
-      ? availableCaregivers.filter((c) => c.services?.includes(form.service.name) && c.verified)
-      : availableCaregivers.filter((c) => c.verified)
-    return (pool.length ? pool : availableCaregivers).slice(0, 6)
-  }, [availableCaregivers, form.service])
 
   const isStepValid = (stepId) => {
     switch (stepId) {
@@ -1111,22 +1103,6 @@ export function BookCaregiverPage() {
           </div>
         </aside>
       </div>
-
-      {!matchedCaregiver && currentStepId === 'service' && stripCaregivers.length > 0 ? (
-        <div>
-          <h3 className="font-display text-base font-bold text-ink">Matching caretakers</h3>
-          <p className="mt-0.5 text-sm text-muted">
-            {form.service
-              ? `Verified professionals who offer ${form.service.name}.`
-              : 'Verified professionals available in your city.'}
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {stripCaregivers.map((cg) => (
-              <CaregiverCard key={cg.id} caregiver={cg} actionLabel="View profile" />
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

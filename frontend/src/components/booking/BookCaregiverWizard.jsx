@@ -22,6 +22,7 @@ import {
   Utensils,
   X,
   LogIn,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -93,6 +94,23 @@ const TIME_OPTIONS = Array.from({ length: 31 }, (_, i) => {
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+const getNextUpcomingTime = () => {
+  const now = new Date(Date.now() + 20 * 60 * 1000)
+  const mins = now.getMinutes()
+  const roundedMins = mins <= 30 ? 30 : 60
+  if (roundedMins === 60) {
+    now.setHours(now.getHours() + 1, 0, 0, 0)
+  } else {
+    now.setMinutes(30, 0, 0)
+  }
+  const hours = String(now.getHours()).padStart(2, '0')
+  const m = String(now.getMinutes()).padStart(2, '0')
+  return {
+    date: now.toISOString().slice(0, 10),
+    startTime: `${hours}:${m}`,
+  }
+}
+
 export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -150,6 +168,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   const patientInfo = user?.patientInfo
   const preselectedId = searchParams.get('caregiver') || ''
 
+  const [isUrgent, setIsUrgent] = useState(() => searchParams.get('urgent') === 'true')
   const [step, setStep] = useState(0)
   const [maxStep, setMaxStep] = useState(0)
   const [terms, setTerms] = useState(false)
@@ -169,7 +188,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     patientAge: patientInfo?.age ? String(patientInfo.age) : '',
     relation: patientInfo?.relation || 'Mother',
     requirements: patientInfo?.condition || '',
-    careType: '',
+    careType: 'Home Care',
     address: user?.address || '',
     city: user?.city || CITIES[0],
     area: user?.area || '',
@@ -179,6 +198,51 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     instructions: '',
     extras: [],
   }))
+
+  const toggleUrgentMode = () => {
+    setIsUrgent((prev) => {
+      const next = !prev
+      if (next) {
+        const upcoming = getNextUpcomingTime()
+        setForm((f) => ({
+          ...f,
+          service: f.service || availableServices[0] || null,
+          date: f.date || upcoming.date,
+          startTime: f.startTime || upcoming.startTime,
+          hours: f.hours || 6,
+          careType: f.careType || 'Home Care',
+          instructions: f.instructions || 'Urgent on-demand broadcast',
+        }))
+        setTerms(true)
+        setStep(0)
+        setMaxStep(0)
+        toast.info('Urgent 2-Step Booking Activated', {
+          description: 'Step 1: Patient details · Step 2: Care setting & address.',
+        })
+      } else {
+        setStep(0)
+        setMaxStep(0)
+        toast.info('Switched to Standard 7-Step Booking')
+      }
+      return next
+    })
+  }
+
+  useEffect(() => {
+    if (searchParams.get('urgent') === 'true' && availableServices.length > 0) {
+      const upcoming = getNextUpcomingTime()
+      setForm((f) => ({
+        ...f,
+        service: f.service || availableServices[0],
+        date: f.date || upcoming.date,
+        startTime: f.startTime || upcoming.startTime,
+        hours: f.hours || 6,
+        careType: f.careType || 'Home Care',
+        instructions: f.instructions || 'Urgent on-demand broadcast',
+      }))
+      setTerms(true)
+    }
+  }, [searchParams, availableServices])
 
   // Rehydrate pending booking if saved prior to login
   useEffect(() => {
@@ -218,9 +282,15 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     return null
   }, [availableCaregivers, selectedCaregiverId, preselectedId])
 
-  // Direct On-Demand Broadcast Flow:
-  const steps = useMemo(
-    () => [
+  // Direct On-Demand Broadcast Flow (2 steps in urgent mode, 7 in standard):
+  const steps = useMemo(() => {
+    if (isUrgent) {
+      return [
+        { id: 'patient', label: 'Patient' },
+        { id: 'setting', label: 'Care setting' },
+      ]
+    }
+    return [
       { id: 'service', label: 'Care service' },
       { id: 'patient', label: 'Patient' },
       { id: 'setting', label: 'Care setting' },
@@ -228,19 +298,19 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       { id: 'instructions', label: 'Directives' },
       { id: 'price', label: 'Pricing' },
       { id: 'confirm', label: 'Confirm & Broadcast' },
-    ],
-    [],
-  )
+    ]
+  }, [isUrgent])
 
   const currentStep = steps[step] || steps[0]
-  const currentStepId = currentStep?.id || 'service'
+  const currentStepId = currentStep?.id || (isUrgent ? 'patient' : 'service')
 
   const rate =
     form.service?.baseHourlyRate ||
     form.service?.startingPrice ||
     matchedCaregiver?.hourlyRate ||
+    availableServices[0]?.baseHourlyRate ||
     499
-  const hours = Number(form.hours) || 0
+  const hours = Number(form.hours) || (isUrgent ? 6 : 0)
   const subtotal = rate * hours
   const platformFee = PLATFORM_FEE
   const tax = Math.round((subtotal + platformFee) * GST_RATE)
@@ -251,9 +321,18 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       case 'service':
         return Boolean(form.service)
       case 'patient':
-        return Boolean(form.patientName.trim()) && Number(form.patientAge) > 0
-      case 'setting':
-        return Boolean(form.careType) && Boolean(form.address.trim()) && Boolean(form.city) && Boolean(form.area.trim())
+        return Boolean(form.patientName?.trim()) && Number(form.patientAge) > 0
+      case 'setting': {
+        const settingValid =
+          Boolean(form.careType) &&
+          Boolean(form.address?.trim()) &&
+          Boolean(form.city) &&
+          Boolean(form.area?.trim())
+        if (isUrgent) {
+          return settingValid && terms
+        }
+        return settingValid
+      }
       case 'schedule':
         return Boolean(form.date) && Boolean(form.startTime) && Number(form.hours) > 0
       case 'instructions':
@@ -312,12 +391,18 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   }
 
   const handleConfirm = async () => {
-    if (!form.service || submitting) return
+    let activeService = form.service
+    if (!activeService && availableServices.length > 0) {
+      activeService = availableServices[0]
+      setForm((f) => ({ ...f, service: availableServices[0] }))
+    }
+
+    if (!activeService || submitting) return
 
     // Guest Authentication Guard
     if (!user) {
       try {
-        sessionStorage.setItem('pending_booking_broadcast', JSON.stringify(form))
+        sessionStorage.setItem('pending_booking_broadcast', JSON.stringify({ ...form, service: activeService }))
       } catch (_) {}
       toast.info('Please sign in to broadcast your request', {
         description: 'Your booking requirements are saved and will be restored immediately after sign-in.',
@@ -337,15 +422,15 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
     try {
       // 1. Resolve Service ObjectId
-      let serviceId = form.service?._id || form.service?.id
+      let serviceId = activeService?._id || activeService?.id
       if (!isMongoObjectId(serviceId)) {
         const found =
           availableServices.find(
             (s) =>
               isMongoObjectId(s._id || s.id) &&
-              (s.name === form.service?.name ||
-                s.slug === form.service?.slug ||
-                s.name?.toLowerCase() === form.service?.name?.toLowerCase()),
+              (s.name === activeService?.name ||
+                s.slug === activeService?.slug ||
+                s.name?.toLowerCase() === activeService?.name?.toLowerCase()),
           ) || availableServices.find((s) => isMongoObjectId(s._id || s.id))
         if (found) {
           serviceId = found._id || found.id
@@ -357,23 +442,27 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       }
 
       // 2. Temporal bounds
-      if (!form.date || !form.startTime) {
-        throw new Error('Please select both a service date and start time.')
+      let targetDate = form.date
+      let targetStartTime = form.startTime
+
+      if (isUrgent || !targetDate || !targetStartTime) {
+        const upcoming = getNextUpcomingTime()
+        targetDate = targetDate || upcoming.date
+        targetStartTime = targetStartTime || upcoming.startTime
       }
 
-      const [startHour, startMin] = (form.startTime || '08:00').split(':').map(Number)
-      const [year, month, day] = form.date.split('-').map(Number)
-      const localStartDate = new Date(year, month - 1, day, startHour, startMin, 0)
+      const [startHour, startMin] = (targetStartTime || '08:00').split(':').map(Number)
+      const [year, month, day] = targetDate.split('-').map(Number)
+      let localStartDate = new Date(year, month - 1, day, startHour, startMin, 0)
 
-      if (isNaN(localStartDate.getTime())) {
-        throw new Error('Invalid start date or time format.')
+      if (isNaN(localStartDate.getTime()) || localStartDate.getTime() <= Date.now()) {
+        const upcoming = getNextUpcomingTime()
+        const [uH, uM] = upcoming.startTime.split(':').map(Number)
+        const [uY, uMo, uD] = upcoming.date.split('-').map(Number)
+        localStartDate = new Date(uY, uMo - 1, uD, uH, uM, 0)
       }
 
-      if (localStartDate.getTime() <= Date.now()) {
-        throw new Error('Scheduled start time must be in the future. Please pick an upcoming date or time.')
-      }
-
-      const hoursNum = Math.max(0.5, Math.min(24, Number(form.hours) || 1))
+      const hoursNum = Math.max(0.5, Math.min(24, Number(form.hours) || (isUrgent ? 6 : 1)))
       const localEndDate = new Date(localStartDate.getTime() + hoursNum * 60 * 60 * 1000)
 
       // Broadcast payload: No caregiverId required. Broadcasts to all active caretakers!
@@ -393,11 +482,12 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           age: Number(form.patientAge) || 0,
           gender: 'Other',
           specialInstructions: [
-            form.instructions.trim() ? `Instructions: ${form.instructions.trim()}` : '',
-            form.extras.length > 0 ? `Care Directives: ${form.extras.join(', ')}` : '',
+            isUrgent ? 'URGENT DISPATCH PROTOCOL' : '',
+            form.instructions?.trim() ? `Instructions: ${form.instructions.trim()}` : '',
+            form.extras?.length > 0 ? `Care Directives: ${form.extras.join(', ')}` : '',
           ]
             .filter(Boolean)
-            .join(' · ') || 'Standard shift protocol',
+            .join(' · ') || (isUrgent ? 'Urgent shift protocol' : 'Standard shift protocol'),
         },
       }
 
@@ -533,29 +623,70 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
   return (
     <div className={cn('space-y-6', className)}>
-      {/* Live Broadcast Feature Notice */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-primary-200 bg-mint-50/70 p-4 shadow-sm sm:p-5">
+      {/* Live Broadcast Feature Notice with Urgent Mode Toggle */}
+      <div
+        className={cn(
+          'flex flex-wrap items-center justify-between gap-4 rounded-card border p-4 shadow-sm sm:p-5 transition-colors duration-200',
+          isUrgent
+            ? 'border-red-300 bg-red-50/80 shadow-md ring-1 ring-red-400/40'
+            : 'border-primary-200 bg-mint-50/70',
+        )}
+      >
         <div className="flex items-center gap-3.5">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary-700 font-display text-base font-extrabold text-white shadow-sm">
-            <Sparkles className="h-6 w-6 text-white" />
+          <span
+            className={cn(
+              'grid h-12 w-12 shrink-0 place-items-center rounded-full font-display text-base font-extrabold text-white shadow-sm transition',
+              isUrgent ? 'bg-red-600' : 'bg-primary-700',
+            )}
+          >
+            {isUrgent ? <Zap className="h-6 w-6 text-white animate-pulse" /> : <Sparkles className="h-6 w-6 text-white" />}
           </span>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-display text-base font-bold text-ink">On-Demand Caretaker Dispatch</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-bold text-success-700 border border-success-200">
-                <ShieldCheck className="h-3 w-3" /> Live Broadcast
+              <span className="font-display text-base font-bold text-ink">
+                {isUrgent ? 'Urgent Caretaker Dispatch · Fast Track' : 'On-Demand Caretaker Dispatch'}
+              </span>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold border',
+                  isUrgent
+                    ? 'bg-red-100 text-red-800 border-red-300'
+                    : 'bg-success-50 text-success-700 border-success-200',
+                )}
+              >
+                {isUrgent ? <Zap className="h-3 w-3 text-red-600" /> : <ShieldCheck className="h-3 w-3" />}
+                {isUrgent ? '2-Step Urgent Mode' : 'Live Broadcast'}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-muted">
-              Your request will be sent to all qualified caretakers across the app. The first available caretaker will accept and be assigned immediately.
+              {isUrgent
+                ? 'Quick 2-step booking (Patient details → Care setting). Your urgent request will be broadcasted immediately.'
+                : 'Your request will be sent to all qualified caretakers across the app. The first available caretaker will accept and be assigned immediately.'}
             </p>
           </div>
         </div>
-        <div className="text-left sm:text-right">
-          <span className="block text-[10px] font-bold uppercase tracking-wider text-faint">Hourly Rate</span>
-          <span className="font-display text-base font-extrabold text-primary-800">
-            {formatCurrency(rate)}/hr
-          </span>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleUrgentMode}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition shadow-xs cursor-pointer',
+              isUrgent
+                ? 'border-slate-300 bg-white text-ink hover:bg-slate-100'
+                : 'border-red-400 bg-red-600 text-white hover:bg-red-700 shadow-sm',
+            )}
+          >
+            <Zap className={cn('h-4 w-4', isUrgent ? 'text-red-600' : 'text-white')} />
+            {isUrgent ? 'Switch to Standard (7 Steps)' : '⚡ Urgent Booking (2 Steps)'}
+          </button>
+
+          <div className="text-left sm:text-right border-l border-line pl-3">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-faint">Hourly Rate</span>
+            <span className="font-display text-base font-extrabold text-primary-800">
+              {formatCurrency(rate)}/hr
+            </span>
+          </div>
         </div>
       </div>
 
@@ -780,6 +911,41 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                         onChange={(e) => set({ address: e.target.value })}
                       />
                     </FormField>
+
+                    {isUrgent ? (
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50/70 p-3.5 text-xs text-red-950">
+                          <Zap className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+                          <div>
+                            <p className="font-bold text-red-900">Urgent Dispatch Protocol Active</p>
+                            <p className="mt-0.5 text-red-800 leading-relaxed">
+                              Your request will be instantly broadcasted to all available caretakers in {form.city || 'your area'} for an immediate 6-hour shift.
+                            </p>
+                          </div>
+                        </div>
+
+                        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={terms}
+                            onChange={(e) => setTerms(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-line-strong accent-[#0F766E]"
+                          />
+                          <span className="text-xs leading-relaxed text-muted">
+                            I agree to the Bystander{' '}
+                            <Link
+                              to="/legal/terms"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-semibold text-primary-700 underline decoration-primary-300 underline-offset-2 hover:text-primary-800"
+                            >
+                              terms of service
+                            </Link>{' '}
+                            and escrow holding policy.
+                          </span>
+                        </label>
+                      </div>
+                    ) : null}
                   </CardBody>
                 </Card>
               ) : null}
@@ -1038,16 +1204,17 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
             </Button>
             {step < steps.length - 1 ? (
               <Button onClick={goNext} disabled={!isCurrentStepValid} iconRight={ArrowRight}>
-                Next
+                {isUrgent ? 'Next: Care setting' : 'Next'}
               </Button>
             ) : (
               <Button
                 onClick={handleConfirm}
-                disabled={!terms || submitting}
+                disabled={(!terms && !isUrgent) || (!isCurrentStepValid && isUrgent) || submitting}
                 loading={submitting}
-                icon={CheckCircle2}
+                icon={isUrgent ? Zap : CheckCircle2}
+                className={cn(isUrgent && 'bg-red-600 hover:bg-red-700 text-white font-bold shadow-md')}
               >
-                Confirm & broadcast request
+                {isUrgent ? '⚡ Confirm & broadcast urgent request' : 'Confirm & broadcast request'}
               </Button>
             )}
           </div>
@@ -1057,16 +1224,19 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         <aside className="lg:col-span-4">
           <div className="space-y-4 lg:sticky lg:top-6">
             <Card>
-              <CardHeader title="Price summary" subtitle="Live estimate" />
+              <CardHeader title="Price summary" subtitle={isUrgent ? 'Urgent dispatch estimate' : 'Live estimate'} />
               <CardBody className="space-y-3">
-                <Row label="Service" value={form.service?.name || 'Not selected'} />
+                {isUrgent ? (
+                  <Row label="Booking mode" value="Urgent 2-Step (Immediate)" />
+                ) : null}
+                <Row label="Service" value={form.service?.name || (isUrgent ? 'On-Demand Caretaker Dispatch' : 'Not selected')} />
                 <Row
                   label="Caretaker rate"
-                  value={form.service ? `${formatCurrency(rate)} / hour` : '—'}
+                  value={form.service || isUrgent ? `${formatCurrency(rate)} / hour` : '—'}
                 />
-                <Row label="Duration" value={form.hours ? `${form.hours} hours` : '—'} />
+                <Row label="Duration" value={`${form.hours || (isUrgent ? 6 : 0)} hours`} />
                 <Row label="Care setting" value={form.careType || '—'} />
-                <Row label="Date" value={form.date ? formatDate(form.date) : '—'} />
+                <Row label="Date" value={form.date ? `${formatDate(form.date)}${isUrgent ? ' (Immediate)' : ''}` : (isUrgent ? 'Today' : '—')} />
                 {form.extras?.length ? (
                   <div className="border-t border-line pt-2">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-faint">Directives</p>

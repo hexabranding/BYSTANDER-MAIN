@@ -647,7 +647,7 @@ export const verifyGuestOtp = async (email, otp, password, mode = 'any') => {
       defaultAddress: {
         addressLine: '',
         area: '',
-        city: 'Mumbai, MH',
+        city: '',
         pincode: '',
       },
       patients: [],

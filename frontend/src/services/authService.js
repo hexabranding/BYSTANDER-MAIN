@@ -68,7 +68,7 @@ export const normalizeUser = (user, profile = {}) => {
 
   // Address assembly
   let formattedAddress = '';
-  if (prof.defaultAddress) {
+  if (prof.defaultAddress && (prof.defaultAddress.addressLine || prof.defaultAddress.addressLine1)) {
     formattedAddress = [
       prof.defaultAddress.addressLine || prof.defaultAddress.addressLine1,
       prof.defaultAddress.area || prof.defaultAddress.addressLine2,
@@ -77,7 +77,7 @@ export const normalizeUser = (user, profile = {}) => {
     ]
       .filter(Boolean)
       .join(', ');
-  } else if (prof.address) {
+  } else if (prof.address && !prof.address.includes('Mumbai, MH')) {
     formattedAddress = prof.address;
   }
 

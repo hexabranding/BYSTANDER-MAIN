@@ -193,9 +193,14 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     relation: patientInfo?.relation || 'Mother',
     requirements: patientInfo?.condition || '',
     careType: 'Home Care',
-    address: user?.address || '',
-    city: user?.city || CITIES[0],
-    area: user?.area || '',
+    address:
+      user?.address &&
+      user?.address !== user?.city &&
+      !user?.address.includes('Mumbai, MH')
+        ? user.address
+        : '',
+    city: user?.city && user?.city !== 'Mumbai, MH' && user?.city !== 'Mumbai' ? user.city : '',
+    area: user?.area && user?.area !== 'Powai' ? user.area : '',
     date: '',
     startTime: '08:00',
     hours: 6,
@@ -397,149 +402,206 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [locationCaptured, setLocationCaptured] = useState(null)
 
-  const handleChooseCurrentLocation = () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      toast.error('Geolocation is not supported by your browser', {
-        description: 'Please enter your address manually in the fields below.',
-      })
-      return
-    }
-
+  const handleChooseCurrentLocation = async () => {
     setDetectingLocation(true)
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null
-
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-            {
-              headers: {
-                'Accept-Language': 'en',
-              },
-            },
-          )
-
-          if (res.ok) {
-            const data = await res.json()
-            const addr = data.address || {}
-
-            const rawCity =
-              addr.city || addr.town || addr.city_district || addr.suburb || addr.state_district || ''
-            const rawState = addr.state || ''
-
-            let matchedCity = CITIES.find((c) => {
-              const base = c.split(',')[0].toLowerCase()
-              return (
-                rawCity.toLowerCase().includes(base) ||
-                base.includes(rawCity.toLowerCase()) ||
-                (base === 'bengaluru' && rawCity.toLowerCase().includes('bangalore')) ||
-                (base === 'mumbai' &&
-                  (rawCity.toLowerCase().includes('bombay') || rawCity.toLowerCase().includes('thane'))) ||
-                (base === 'delhi ncr' &&
-                  (rawCity.toLowerCase().includes('delhi') ||
-                    rawCity.toLowerCase().includes('noida') ||
-                    rawCity.toLowerCase().includes('gurugram') ||
-                    rawCity.toLowerCase().includes('gurgaon')))
-              )
+    // Fast browser Wi-Fi/GPS check
+    const getBrowserCoords = () =>
+      new Promise((resolve) => {
+        if (typeof navigator === 'undefined' || !navigator.geolocation) {
+          resolve(null)
+          return
+        }
+        const timer = setTimeout(() => resolve(null), 3000)
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            clearTimeout(timer)
+            resolve({
+              latitude: Number(pos.coords.latitude.toFixed(5)),
+              longitude: Number(pos.coords.longitude.toFixed(5)),
+              accuracy: pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 25,
             })
+          },
+          () => {
+            clearTimeout(timer)
+            resolve(null)
+          },
+          { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 },
+        )
+      })
 
-            if (!matchedCity && rawCity) {
-              matchedCity = rawState ? `${rawCity}, ${rawState}` : rawCity
+    // Instant IP Geolocation fallback (works reliably on computers without GPS hardware)
+    const getIpCoords = async () => {
+      try {
+        const res = await fetch('https://ipwho.is/')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.latitude && data.longitude) {
+            return {
+              latitude: Number(Number(data.latitude).toFixed(5)),
+              longitude: Number(Number(data.longitude).toFixed(5)),
+              city: data.city || '',
+              region: data.region || '',
+              postal: data.postal || '',
+              accuracy: 50,
             }
-
-            const detectedArea =
-              addr.suburb ||
-              addr.neighbourhood ||
-              addr.residential ||
-              addr.subdistrict ||
-              addr.quarter ||
-              addr.city_district ||
-              ''
-
-            const streetParts = [
-              addr.building || addr.amenity || addr.house_name,
-              addr.house_number ? `#${addr.house_number}` : '',
-              addr.road,
-              detectedArea,
-            ].filter(Boolean)
-
-            const detectedAddress =
-              streetParts.length > 0
-                ? streetParts.join(', ')
-                : data.display_name?.split(',').slice(0, 3).join(', ') || `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
-
-            setForm((prev) => ({
-              ...prev,
-              city: matchedCity || prev.city || CITIES[0],
-              area: detectedArea || prev.area,
-              address: detectedAddress || prev.address,
-              coordinates: {
-                latitude: Number(lat.toFixed(5)),
-                longitude: Number(lng.toFixed(5)),
-              },
-            }))
-
-            setLocationCaptured({
-              lat: Number(lat.toFixed(5)),
-              lng: Number(lng.toFixed(5)),
-              accuracy,
-              area: detectedArea,
-              city: matchedCity || rawCity,
-              address: detectedAddress,
-            })
-
-            toast.success('Current location chosen!', {
-              description: `${detectedArea ? detectedArea + ', ' : ''}${matchedCity || rawCity || 'Location'} (Accuracy ±${accuracy || 15}m)`,
-            })
-          } else {
-            throw new Error('Geocoding service unavailable')
           }
-        } catch {
-          const fallbackAddress = `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
-          setForm((prev) => ({
-            ...prev,
-            coordinates: {
-              latitude: Number(lat.toFixed(5)),
-              longitude: Number(lng.toFixed(5)),
-            },
-            address: prev.address || fallbackAddress,
-          }))
+        }
+      } catch (_) {}
 
-          setLocationCaptured({
-            lat: Number(lat.toFixed(5)),
-            lng: Number(lng.toFixed(5)),
-            accuracy,
+      try {
+        const res2 = await fetch('https://ipapi.co/json/')
+        if (res2.ok) {
+          const d2 = await res2.json()
+          if (d2.latitude && d2.longitude) {
+            return {
+              latitude: Number(Number(d2.latitude).toFixed(5)),
+              longitude: Number(Number(d2.longitude).toFixed(5)),
+              city: d2.city || '',
+              region: d2.region || '',
+              postal: d2.postal || '',
+              accuracy: 50,
+            }
+          }
+        }
+      } catch (_) {}
+
+      return null
+    }
+
+    try {
+      // 1. Try browser device coordinates
+      let coords = await getBrowserCoords()
+      let ipData = null
+
+      // 2. If browser GPS timed out or failed, immediately use IP Geolocation
+      if (!coords) {
+        ipData = await getIpCoords()
+        if (ipData) {
+          coords = {
+            latitude: ipData.latitude,
+            longitude: ipData.longitude,
+            accuracy: ipData.accuracy,
+          }
+        }
+      }
+
+      if (!coords) {
+        throw new Error('Location detection unavailable. Please enter your address manually.')
+      }
+
+      const { latitude: lat, longitude: lng, accuracy } = coords
+      let detectedCity = ''
+      let detectedArea = ''
+      let detectedAddress = ''
+
+      // 3. Reverse Geocode with Nominatim (3.5s timeout)
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 3500)
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+          {
+            signal: controller.signal,
+            headers: { 'Accept-Language': 'en' },
+          },
+        )
+        clearTimeout(timer)
+
+        if (geoRes.ok) {
+          const data = await geoRes.json()
+          const addr = data.address || {}
+
+          const rawCity =
+            addr.city || addr.town || addr.city_district || addr.suburb || addr.state_district || ipData?.city || ''
+          const rawState = addr.state || ipData?.region || ''
+
+          let matchedCity = CITIES.find((c) => {
+            const base = c.split(',')[0].toLowerCase()
+            return (
+              rawCity.toLowerCase().includes(base) ||
+              base.includes(rawCity.toLowerCase()) ||
+              (base === 'bengaluru' && rawCity.toLowerCase().includes('bangalore')) ||
+              (base === 'mumbai' &&
+                (rawCity.toLowerCase().includes('bombay') || rawCity.toLowerCase().includes('thane'))) ||
+              (base === 'delhi ncr' &&
+                (rawCity.toLowerCase().includes('delhi') ||
+                  rawCity.toLowerCase().includes('noida') ||
+                  rawCity.toLowerCase().includes('gurugram') ||
+                  rawCity.toLowerCase().includes('gurgaon')))
+            )
           })
 
-          toast.success('Device GPS captured', {
-            description: `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Accuracy ±${accuracy || 20}m)`,
-          })
-        } finally {
-          setDetectingLocation(false)
+          if (!matchedCity && rawCity) {
+            matchedCity = rawState ? `${rawCity}, ${rawState}` : rawCity
+          }
+
+          detectedCity = matchedCity || rawCity
+          detectedArea =
+            addr.suburb ||
+            addr.neighbourhood ||
+            addr.residential ||
+            addr.subdistrict ||
+            addr.quarter ||
+            addr.city_district ||
+            ipData?.city ||
+            ''
+
+          const streetParts = [
+            addr.building || addr.amenity || addr.house_name,
+            addr.house_number ? `#${addr.house_number}` : '',
+            addr.road,
+            detectedArea,
+          ].filter(Boolean)
+
+          detectedAddress =
+            streetParts.length > 0
+              ? streetParts.join(', ')
+              : data.display_name?.split(',').slice(0, 3).join(', ') || `${detectedArea}, ${detectedCity}`
         }
-      },
-      (err) => {
-        setDetectingLocation(false)
-        let msg = 'Could not access device location.'
-        if (err.code === 1) {
-          msg = 'Location permission was denied. Please allow location permissions in your browser or type your address manually.'
-        } else if (err.code === 2) {
-          msg = 'Position unavailable. Please check your GPS signal or enter address manually.'
-        } else if (err.code === 3) {
-          msg = 'Location detection timed out. Please try again or type manually.'
-        }
-        toast.error('Location detection failed', { description: msg })
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
-      },
-    )
+      } catch (_) {}
+
+      if (!detectedCity && ipData) {
+        detectedCity = ipData.region ? `${ipData.city}, ${ipData.region}` : ipData.city
+        detectedArea = ipData.city
+        detectedAddress = `${ipData.city}, ${ipData.region}`
+      }
+
+      if (!detectedAddress) {
+        detectedAddress = `Location (${lat}, ${lng})`
+      }
+
+      // Automatically populate inputs in form state
+      setForm((prev) => ({
+        ...prev,
+        city: detectedCity || prev.city,
+        area: detectedArea || prev.area,
+        address: detectedAddress,
+        coordinates: {
+          latitude: lat,
+          longitude: lng,
+        },
+      }))
+
+      setLocationCaptured({
+        lat,
+        lng,
+        accuracy,
+        area: detectedArea,
+        city: detectedCity,
+        address: detectedAddress,
+      })
+
+      toast.success('Location detected & entered!', {
+        description: `${detectedArea ? detectedArea + ', ' : ''}${detectedCity || 'Current location'}`,
+      })
+    } catch (err) {
+      toast.error('Location detection failed', {
+        description: err.message || 'Please type your city and address manually.',
+      })
+    } finally {
+      setDetectingLocation(false)
+    }
   }
 
   const handleConfirm = async () => {
@@ -1089,24 +1151,16 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                               <span className="text-[10px] text-muted font-normal">(±{locationCaptured.accuracy}m)</span>
                             )}
                           </span>
-                          <a
-                            href={`https://www.google.com/maps?q=${locationCaptured.lat},${locationCaptured.lng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline"
-                          >
-                            <span>Open in Google Maps</span>
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
+                          <span className="text-[10px] text-muted">OpenStreetMap Preview</span>
                         </div>
-                        <div className="relative h-36 w-full overflow-hidden rounded-lg bg-slate-200 shadow-inner">
+                        <div className="relative h-32 w-full overflow-hidden rounded-lg bg-slate-200 shadow-inner">
                           <iframe
-                            title="Google Maps Location Preview"
+                            title="OpenStreetMap Location Preview"
                             width="100%"
                             height="100%"
                             loading="lazy"
-                            className="border-0"
-                            src={`https://maps.google.com/maps?q=${locationCaptured.lat},${locationCaptured.lng}&hl=en&z=15&output=embed`}
+                            className="border-0 pointer-events-none"
+                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationCaptured.lng - 0.005}%2C${locationCaptured.lat - 0.004}%2C${locationCaptured.lng + 0.005}%2C${locationCaptured.lat + 0.004}&layer=mapnik&marker=${locationCaptured.lat}%2C${locationCaptured.lng}`}
                           />
                         </div>
                       </div>
@@ -1115,6 +1169,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <FormField label="City" required>
                         <Select value={form.city} onChange={(e) => set({ city: e.target.value })}>
+                          <option value="">Select City</option>
                           {Array.from(new Set([form.city, ...CITIES].filter(Boolean))).map((c) => (
                             <option key={c} value={c}>
                               {c}

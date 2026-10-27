@@ -14,6 +14,7 @@ import {
   Stethoscope,
   Star,
   UserRound,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -64,6 +65,13 @@ export function DashboardPage() {
   const [rateTarget, setRateTarget] = useState(null)
 
   const firstName = (user?.name || user?.fullName || 'Customer').split(' ')[0]
+
+  const isProfileIncomplete = Boolean(
+    user?.isGuest ||
+    user?.isProfileComplete === false ||
+    user?.fullName?.includes('(Guest)') ||
+    (!user?.address && !user?.rawProfile?.defaultAddress?.addressLine)
+  )
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -226,6 +234,50 @@ export function DashboardPage() {
           </Button>
         }
       />
+
+      {isProfileIncomplete && (
+        <div className="relative overflow-hidden rounded-2xl border border-amber-200/90 bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-500/10 p-5 shadow-sm dark:border-amber-900/50 dark:from-amber-950/40 dark:via-neutral-900 dark:to-orange-950/30">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3.5">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm ring-4 ring-amber-100 dark:ring-amber-950/60">
+                <Zap className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-sm font-bold text-ink">
+                    Fast-Track Guest Access · Profile Incomplete
+                  </h3>
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-2xs font-semibold text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                    Urgent Care Mode
+                  </span>
+                </div>
+                <p className="text-xs text-muted leading-relaxed max-w-2xl">
+                  You logged in via quick email verification. You do not need to fill out a separate profile page—simply provide your patient and address details directly in the booking form, and your profile will be saved automatically!
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 sm:self-center">
+              <Button
+                to="/customer/book-caregiver"
+                variant="primary"
+                size="sm"
+                icon={CalendarPlus}
+                className="whitespace-nowrap shadow-sm"
+              >
+                Book Caretaker Now
+              </Button>
+              <Button
+                to="/customer/profile"
+                variant="outline"
+                size="sm"
+                className="whitespace-nowrap"
+              >
+                Profile Settings
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard

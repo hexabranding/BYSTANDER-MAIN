@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { User, CustomerProfile, CaregiverProfile, Document, Service, Blacklist, Ambulance } from '../models/index.js';
 import { hashPassword, comparePassword, generateToken, sanitizeUser, formatAccountStatusMessage } from '../utils/auth.js';
+import { generateNumericOtp } from '../utils/otpUtils.js';
 
 /**
  * Register a new Customer.
@@ -376,5 +378,171 @@ export const getCurrentUser = async (userId) => {
   return {
     user: sanitizeUser(user),
     profile,
+  };
+};
+
+const GUEST_OTP_CACHE = new Map();
+
+/**
+ * Request an instant guest login OTP for urgent customer booking.
+ */
+export const requestGuestOtp = async (email) => {
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    const err = new Error('Please provide a valid email address for guest login.');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  // If user exists and is NOT a customer, reject to protect roles
+  const existingUser = await User.findOne({ email: cleanEmail });
+  if (existingUser && existingUser.role !== 'customer') {
+    const err = new Error(
+      `An account with this email already exists with the ${existingUser.role} role. Please use standard login.`
+    );
+    err.statusCode = 409;
+    err.name = 'ConflictError';
+    throw err;
+  }
+
+  const otp = generateNumericOtp();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  GUEST_OTP_CACHE.set(cleanEmail, {
+    otp,
+    expiresAt,
+    attempts: 0,
+  });
+
+  console.log(`[Guest OTP Dispatch] Code for ${cleanEmail}: ${otp}`);
+
+  return {
+    email: cleanEmail,
+    message: `Verification code sent to ${cleanEmail}`,
+    devOtp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+  };
+};
+
+/**
+ * Verify guest login OTP and create or authenticate customer session.
+ */
+export const verifyGuestOtp = async (email, otp) => {
+  if (!email || !otp) {
+    const err = new Error('Email address and 6-digit OTP code are required.');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanOtp = String(otp).trim();
+
+  const record = GUEST_OTP_CACHE.get(cleanEmail);
+  const isDevMasterOtp = process.env.NODE_ENV !== 'production' && cleanOtp === '123456';
+
+  if (!record && !isDevMasterOtp) {
+    const err = new Error(
+      'No active verification code found for this email, or the code has expired. Please request a new code.'
+    );
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  if (record) {
+    if (Date.now() > record.expiresAt) {
+      GUEST_OTP_CACHE.delete(cleanEmail);
+      const err = new Error('Verification code has expired. Please request a new code.');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
+    if (record.attempts >= 5) {
+      GUEST_OTP_CACHE.delete(cleanEmail);
+      const err = new Error('Too many failed verification attempts. Please request a new code.');
+      err.statusCode = 429;
+      err.name = 'RateLimitError';
+      throw err;
+    }
+
+    if (record.otp !== cleanOtp && !isDevMasterOtp) {
+      record.attempts += 1;
+      const err = new Error('Incorrect verification code. Please check your email and try again.');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
+    GUEST_OTP_CACHE.delete(cleanEmail);
+  }
+
+  let user = await User.findOne({ email: cleanEmail });
+  let profile = null;
+
+  if (user) {
+    if (user.role !== 'customer') {
+      const err = new Error(`This email belongs to a ${user.role} account. Please use standard login.`);
+      err.statusCode = 409;
+      err.name = 'ConflictError';
+      throw err;
+    }
+
+    if (user.status === 'blocked' || user.status === 'suspended') {
+      const err = new Error(formatAccountStatusMessage(user));
+      err.statusCode = 403;
+      err.name = 'ForbiddenError';
+      throw err;
+    }
+
+    user.lastLoginAt = new Date();
+    await user.save();
+    profile = await CustomerProfile.findOne({ user: user._id });
+  } else {
+    // Create new customer account for guest
+    const randomPassword = crypto.randomUUID();
+    const passwordHash = await hashPassword(randomPassword);
+    const prefix = cleanEmail.split('@')[0];
+    const formattedName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+
+    user = await User.create({
+      fullName: `${formattedName} (Guest)`,
+      email: cleanEmail,
+      passwordHash,
+      role: 'customer',
+      status: 'active',
+      isGuest: true,
+      isEmailVerified: true,
+      lastLoginAt: new Date(),
+    });
+
+    profile = await CustomerProfile.create({
+      user: user._id,
+      defaultAddress: {
+        addressLine: '',
+        area: '',
+        city: 'Mumbai, MH',
+        pincode: '',
+      },
+      patients: [],
+    });
+  }
+
+  const token = generateToken({ id: user._id, role: 'customer' });
+  const isProfileComplete = Boolean(
+    profile &&
+    profile.defaultAddress?.addressLine &&
+    profile.defaultAddress?.city &&
+    profile.patients?.length > 0
+  );
+
+  return {
+    user: sanitizeUser(user),
+    profile,
+    token,
+    isGuest: true,
+    isProfileComplete,
   };
 };

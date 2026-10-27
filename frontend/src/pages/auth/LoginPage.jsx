@@ -14,6 +14,7 @@ import {
   Siren,
   Sparkles,
   Stethoscope,
+  Zap,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -21,6 +22,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useAuth } from '@/context/AuthContext'
 import { FormField, Input } from '@/components/forms/FormField'
 import { Button } from '@/components/common/Button'
+import { requestGuestOtp } from '@/services/authService'
 import { DEMO_USERS, DEMO_PASSWORD } from '@/data/demoUsers'
 import { initials } from '@/utils/format'
 
@@ -73,7 +75,7 @@ export function LoginPage({ adminOnly = false }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { login } = useAuth()
+  const { login, guestLogin } = useAuth()
   const [rememberedEmail, setRememberedEmail] = useLocalStorage('caremate.rememberedEmail', '')
   const redirectTo = location.state?.from || null
 
@@ -97,6 +99,67 @@ export function LoginPage({ adminOnly = false }) {
   const [remember, setRemember] = useState(Boolean(rememberedEmail))
   const [showDemo, setShowDemo] = useState(false)
   const [statusNotice, setStatusNotice] = useState(null)
+
+  // Urgent Guest Login State
+  const [guestStep, setGuestStep] = useState(null) // null | 'email' | 'otp'
+  const [guestEmail, setGuestEmail] = useState('')
+  const [guestOtp, setGuestOtp] = useState('')
+  const [guestLoading, setGuestLoading] = useState(false)
+
+  const handleRequestGuestOtp = async (e) => {
+    e?.preventDefault?.()
+    const clean = String(guestEmail || '').trim().toLowerCase()
+    if (!clean || !clean.includes('@')) {
+      toast.error('Please enter a valid email address.')
+      return
+    }
+    setGuestLoading(true)
+    try {
+      const res = await requestGuestOtp(clean)
+      if (res.ok) {
+        setGuestStep('otp')
+        toast.success('Verification code sent!', {
+          description: `Enter the 6-digit code sent to ${clean}`,
+        })
+        if (res.data?.devOtp) {
+          toast.info(`Development test code: ${res.data.devOtp}`, { duration: 8000 })
+        }
+      } else {
+        toast.error(res.message || 'Failed to send OTP')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to request code')
+    } finally {
+      setGuestLoading(false)
+    }
+  }
+
+  const handleVerifyGuestOtp = async (e) => {
+    e?.preventDefault?.()
+    const cleanOtp = String(guestOtp || '').trim()
+    if (!cleanOtp || cleanOtp.length < 6) {
+      toast.error('Please enter the complete 6-digit verification code.')
+      return
+    }
+    setGuestLoading(true)
+    try {
+      const res = await guestLogin({ email: guestEmail, otp: cleanOtp })
+      if (res.ok && res.user) {
+        toast.success(`Welcome, ${res.user.name}!`, {
+          description: 'You are signed in as a guest. You can book a caretaker directly.',
+        })
+        const canUseRedirect =
+          redirectTo && typeof redirectTo === 'string' && !redirectTo.includes('/login')
+        navigate(canUseRedirect ? redirectTo : '/customer/dashboard', { replace: true })
+      } else {
+        toast.error(res.message || 'Invalid verification code')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Verification failed')
+    } finally {
+      setGuestLoading(false)
+    }
+  }
 
   const activeRole = isAdminPortal
     ? ADMIN_ROLE_OPTION
@@ -389,6 +452,116 @@ export function LoginPage({ adminOnly = false }) {
           </div>
         )
       })()}
+
+      {/* ---------------- urgent guest login ---------------- */}
+      {!isAdminPortal && (
+        <div className="rounded-card border border-emerald-300 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white p-4.5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-700 text-white shadow-sm">
+              <Zap className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-extrabold text-ink">Urgent Care? Fast-Track Guest Login</span>
+                <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-primary-800">
+                  Instant Access
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-muted">
+                Need to book a caretaker immediately? Skip full registration and sign in with just your Email & OTP.
+              </p>
+
+              {!guestStep ? (
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setGuestStep('email')}
+                    className="border-primary-600 bg-white font-bold text-primary-800 hover:bg-primary-50 text-xs shadow-sm"
+                  >
+                    Continue as Guest with OTP &rarr;
+                  </Button>
+                </div>
+              ) : guestStep === 'email' ? (
+                <form onSubmit={handleRequestGuestOtp} className="mt-3 space-y-2.5">
+                  <div className="flex gap-2">
+                    <Input
+                      type="email"
+                      value={guestEmail}
+                      onChange={(e) => setGuestEmail(e.target.value)}
+                      placeholder="Enter your email address"
+                      autoFocus
+                      required
+                      className="bg-white text-xs h-9"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      loading={guestLoading}
+                      className="shrink-0 bg-primary-700 text-white hover:bg-primary-800 text-xs"
+                    >
+                      Send OTP
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGuestStep(null)}
+                    className="text-[11px] font-semibold text-muted hover:text-ink"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyGuestOtp} className="mt-3 space-y-2.5">
+                  <p className="text-[11px] text-muted">
+                    Enter the 6-digit verification code sent to <strong className="text-ink">{guestEmail}</strong>:
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      maxLength={6}
+                      value={guestOtp}
+                      onChange={(e) => setGuestOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="6-digit OTP"
+                      autoFocus
+                      required
+                      className="font-mono text-center tracking-widest bg-white text-sm h-9"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      loading={guestLoading}
+                      className="shrink-0 bg-primary-700 text-white hover:bg-primary-800 text-xs"
+                    >
+                      Verify & Enter
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => handleRequestGuestOtp({ preventDefault: () => {} })}
+                      className="font-semibold text-primary-700 hover:underline"
+                    >
+                      Resend OTP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGuestStep(null)
+                        setGuestOtp('')
+                      }}
+                      className="font-semibold text-muted hover:text-ink"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ---------------- footer links ---------------- */}
       <div className="rounded-card border border-dashed border-line-strong bg-slate-50/60 px-4 py-4 text-center text-sm">

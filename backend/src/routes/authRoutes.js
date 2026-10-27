@@ -35,4 +35,8 @@ router.get('/me', authenticate, authController.getMe);
 // 5. User Logout
 router.post('/logout', authController.logout);
 
+// 6. Urgent Guest Access (Email + OTP)
+router.post('/guest/request-otp', authLimiter, authController.requestGuestOtp);
+router.post('/guest/verify-otp', authLimiter, authController.verifyGuestOtp);
+
 export default router;

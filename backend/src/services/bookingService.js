@@ -83,6 +83,45 @@ export const executeWithTransactionRetry = async (workFn, maxRetries = 3) => {
 };
 
 /**
+ * Synchronize customer profile from booking details if profile is incomplete.
+ */
+const syncCustomerProfileFromBooking = async (customerId, location, patientDetails) => {
+  try {
+    const custProfile = await CustomerProfile.findOne({ user: customerId });
+    if (custProfile) {
+      let modified = false;
+      if (!custProfile.defaultAddress?.addressLine && location?.addressLine) {
+        custProfile.defaultAddress = {
+          addressLine: location.addressLine || '',
+          area: location.area || '',
+          city: location.city || 'Mumbai, MH',
+          pincode: location.pincode || '',
+        };
+        modified = true;
+      }
+      if (patientDetails?.name && (!custProfile.patients || custProfile.patients.length === 0)) {
+        custProfile.patients = [
+          {
+            name: patientDetails.name,
+            age: patientDetails.age || null,
+            gender: patientDetails.gender || 'Other',
+            relation: patientDetails.relation || 'Self',
+            condition: patientDetails.condition || '',
+          },
+        ];
+        modified = true;
+      }
+      if (modified) {
+        await custProfile.save();
+        await User.findByIdAndUpdate(customerId, { isGuest: false });
+      }
+    }
+  } catch (profErr) {
+    console.warn('[Auto-populate profile from booking warning]', profErr?.message);
+  }
+};
+
+/**
  * Create a new Booking request.
  * Supports:
  * 1. Targeted Booking: If caregiverId is supplied, verifies caregiver verification, service offering, schedule fit, and serializes conflict lock.
@@ -278,6 +317,9 @@ export const createBooking = async (customerId, bookingData) => {
       await recordBookingTransaction(createdBooking, 'escrow_held', { session });
       return createdBooking;
     });
+
+    await syncCustomerProfileFromBooking(customerId, location, patientDetails);
+    return createdBooking;
   }
 
   // 5. On-Demand Broadcast Booking Mode (Swiggy / Uber delivery style)
@@ -344,6 +386,7 @@ export const createBooking = async (customerId, bookingData) => {
     console.error('Broadcast notification dispatch error:', notifyErr.message);
   }
 
+  await syncCustomerProfileFromBooking(customerId, location, patientDetails);
   return createdBooking;
 };
 

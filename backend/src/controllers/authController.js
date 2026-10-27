@@ -111,3 +111,50 @@ export const logout = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * POST /api/auth/guest/request-otp
+ */
+export const requestGuestOtp = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const result = await authService.requestGuestOtp(email);
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/auth/guest/verify-otp
+ */
+export const verifyGuestOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    const { user, profile, token, isGuest, isProfileComplete } = await authService.verifyGuestOtp(
+      email,
+      otp
+    );
+
+    // Set secure HTTP-only cookie
+    res.cookie(COOKIE_NAME, token, getCookieOptions());
+
+    return res.status(200).json({
+      success: true,
+      message: 'Guest login successful',
+      data: {
+        user,
+        profile,
+        token,
+        isGuest,
+        isProfileComplete,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

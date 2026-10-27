@@ -96,6 +96,16 @@ export const normalizeUser = (user, profile = {}) => {
     patientInfo = prof.patientInfo;
   }
 
+  const isProfileComplete = Boolean(
+    formattedAddress &&
+    prof.defaultAddress?.addressLine &&
+    (patientInfo?.name || (Array.isArray(prof.patients) && prof.patients.length > 0))
+  );
+  const isGuest = Boolean(
+    user.isGuest ||
+    (user.fullName && user.fullName.includes('(Guest)'))
+  );
+
   return {
     id: String(user._id || user.id),
     _id: String(user._id || user.id),
@@ -106,6 +116,8 @@ export const normalizeUser = (user, profile = {}) => {
     role: user.role || 'customer',
     avatar: user.avatar || prof.avatar || '',
     status: user.status || 'active',
+    isGuest,
+    isProfileComplete,
     city: prof.city || prof.defaultAddress?.city || '',
     area: prof.area || prof.defaultAddress?.area || '',
     address: formattedAddress,
@@ -159,6 +171,74 @@ export const login = async ({ identifier, email, password }) => {
     return {
       ok: false,
       message: error.message || 'Invalid credentials. Please check your details and try again.',
+      error,
+    };
+  }
+};
+
+/**
+ * Request guest login OTP for urgent customer care booking.
+ */
+export const requestGuestOtp = async (email) => {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    return { ok: false, message: 'Please provide a valid email address.' };
+  }
+
+  try {
+    const res = await apiClient.post('/auth/guest/request-otp', { email: cleanEmail });
+    return {
+      ok: true,
+      message: res?.message || 'Verification code sent to your email.',
+      data: res?.data || res,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error.message || 'Failed to send verification code. Please try again.',
+      error,
+    };
+  }
+};
+
+/**
+ * Verify guest login OTP and create/authenticate customer session.
+ */
+export const verifyGuestOtp = async (email, otp) => {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanOtp = String(otp || '').trim();
+
+  if (!cleanEmail || !cleanOtp) {
+    return { ok: false, message: 'Both email and verification code are required.' };
+  }
+
+  try {
+    const res = await apiClient.post('/auth/guest/verify-otp', {
+      email: cleanEmail,
+      otp: cleanOtp,
+    });
+
+    const { user, profile, token, isProfileComplete, isGuest } = res?.data || res || {};
+    if (token) {
+      setAuthToken(token);
+    }
+
+    const normalized = normalizeUser(user, profile);
+    normalized.isGuest = isGuest ?? true;
+    normalized.isProfileComplete = Boolean(isProfileComplete);
+
+    return {
+      ok: true,
+      user: normalized,
+      token,
+      isProfileComplete: Boolean(isProfileComplete),
+      isGuest: true,
+      message: res?.message || 'Signed in as guest successfully',
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error.message || 'Verification failed. Please check the code and try again.',
       error,
     };
   }
@@ -462,6 +542,8 @@ export const logout = async () => {
 
 export const authService = {
   login,
+  requestGuestOtp,
+  verifyGuestOtp,
   registerCustomer,
   registerCaregiver,
   getMe,

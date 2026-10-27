@@ -259,7 +259,7 @@ export const createReview = async (user, data) => {
   // 4. Fast-path duplicate review check for this role
   const existingReview = await Review.findOne({ booking: booking._id, reviewerRole });
   if (existingReview) {
-    const err = new Error('You have already submitted a review for this booking engagement');
+    const err = new Error('A review has already been submitted for this booking engagement');
     err.statusCode = 400;
     err.name = 'ValidationError';
     throw err;
@@ -281,7 +281,7 @@ export const createReview = async (user, data) => {
       ? await doubleCheckQuery.session(session)
       : await doubleCheckQuery;
     if (doubleCheck) {
-      const err = new Error('You have already submitted a review for this booking engagement');
+      const err = new Error('A review has already been submitted for this booking engagement');
       err.statusCode = 400;
       err.name = 'ValidationError';
       throw err;
@@ -313,7 +313,7 @@ export const createReview = async (user, data) => {
       createdReview = Array.isArray(rawCreated) ? rawCreated[0] : rawCreated;
     } catch (createErr) {
       if (createErr.code === 11000) {
-        const err = new Error('You have already submitted a review for this booking engagement');
+        const err = new Error('A review has already been submitted for this booking engagement');
         err.statusCode = 400;
         err.name = 'ValidationError';
         throw err;
@@ -569,7 +569,7 @@ export const getCustomerReviews = async (customerId, query = {}) => {
 export const getMyCustomerReviews = async (user, query = {}) => {
   const userId = user?._id || user?.id;
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-    const err = new Error('Authenticated user identifier required');
+    const err = new Error('Authenticated customer identifier required');
     err.statusCode = 401;
     err.name = 'UnauthorizedError';
     throw err;
@@ -589,8 +589,10 @@ export const getMyCustomerReviews = async (user, query = {}) => {
   } else {
     if (query.type === 'received') {
       filter = { customer: userId, reviewerRole: 'caregiver' };
-    } else {
+    } else if (query.type === 'written') {
       filter = { customer: userId, reviewerRole: { $ne: 'caregiver' } };
+    } else {
+      filter = { customer: userId };
     }
   }
 

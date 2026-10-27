@@ -113,6 +113,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isGuest: {
+      type: Boolean,
+      default: false,
+    },
     lastLoginAt: {
       type: Date,
       default: null,

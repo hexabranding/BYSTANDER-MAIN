@@ -26,6 +26,7 @@ import {
   Loader2,
   LocateFixed,
   Navigation,
+  ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -1079,22 +1080,33 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     </div>
 
                     {locationCaptured?.lat && locationCaptured?.lng && (
-                      <div className="overflow-hidden rounded-xl border border-line bg-slate-50 p-2 text-xs">
-                        <div className="mb-2 flex items-center justify-between px-2 text-slate-700">
+                      <div className="overflow-hidden rounded-xl border border-line bg-slate-50 p-2.5 text-xs">
+                        <div className="mb-2 flex items-center justify-between px-1 text-slate-700">
                           <span className="flex items-center gap-1.5 font-medium text-[11px]">
                             <MapPin className="h-3.5 w-3.5 text-primary-700" />
-                            Live GPS coordinates: {locationCaptured.lat}, {locationCaptured.lng}
+                            GPS: {locationCaptured.lat}, {locationCaptured.lng}
+                            {locationCaptured.accuracy && (
+                              <span className="text-[10px] text-muted font-normal">(±{locationCaptured.accuracy}m)</span>
+                            )}
                           </span>
-                          <span className="text-[10px] text-muted">Accuracy: ±{locationCaptured.accuracy || 15}m</span>
+                          <a
+                            href={`https://www.google.com/maps?q=${locationCaptured.lat},${locationCaptured.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline"
+                          >
+                            <span>Open in Google Maps</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
                         </div>
-                        <div className="relative h-28 w-full overflow-hidden rounded-lg bg-slate-200">
+                        <div className="relative h-36 w-full overflow-hidden rounded-lg bg-slate-200 shadow-inner">
                           <iframe
-                            title="Current Location Map"
+                            title="Google Maps Location Preview"
                             width="100%"
                             height="100%"
                             loading="lazy"
-                            className="border-0 pointer-events-none"
-                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationCaptured.lng - 0.005}%2C${locationCaptured.lat - 0.004}%2C${locationCaptured.lng + 0.005}%2C${locationCaptured.lat + 0.004}&layer=mapnik&marker=${locationCaptured.lat}%2C${locationCaptured.lng}`}
+                            className="border-0"
+                            src={`https://maps.google.com/maps?q=${locationCaptured.lat},${locationCaptured.lng}&hl=en&z=15&output=embed`}
                           />
                         </div>
                       </div>

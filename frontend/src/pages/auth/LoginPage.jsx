@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
   ArrowRight,
+  CheckCircle2,
   ChevronDown,
   Eye,
   EyeOff,
@@ -94,6 +95,11 @@ export function LoginPage({ adminOnly = false }) {
     ? searchParams.get('role')
     : 'customer'
 
+  const isGuestQuery =
+    searchParams.get('mode') === 'guest' ||
+    searchParams.get('mode') === 'otp' ||
+    searchParams.get('guest') === 'true'
+
   const [role, setRole] = useState(initialRole)
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(Boolean(rememberedEmail))
@@ -101,7 +107,8 @@ export function LoginPage({ adminOnly = false }) {
   const [statusNotice, setStatusNotice] = useState(null)
 
   // Urgent Guest Login State
-  const [guestStep, setGuestStep] = useState(null) // null | 'email' | 'otp'
+  const [isGuestMode, setIsGuestMode] = useState(isGuestQuery)
+  const [guestStep, setGuestStep] = useState('email') // 'email' | 'otp'
   const [guestEmail, setGuestEmail] = useState('')
   const [guestOtp, setGuestOtp] = useState('')
   const [guestLoading, setGuestLoading] = useState(false)
@@ -169,12 +176,30 @@ export function LoginPage({ adminOnly = false }) {
     register,
     handleSubmit,
     setValue,
+    getValues,
     setError,
     formState: { errors, isSubmitting },
   } = useForm({
     mode: 'onTouched',
     defaultValues: { email: rememberedEmail || '', password: '' },
   })
+
+  const activateGuestMode = () => {
+    const mainEmail = getValues('email')
+    if (mainEmail && !guestEmail) {
+      setGuestEmail(mainEmail.trim())
+    }
+    setRole('customer')
+    setIsGuestMode(true)
+    setGuestStep('email')
+    setStatusNotice(null)
+    setTimeout(() => {
+      const emailInput = document.getElementById('guest-email-input')
+      if (emailInput) {
+        emailInput.focus()
+      }
+    }, 60)
+  }
 
   const onSubmit = async ({ email, password }) => {
     const effectiveRole = isAdminPortal ? 'admin' : role
@@ -261,6 +286,9 @@ export function LoginPage({ adminOnly = false }) {
                 onClick={() => {
                   setRole(option.id)
                   setStatusNotice(null)
+                  if (option.id !== 'customer') {
+                    setIsGuestMode(false)
+                  }
                 }}
                 aria-pressed={selected}
                 className={cn(
@@ -284,106 +312,265 @@ export function LoginPage({ adminOnly = false }) {
       )}
 
       {/* ---------------- form ---------------- */}
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        noValidate
-        className="space-y-4 rounded-card border border-line bg-white p-5 shadow-card sm:p-6"
+      <div
+        id="login-main-form"
+        className={cn(
+          'rounded-card border bg-white p-5 shadow-card sm:p-6 transition-all duration-200',
+          isGuestMode ? 'border-emerald-400 ring-2 ring-emerald-500/20' : 'border-line',
+        )}
       >
-        {statusNotice ? (
-          <div
-            role="alert"
-            className="rounded-2xl border border-danger-200 bg-danger-50/90 p-4 shadow-sm animate-in fade-in slide-in-from-top-1"
-          >
-            <div className="flex items-start gap-3">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-danger-100 text-danger-700">
-                <ShieldAlert className="h-4.5 w-4.5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-wider text-danger-900">
-                  Account Access Restricted
-                </p>
-                <p className="mt-1 text-sm font-medium leading-relaxed text-danger-800">
-                  {statusNotice}
-                </p>
-                <div className="mt-2.5 flex items-center gap-3">
-                  <a
-                    href="mailto:support@bystander.com?subject=Account%20Suspension%20Inquiry"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-danger-700 hover:text-danger-900 hover:underline"
-                  >
-                    Contact platform support &rarr;
-                  </a>
+        {isGuestMode ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-600 text-white shadow-xs">
+                  <Zap className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
+                    Fast-Track Guest Sign-in
+                  </p>
+                  <p className="text-[11px] text-muted">
+                    Instant access · Enter email to receive one-time code
+                  </p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsGuestMode(false)}
+                className="rounded-lg border border-line bg-slate-50 px-2.5 py-1 text-xs font-semibold text-ink-soft hover:bg-slate-100 transition"
+              >
+                Use Password
+              </button>
             </div>
+
+            {guestStep === 'email' ? (
+              <form onSubmit={handleRequestGuestOtp} className="space-y-4">
+                <FormField
+                  label="Email address"
+                  htmlFor="guest-email-input"
+                  required
+                  hint="We will send a 6-digit verification code to this email"
+                >
+                  <Input
+                    id="guest-email-input"
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    autoFocus
+                    required
+                    className="h-11"
+                  />
+                </FormField>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full bg-primary-700 hover:bg-primary-800 text-white"
+                  loading={guestLoading}
+                  iconRight={ArrowRight}
+                >
+                  Send Verification Code (OTP)
+                </Button>
+
+                <div className="pt-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsGuestMode(false)}
+                    className="text-xs font-semibold text-primary-700 hover:text-primary-800 hover:underline"
+                  >
+                    &larr; Return to regular password sign-in
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyGuestOtp} className="space-y-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-950 flex items-center justify-between">
+                  <div className="min-w-0 pr-2">
+                    <p className="text-[11px] text-emerald-800">Verification code sent to:</p>
+                    <p className="font-bold truncate text-emerald-950">{guestEmail}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGuestStep('email')
+                      setGuestOtp('')
+                    }}
+                    className="shrink-0 font-bold text-emerald-800 hover:underline text-xs"
+                  >
+                    Change email
+                  </button>
+                </div>
+
+                <FormField
+                  label="Enter 6-digit verification code"
+                  htmlFor="guest-otp-input"
+                  required
+                  hint="Check your inbox or spam folder for your 6-digit OTP"
+                >
+                  <Input
+                    id="guest-otp-input"
+                    type="text"
+                    maxLength={6}
+                    value={guestOtp}
+                    onChange={(e) => setGuestOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="• • • • • •"
+                    autoFocus
+                    required
+                    className="font-mono text-center tracking-[0.3em] text-xl font-bold h-12"
+                  />
+                </FormField>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full bg-primary-700 hover:bg-primary-800 text-white"
+                  loading={guestLoading}
+                  iconRight={ArrowRight}
+                >
+                  Verify &amp; Sign In as Guest
+                </Button>
+
+                <div className="flex items-center justify-between pt-1 text-xs text-muted">
+                  <button
+                    type="button"
+                    onClick={handleRequestGuestOtp}
+                    disabled={guestLoading}
+                    className="font-semibold text-primary-700 hover:underline"
+                  >
+                    Resend OTP Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsGuestMode(false)
+                      setGuestStep('email')
+                      setGuestOtp('')
+                    }}
+                    className="font-semibold hover:text-ink hover:underline"
+                  >
+                    Use Password Instead
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
-        ) : null}
+        ) : (
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
+            className="space-y-4"
+          >
+            {statusNotice ? (
+              <div
+                role="alert"
+                className="rounded-2xl border border-danger-200 bg-danger-50/90 p-4 shadow-sm animate-in fade-in slide-in-from-top-1"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-danger-100 text-danger-700">
+                    <ShieldAlert className="h-4.5 w-4.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-danger-900">
+                      Account Access Restricted
+                    </p>
+                    <p className="mt-1 text-sm font-medium leading-relaxed text-danger-800">
+                      {statusNotice}
+                    </p>
+                    <div className="mt-2.5 flex items-center gap-3">
+                      <a
+                        href="mailto:support@bystander.com?subject=Account%20Suspension%20Inquiry"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-danger-700 hover:text-danger-900 hover:underline"
+                      >
+                        Contact platform support &rarr;
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
-        <FormField label="Email address" htmlFor="login-email" required error={errors.email?.message}>
-          <Input
-            id="login-email"
-            type="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            autoFocus
-            error={errors.email?.message}
-            {...register('email', {
-              required: 'Email is required',
-              pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Enter a valid email address' },
-            })}
-          />
-        </FormField>
+            <FormField label="Email address" htmlFor="login-email" required error={errors.email?.message}>
+              <Input
+                id="login-email"
+                type="email"
+                placeholder="you@example.com"
+                autoComplete="email"
+                autoFocus
+                error={errors.email?.message}
+                {...register('email', {
+                  required: 'Email is required',
+                  pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Enter a valid email address' },
+                })}
+              />
+            </FormField>
 
-        <FormField
-          label="Password"
-          htmlFor="login-password"
-          required
-          error={errors.password?.message}
-          hint={`Demo password for all seeded accounts: ${DEMO_PASSWORD}`}
-        >
-          <div className="relative">
-            <Input
-              id="login-password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              className="pr-11"
+            <FormField
+              label="Password"
+              htmlFor="login-password"
+              required
               error={errors.password?.message}
-              {...register('password', {
-                required: 'Password is required',
-                minLength: { value: 6, message: 'Password must be at least 6 characters' },
-              })}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              className="absolute right-1 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted transition hover:bg-slate-100 hover:text-ink"
+              hint={`Demo password for all seeded accounts: ${DEMO_PASSWORD}`}
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-        </FormField>
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  className="pr-11"
+                  error={errors.password?.message}
+                  {...register('password', {
+                    required: 'Password is required',
+                    minLength: { value: 6, message: 'Password must be at least 6 characters' },
+                  })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-1 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted transition hover:bg-slate-100 hover:text-ink"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </FormField>
 
-        <div className="flex items-center justify-between gap-3">
-          <label htmlFor="login-remember" className="flex cursor-pointer items-center gap-2 text-sm text-ink-soft">
-            <input
-              id="login-remember"
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="h-4 w-4 rounded border-line-strong accent-[#0F766E]"
-            />
-            Remember me
-          </label>
-          <Link to="/forgot-password" className="text-sm font-semibold text-primary-700 hover:text-primary-800">
-            Forgot password?
-          </Link>
-        </div>
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="login-remember" className="flex cursor-pointer items-center gap-2 text-sm text-ink-soft">
+                <input
+                  id="login-remember"
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="h-4 w-4 rounded border-line-strong accent-[#0F766E]"
+                />
+                Remember me
+              </label>
+              <Link to="/forgot-password" className="text-sm font-semibold text-primary-700 hover:text-primary-800">
+                Forgot password?
+              </Link>
+            </div>
 
-        <Button type="submit" size="lg" className="w-full" loading={isSubmitting} iconRight={ArrowRight}>
-          Sign in
-        </Button>
-      </form>
+            <Button type="submit" size="lg" className="w-full" loading={isSubmitting} iconRight={ArrowRight}>
+              Sign in
+            </Button>
+
+            {!isAdminPortal && (
+              <div className="pt-1 text-center">
+                <button
+                  type="button"
+                  onClick={activateGuestMode}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                >
+                  <Zap className="h-3.5 w-3.5" /> Need urgent care? Sign in with Email OTP instead &rarr;
+                </button>
+              </div>
+            )}
+          </form>
+        )}
+      </div>
 
       {/* ---------------- demo accounts ---------------- */}
       {(() => {
@@ -455,7 +642,14 @@ export function LoginPage({ adminOnly = false }) {
 
       {/* ---------------- urgent guest login ---------------- */}
       {!isAdminPortal && (
-        <div className="rounded-card border border-emerald-300 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white p-4.5 shadow-sm">
+        <div
+          className={cn(
+            'rounded-card border p-4.5 shadow-sm transition-all duration-200',
+            isGuestMode
+              ? 'border-emerald-400 bg-emerald-50/50 ring-2 ring-emerald-500/20'
+              : 'border-emerald-300 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white',
+          )}
+        >
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-700 text-white shadow-sm">
               <Zap className="h-5 w-5" />
@@ -468,96 +662,36 @@ export function LoginPage({ adminOnly = false }) {
                 </span>
               </div>
               <p className="mt-1 text-xs leading-relaxed text-muted">
-                Need to book a caretaker immediately? Skip full registration and sign in with just your Email & OTP.
+                Need to book a caretaker immediately? Skip full registration and sign in with just your Email &amp; OTP.
               </p>
 
-              {!guestStep ? (
-                <div className="mt-3">
+              <div className="mt-3">
+                {isGuestMode ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/80 p-2.5 border border-emerald-200">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      Guest email &amp; OTP fields active in the form above
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsGuestMode(false)}
+                      className="text-xs font-semibold text-muted hover:text-ink hover:underline"
+                    >
+                      Return to password login
+                    </button>
+                  </div>
+                ) : (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setGuestStep('email')}
+                    onClick={activateGuestMode}
                     className="border-primary-600 bg-white font-bold text-primary-800 hover:bg-primary-50 text-xs shadow-sm"
                   >
                     Continue as Guest with OTP &rarr;
                   </Button>
-                </div>
-              ) : guestStep === 'email' ? (
-                <form onSubmit={handleRequestGuestOtp} className="mt-3 space-y-2.5">
-                  <div className="flex gap-2">
-                    <Input
-                      type="email"
-                      value={guestEmail}
-                      onChange={(e) => setGuestEmail(e.target.value)}
-                      placeholder="Enter your email address"
-                      autoFocus
-                      required
-                      className="bg-white text-xs h-9"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      loading={guestLoading}
-                      className="shrink-0 bg-primary-700 text-white hover:bg-primary-800 text-xs"
-                    >
-                      Send OTP
-                    </Button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setGuestStep(null)}
-                    className="text-[11px] font-semibold text-muted hover:text-ink"
-                  >
-                    Cancel
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyGuestOtp} className="mt-3 space-y-2.5">
-                  <p className="text-[11px] text-muted">
-                    Enter the 6-digit verification code sent to <strong className="text-ink">{guestEmail}</strong>:
-                  </p>
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      maxLength={6}
-                      value={guestOtp}
-                      onChange={(e) => setGuestOtp(e.target.value.replace(/\D/g, ''))}
-                      placeholder="6-digit OTP"
-                      autoFocus
-                      required
-                      className="font-mono text-center tracking-widest bg-white text-sm h-9"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      loading={guestLoading}
-                      className="shrink-0 bg-primary-700 text-white hover:bg-primary-800 text-xs"
-                    >
-                      Verify & Enter
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => handleRequestGuestOtp({ preventDefault: () => {} })}
-                      className="font-semibold text-primary-700 hover:underline"
-                    >
-                      Resend OTP
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGuestStep(null)
-                        setGuestOtp('')
-                      }}
-                      className="font-semibold text-muted hover:text-ink"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>

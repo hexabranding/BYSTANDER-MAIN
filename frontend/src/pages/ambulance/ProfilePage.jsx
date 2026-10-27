@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Save, Siren, Phone, Car, Building2, MapPin, Wind, Activity, Bed } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuth } from '@/context/AuthContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { CITIES } from '@/utils/constants'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
@@ -18,14 +19,15 @@ const AMBULANCE_TYPES = [
 
 export function AmbulanceProfilePage() {
   useDocumentTitle('Driver & Vehicle Profile · Bystander')
+  const { user } = useAuth()
 
   const [form, setForm] = useState({
-    driverName: '',
-    phone: '',
+    driverName: user?.fullName || user?.name || '',
+    phone: user?.phone || '',
     alternatePhone: '',
     vehicleNumber: '',
     ambulanceType: 'Basic Life Support (BLS)',
-    city: 'Mumbai',
+    city: user?.city || 'Mumbai',
     area: '',
     baseHospital: '',
     oxygenFitted: true,
@@ -42,12 +44,12 @@ export function AmbulanceProfilePage() {
       .then((data) => {
         if (data) {
           setForm({
-            driverName: data.driverName || '',
-            phone: data.phone || '',
+            driverName: data.driverName || user?.fullName || user?.name || '',
+            phone: data.phone || user?.phone || '',
             alternatePhone: data.alternatePhone || '',
             vehicleNumber: data.vehicleNumber || '',
             ambulanceType: data.ambulanceType || 'Basic Life Support (BLS)',
-            city: data.city || 'Mumbai',
+            city: data.city || user?.city || 'Mumbai',
             area: data.area || '',
             baseHospital: data.baseHospital || '',
             oxygenFitted: data.oxygenFitted ?? true,
@@ -60,26 +62,27 @@ export function AmbulanceProfilePage() {
       .catch(() => {
         setForm((prev) => ({
           ...prev,
-          driverName: 'Rajesh Patil',
-          phone: '+91 98201 12233',
-          vehicleNumber: 'MH 02 CZ 4421',
-          ambulanceType: 'ICU on Wheels',
-          baseHospital: 'Lilavati Hospital & Research Centre',
-          city: 'Mumbai',
-          area: 'Bandra West',
+          driverName: prev.driverName || user?.fullName || user?.name || '',
+          phone: prev.phone || user?.phone || '',
         }))
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      await updateAmbulanceProfile(form)
+      const updated = await updateAmbulanceProfile(form)
+      if (updated) {
+        setForm((prev) => ({
+          ...prev,
+          ...updated,
+        }))
+      }
       toast.success('Ambulance profile updated successfully!')
     } catch (err) {
-      toast.info('Profile saved locally.')
+      toast.error(err?.message || 'Failed to update profile.')
     } finally {
       setSaving(false)
     }

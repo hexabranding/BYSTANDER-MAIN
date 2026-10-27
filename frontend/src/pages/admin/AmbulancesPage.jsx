@@ -23,7 +23,7 @@ import { Button } from '@/components/common/Button'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Input, Select } from '@/components/forms/FormField'
 import { TableSkeleton } from '@/components/common/States'
-import { fetchAdminAmbulances, updateAdminAmbulanceStatus, DEFAULT_AMBULANCES } from '@/services/ambulanceService'
+import { fetchAdminAmbulances, updateAdminAmbulanceStatus } from '@/services/ambulanceService'
 
 export function AdminAmbulancesPage() {
   useDocumentTitle('Ambulance Fleet Management · Admin')
@@ -38,13 +38,10 @@ export function AdminAmbulancesPage() {
     setLoading(true)
     try {
       const res = await fetchAdminAmbulances({ city, status, search })
-      if (res?.ambulances && res.ambulances.length > 0) {
-        setAmbulances(res.ambulances)
-      } else {
-        setAmbulances(DEFAULT_AMBULANCES)
-      }
+      const list = res?.ambulances || res?.data?.ambulances || (Array.isArray(res) ? res : [])
+      setAmbulances(list)
     } catch (_) {
-      setAmbulances(DEFAULT_AMBULANCES)
+      setAmbulances([])
     } finally {
       setLoading(false)
     }

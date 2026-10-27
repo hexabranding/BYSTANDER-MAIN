@@ -34,23 +34,40 @@ export function AmbulanceDashboardPage() {
     setLoading(true)
     try {
       const data = await getAmbulanceProfile()
-      setAmbulance(data)
+      if (data) {
+        setAmbulance(data)
+      } else {
+        setAmbulance({
+          driverName: user?.fullName || user?.name || '',
+          phone: user?.phone || '',
+          vehicleNumber: '',
+          ambulanceType: 'Basic Life Support (BLS)',
+          baseHospital: '',
+          city: '',
+          area: '',
+          isAvailable: true,
+          verificationStatus: 'verified',
+          oxygenFitted: true,
+          ventilatorFitted: false,
+          stretcherAvailable: true,
+          emergencyCallCount: 0,
+        })
+      }
     } catch (_) {
-      // Mock / fallback if offline
       setAmbulance({
-        driverName: user?.name || user?.fullName || 'Rajesh Patil',
-        phone: user?.phone || '+91 98201 12233',
-        vehicleNumber: 'MH 02 CZ 4421',
-        ambulanceType: 'ICU on Wheels',
-        baseHospital: 'Lilavati Hospital & Research Centre',
-        city: 'Mumbai',
-        area: 'Bandra West',
+        driverName: user?.fullName || user?.name || '',
+        phone: user?.phone || '',
+        vehicleNumber: '',
+        ambulanceType: 'Basic Life Support (BLS)',
+        baseHospital: '',
+        city: '',
+        area: '',
         isAvailable: true,
         verificationStatus: 'verified',
         oxygenFitted: true,
-        ventilatorFitted: true,
+        ventilatorFitted: false,
         stretcherAvailable: true,
-        emergencyCallCount: 24,
+        emergencyCallCount: 0,
       })
     } finally {
       setLoading(false)
@@ -98,7 +115,7 @@ export function AmbulanceDashboardPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-2xl font-extrabold text-ink">
-                Welcome, {ambulance?.driverName || 'Driver'}
+                Welcome, {ambulance?.driverName || user?.fullName || user?.name || 'Driver'}
               </h1>
               <span className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-mint-50 px-2.5 py-0.5 text-xs font-bold text-primary-800">
                 <ShieldCheck className="h-3.5 w-3.5" /> Verified Driver
@@ -106,10 +123,15 @@ export function AmbulanceDashboardPage() {
             </div>
             <p className="mt-1 text-xs text-muted sm:text-sm">
               Vehicle Registration:{' '}
-              <strong className="font-mono text-ink">{ambulance?.vehicleNumber || 'MH 02 CZ 4421'}</strong>{' '}
-              · Base:{' '}
-              <strong className="text-ink">{ambulance?.baseHospital || 'General Hospital'}</strong> (
-              {ambulance?.city || 'Mumbai'})
+              <strong className="font-mono text-ink">{ambulance?.vehicleNumber || '—'}</strong>
+              {ambulance?.baseHospital ? (
+                <>
+                  {' '}· Base: <strong className="text-ink">{ambulance.baseHospital}</strong>
+                  {ambulance.city ? ` (${ambulance.city})` : ''}
+                </>
+              ) : ambulance?.city ? (
+                <> · City: <strong className="text-ink">{ambulance.city}</strong></>
+              ) : null}
             </p>
           </div>
         </div>
@@ -181,11 +203,11 @@ export function AmbulanceDashboardPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-xl border border-line p-3">
                 <span className="text-[11px] font-bold uppercase text-faint">Vehicle Plate</span>
-                <p className="font-mono text-base font-extrabold text-ink">{ambulance?.vehicleNumber}</p>
+                <p className="font-mono text-base font-extrabold text-ink">{ambulance?.vehicleNumber || '—'}</p>
               </div>
               <div className="rounded-xl border border-line p-3">
                 <span className="text-[11px] font-bold uppercase text-faint">Category</span>
-                <p className="text-sm font-extrabold text-primary-800">{ambulance?.ambulanceType}</p>
+                <p className="text-sm font-extrabold text-primary-800">{ambulance?.ambulanceType || 'Basic Life Support (BLS)'}</p>
               </div>
             </div>
 
@@ -230,11 +252,11 @@ export function AmbulanceDashboardPage() {
             <div className="rounded-xl bg-slate-50 p-3.5 text-xs text-muted space-y-1">
               <div className="flex items-center gap-2">
                 <Phone className="h-3.5 w-3.5 text-faint" />
-                <span>Primary Hotline: <strong className="text-ink">{ambulance?.phone}</strong></span>
+                <span>Primary Hotline: <strong className="text-ink">{ambulance?.phone || user?.phone || '—'}</strong></span>
               </div>
               <div className="flex items-center gap-2">
                 <Building2 className="h-3.5 w-3.5 text-faint" />
-                <span>Hospital Anchor: <strong className="text-ink">{ambulance?.baseHospital}</strong></span>
+                <span>Hospital Anchor: <strong className="text-ink">{ambulance?.baseHospital || '—'}</strong></span>
               </div>
             </div>
           </CardBody>

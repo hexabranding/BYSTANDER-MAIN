@@ -23,6 +23,9 @@ import {
   X,
   LogIn,
   Zap,
+  Loader2,
+  LocateFixed,
+  Navigation,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -388,6 +391,154 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       const current = Array.isArray(f.extras) ? f.extras : []
       return { ...f, extras: current.filter((e) => e !== extra) }
     })
+  }
+
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [locationCaptured, setLocationCaptured] = useState(null)
+
+  const handleChooseCurrentLocation = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser', {
+        description: 'Please enter your address manually in the fields below.',
+      })
+      return
+    }
+
+    setDetectingLocation(true)
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+            {
+              headers: {
+                'Accept-Language': 'en',
+              },
+            },
+          )
+
+          if (res.ok) {
+            const data = await res.json()
+            const addr = data.address || {}
+
+            const rawCity =
+              addr.city || addr.town || addr.city_district || addr.suburb || addr.state_district || ''
+            const rawState = addr.state || ''
+
+            let matchedCity = CITIES.find((c) => {
+              const base = c.split(',')[0].toLowerCase()
+              return (
+                rawCity.toLowerCase().includes(base) ||
+                base.includes(rawCity.toLowerCase()) ||
+                (base === 'bengaluru' && rawCity.toLowerCase().includes('bangalore')) ||
+                (base === 'mumbai' &&
+                  (rawCity.toLowerCase().includes('bombay') || rawCity.toLowerCase().includes('thane'))) ||
+                (base === 'delhi ncr' &&
+                  (rawCity.toLowerCase().includes('delhi') ||
+                    rawCity.toLowerCase().includes('noida') ||
+                    rawCity.toLowerCase().includes('gurugram') ||
+                    rawCity.toLowerCase().includes('gurgaon')))
+              )
+            })
+
+            if (!matchedCity && rawCity) {
+              matchedCity = rawState ? `${rawCity}, ${rawState}` : rawCity
+            }
+
+            const detectedArea =
+              addr.suburb ||
+              addr.neighbourhood ||
+              addr.residential ||
+              addr.subdistrict ||
+              addr.quarter ||
+              addr.city_district ||
+              ''
+
+            const streetParts = [
+              addr.building || addr.amenity || addr.house_name,
+              addr.house_number ? `#${addr.house_number}` : '',
+              addr.road,
+              detectedArea,
+            ].filter(Boolean)
+
+            const detectedAddress =
+              streetParts.length > 0
+                ? streetParts.join(', ')
+                : data.display_name?.split(',').slice(0, 3).join(', ') || `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
+
+            setForm((prev) => ({
+              ...prev,
+              city: matchedCity || prev.city || CITIES[0],
+              area: detectedArea || prev.area,
+              address: detectedAddress || prev.address,
+              coordinates: {
+                latitude: Number(lat.toFixed(5)),
+                longitude: Number(lng.toFixed(5)),
+              },
+            }))
+
+            setLocationCaptured({
+              lat: Number(lat.toFixed(5)),
+              lng: Number(lng.toFixed(5)),
+              accuracy,
+              area: detectedArea,
+              city: matchedCity || rawCity,
+              address: detectedAddress,
+            })
+
+            toast.success('Current location chosen!', {
+              description: `${detectedArea ? detectedArea + ', ' : ''}${matchedCity || rawCity || 'Location'} (Accuracy ±${accuracy || 15}m)`,
+            })
+          } else {
+            throw new Error('Geocoding service unavailable')
+          }
+        } catch {
+          const fallbackAddress = `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
+          setForm((prev) => ({
+            ...prev,
+            coordinates: {
+              latitude: Number(lat.toFixed(5)),
+              longitude: Number(lng.toFixed(5)),
+            },
+            address: prev.address || fallbackAddress,
+          }))
+
+          setLocationCaptured({
+            lat: Number(lat.toFixed(5)),
+            lng: Number(lng.toFixed(5)),
+            accuracy,
+          })
+
+          toast.success('Device GPS captured', {
+            description: `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Accuracy ±${accuracy || 20}m)`,
+          })
+        } finally {
+          setDetectingLocation(false)
+        }
+      },
+      (err) => {
+        setDetectingLocation(false)
+        let msg = 'Could not access device location.'
+        if (err.code === 1) {
+          msg = 'Location permission was denied. Please allow location permissions in your browser or type your address manually.'
+        } else if (err.code === 2) {
+          msg = 'Position unavailable. Please check your GPS signal or enter address manually.'
+        } else if (err.code === 3) {
+          msg = 'Location detection timed out. Please try again or type manually.'
+        }
+        toast.error('Location detection failed', { description: msg })
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      },
+    )
   }
 
   const handleConfirm = async () => {
@@ -885,10 +1036,74 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                       })}
                     </div>
 
+                    {/* Quick GPS Location Picker */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-primary-200 bg-mint-50/60 p-4 shadow-xs transition-all duration-200">
+                      <div className="flex items-start gap-3">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl font-bold text-white shadow-xs bg-primary-700">
+                          <Navigation className={cn('h-5 w-5', detectingLocation && 'animate-spin')} />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-display text-sm font-bold text-ink">Choose My Current Location</p>
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border bg-primary-100 text-primary-800 border-primary-300">
+                              <LocateFixed className="h-3 w-3" />
+                              GPS Fast Fill
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted">
+                            {locationCaptured
+                              ? `✓ Located: ${locationCaptured.area ? locationCaptured.area + ', ' : ''}${locationCaptured.city || ''} (±${locationCaptured.accuracy || 15}m)`
+                              : 'Instantly detect and fill your current city, locality, and street address.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleChooseCurrentLocation}
+                        disabled={detectingLocation}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition shadow-xs cursor-pointer shrink-0 bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-60"
+                      >
+                        {detectingLocation ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-white" />
+                            Detecting GPS...
+                          </>
+                        ) : (
+                          <>
+                            <LocateFixed className="h-4 w-4 text-white" />
+                            {locationCaptured ? 'Re-detect My Location' : 'Choose My Current Location'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {locationCaptured?.lat && locationCaptured?.lng && (
+                      <div className="overflow-hidden rounded-xl border border-line bg-slate-50 p-2 text-xs">
+                        <div className="mb-2 flex items-center justify-between px-2 text-slate-700">
+                          <span className="flex items-center gap-1.5 font-medium text-[11px]">
+                            <MapPin className="h-3.5 w-3.5 text-primary-700" />
+                            Live GPS coordinates: {locationCaptured.lat}, {locationCaptured.lng}
+                          </span>
+                          <span className="text-[10px] text-muted">Accuracy: ±{locationCaptured.accuracy || 15}m</span>
+                        </div>
+                        <div className="relative h-28 w-full overflow-hidden rounded-lg bg-slate-200">
+                          <iframe
+                            title="Current Location Map"
+                            width="100%"
+                            height="100%"
+                            loading="lazy"
+                            className="border-0 pointer-events-none"
+                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationCaptured.lng - 0.005}%2C${locationCaptured.lat - 0.004}%2C${locationCaptured.lng + 0.005}%2C${locationCaptured.lat + 0.004}&layer=mapnik&marker=${locationCaptured.lat}%2C${locationCaptured.lng}`}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid gap-4 sm:grid-cols-2">
                       <FormField label="City" required>
                         <Select value={form.city} onChange={(e) => set({ city: e.target.value })}>
-                          {CITIES.map((c) => (
+                          {Array.from(new Set([form.city, ...CITIES].filter(Boolean))).map((c) => (
                             <option key={c} value={c}>
                               {c}
                             </option>
@@ -913,17 +1128,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     </FormField>
 
                     {isUrgent ? (
-                      <div className="space-y-3 pt-2">
-                        <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50/70 p-3.5 text-xs text-orange-950">
-                          <Zap className="h-4 w-4 shrink-0 text-orange-600 mt-0.5" />
-                          <div>
-                            <p className="font-bold text-orange-900">Urgent Dispatch Protocol Active</p>
-                            <p className="mt-0.5 text-orange-800 leading-relaxed">
-                              Your request will be instantly broadcasted to all available caretakers in {form.city || 'your area'} for an immediate 6-hour shift.
-                            </p>
-                          </div>
-                        </div>
-
+                      <div className="pt-2">
                         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3">
                           <input
                             type="checkbox"

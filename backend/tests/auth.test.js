@@ -17,6 +17,7 @@ import {
 } from '../src/middleware/validate.js';
 import { authenticate, authorizeRoles } from '../src/middleware/auth.js';
 import { User, CustomerProfile, CaregiverProfile } from '../src/models/index.js';
+import { requestGuestOtp, validateGuestOtp, verifyGuestOtp } from '../src/services/authService.js';
 
 // Mock helper to simulate Express req, res, next
 const createMockReqRes = (options = {}) => {
@@ -349,4 +350,114 @@ test('12: formatAccountStatusMessage outputs dynamic review date and professiona
     msgPast,
     'Your account suspension has reached its review date and is currently pending administrative review. Please contact platform support.',
   );
+});
+
+// -----------------------------------------------------------------------------
+// Test 13: Customer Registration Flow - No Premature MongoDB Creation on OTP Step
+// -----------------------------------------------------------------------------
+test('Step 15 - 1: validateGuestOtp validates OTP without writing user to database', async () => {
+  const originalFindOne = User.findOne;
+  const originalCreate = User.create;
+  let userInDb = null;
+  User.findOne = async () => userInDb;
+  User.create = async (payload) => {
+    userInDb = { ...payload, _id: '6711a1b2c3d4e5f6a7b8c001' };
+    return userInDb;
+  };
+
+  try {
+    const testEmail = `temp_unregistered_${Date.now()}@example.com`;
+    const { devOtp } = await requestGuestOtp(testEmail, 'signup');
+    assert.ok(devOtp, 'Should return dev OTP in non-production mode');
+
+    // 1. Validating OTP validates successfully
+    const valResult = await validateGuestOtp(testEmail, devOtp);
+    assert.equal(valResult.valid, true);
+
+    // 2. Database MUST NOT contain this user yet
+    assert.equal(userInDb, null, 'User must not be saved in background before password creation');
+  } finally {
+    User.findOne = originalFindOne;
+    User.create = originalCreate;
+  }
+});
+
+test('Step 15 - 2: verifyGuestOtp in signup mode rejects if password missing or under 6 chars', async () => {
+  const originalFindOne = User.findOne;
+  const originalCreate = User.create;
+  let userInDb = null;
+  User.findOne = async () => userInDb;
+  User.create = async (payload) => {
+    userInDb = { ...payload, _id: '6711a1b2c3d4e5f6a7b8c002' };
+    return userInDb;
+  };
+
+  try {
+    const testEmail = `temp_nopass_${Date.now()}@example.com`;
+    const { devOtp } = await requestGuestOtp(testEmail, 'signup');
+
+    // Missing password rejected
+    await assert.rejects(
+      () => verifyGuestOtp(testEmail, devOtp, null, 'signup'),
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        assert.match(err.message, /Password is required/i);
+        return true;
+      }
+    );
+
+    // Short password rejected
+    await assert.rejects(
+      () => verifyGuestOtp(testEmail, devOtp, '123', 'signup'),
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        assert.match(err.message, /Password is required/i);
+        return true;
+      }
+    );
+
+    // Database must still have zero records
+    assert.equal(userInDb, null);
+  } finally {
+    User.findOne = originalFindOne;
+    User.create = originalCreate;
+  }
+});
+
+test('Step 15 - 3: verifyGuestOtp creates user only upon password submission in signup mode', async () => {
+  const originalFindOne = User.findOne;
+  const originalCreate = User.create;
+  const origProfileCreate = CustomerProfile.create;
+
+  let userInDb = null;
+  User.findOne = async () => userInDb;
+  User.create = async (payload) => {
+    userInDb = { ...payload, _id: '6711a1b2c3d4e5f6a7b8c003' };
+    return userInDb;
+  };
+  CustomerProfile.create = async (payload) => ({ ...payload, _id: '6711a1b2c3d4e5f6a7b8c999' });
+
+  try {
+    const testEmail = `new_customer_${Date.now()}@example.com`;
+    const { devOtp } = await requestGuestOtp(testEmail, 'signup');
+
+    // Validate OTP first (Step 2)
+    await validateGuestOtp(testEmail, devOtp);
+    assert.equal(userInDb, null, 'User must not exist after Step 2');
+
+    // Submit Password (Step 3)
+    const result = await verifyGuestOtp(testEmail, devOtp, 'SecretPass123!', 'signup');
+    assert.ok(result.user);
+    assert.equal(result.user.email, testEmail);
+    assert.equal(result.user.role, 'customer');
+
+    // Verify User is now in MongoDB with correct password hash
+    assert.ok(userInDb);
+    const match = await comparePassword('SecretPass123!', userInDb.passwordHash);
+    assert.equal(match, true);
+  } finally {
+    User.findOne = originalFindOne;
+    User.create = originalCreate;
+    CustomerProfile.create = origProfileCreate;
+  }
 });

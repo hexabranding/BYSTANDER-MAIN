@@ -456,9 +456,10 @@ export const requestGuestOtp = async (email, mode = 'any') => {
 };
 
 /**
- * Verify guest login OTP and create or authenticate customer session.
+ * Validate guest/signup OTP without creating a User document in MongoDB
+ * or removing the OTP from the cache.
  */
-export const verifyGuestOtp = async (email, otp, password, mode = 'any') => {
+export const validateGuestOtp = async (email, otp) => {
   if (!email || !otp) {
     const err = new Error('Email address and 6-digit OTP code are required.');
     err.statusCode = 400;
@@ -499,6 +500,77 @@ export const verifyGuestOtp = async (email, otp, password, mode = 'any') => {
     }
 
     if (record.otp !== cleanOtp && !isDevMasterOtp) {
+      record.attempts += 1;
+      const err = new Error('Incorrect verification code. Please check your email and try again.');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
+    // Mark as verified in cache so Step 3 can confirm verification
+    record.verified = true;
+  }
+
+  return {
+    email: cleanEmail,
+    valid: true,
+    message: 'Verification code validated successfully.',
+  };
+};
+
+/**
+ * Verify guest login OTP and create or authenticate customer session.
+ */
+export const verifyGuestOtp = async (email, otp, password, mode = 'any') => {
+  if (!email || !otp) {
+    const err = new Error('Email address and 6-digit OTP code are required.');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanOtp = String(otp).trim();
+
+  if (mode === 'signup') {
+    if (!password || typeof password !== 'string' || password.trim().length < 6) {
+      const err = new Error('Password is required for customer registration (minimum 6 characters).');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+  }
+
+  const record = GUEST_OTP_CACHE.get(cleanEmail);
+  const isDevMasterOtp = process.env.NODE_ENV !== 'production' && cleanOtp === '123456';
+
+  if (!record && !isDevMasterOtp) {
+    const err = new Error(
+      'No active verification code found for this email, or the code has expired. Please request a new code.'
+    );
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  if (record) {
+    if (Date.now() > record.expiresAt) {
+      GUEST_OTP_CACHE.delete(cleanEmail);
+      const err = new Error('Verification code has expired. Please request a new code.');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
+    if (record.attempts >= 5) {
+      GUEST_OTP_CACHE.delete(cleanEmail);
+      const err = new Error('Too many failed verification attempts. Please request a new code.');
+      err.statusCode = 429;
+      err.name = 'RateLimitError';
+      throw err;
+    }
+
+    if (!record.verified && record.otp !== cleanOtp && !isDevMasterOtp) {
       record.attempts += 1;
       const err = new Error('Incorrect verification code. Please check your email and try again.');
       err.statusCode = 400;

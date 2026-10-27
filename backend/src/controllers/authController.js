@@ -130,6 +130,23 @@ export const requestGuestOtp = async (req, res, next) => {
 };
 
 /**
+ * POST /api/auth/guest/validate-otp
+ */
+export const validateGuestOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    const result = await authService.validateGuestOtp(email, otp);
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * POST /api/auth/guest/verify-otp
  */
 export const verifyGuestOtp = async (req, res, next) => {

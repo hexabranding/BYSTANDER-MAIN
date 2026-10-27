@@ -7,13 +7,13 @@ import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useAuth } from '@/context/AuthContext'
 import { FormField, Input } from '@/components/forms/FormField'
 import { Button } from '@/components/common/Button'
-import { requestGuestOtp } from '@/services/authService'
+import { requestGuestOtp, validateGuestOtp } from '@/services/authService'
 import { cn } from '@/utils/cn'
 
 export function RegisterCustomerPage() {
   useDocumentTitle('Register as customer · Bystander')
   const navigate = useNavigate()
-  const { guestLogin, setPassword: setAuthPassword } = useAuth()
+  const { guestLogin } = useAuth()
   const [rememberedEmail, setRememberedEmail] = useLocalStorage('caremate.rememberedEmail', '')
 
   const [step, setStep] = useState('email') // 'email' | 'otp' | 'password'
@@ -70,14 +70,14 @@ export function RegisterCustomerPage() {
 
     setLoading(true)
     try {
-      const res = await guestLogin({ email: email.trim().toLowerCase(), otp: cleanOtp, mode: 'signup' })
-      if (res.ok && res.user) {
+      const res = await validateGuestOtp(email.trim().toLowerCase(), cleanOtp)
+      if (res.ok) {
         if (remember) setRememberedEmail(email.trim().toLowerCase())
         else setRememberedEmail('')
 
         setStep('password')
         toast.success('Email verified successfully!', {
-          description: 'Now choose a password for your account.',
+          description: 'Now choose a password to complete your account registration.',
         })
       } else {
         toast.error(res.message || 'Invalid verification code')
@@ -106,17 +106,22 @@ export function RegisterCustomerPage() {
 
     setLoading(true)
     try {
-      const res = await setAuthPassword(cleanPassword)
-      if (res.ok) {
-        toast.success('Password created successfully!', {
+      const res = await guestLogin({
+        email: email.trim().toLowerCase(),
+        otp: String(otp || '').trim(),
+        password: cleanPassword,
+        mode: 'signup',
+      })
+      if (res.ok && res.user) {
+        toast.success('Account created successfully!', {
           description: 'Welcome to Bystander! You can now book verified caretakers.',
         })
         navigate('/customer/dashboard', { replace: true })
       } else {
-        toast.error(res.message || 'Failed to save password')
+        toast.error(res.message || 'Failed to create account')
       }
     } catch (err) {
-      toast.error(err.message || 'Failed to save password')
+      toast.error(err.message || 'Failed to create account')
     } finally {
       setLoading(false)
     }
@@ -403,8 +408,36 @@ export function RegisterCustomerPage() {
               loading={loading}
               iconRight={ArrowRight}
             >
-              Save Password &amp; Go to Dashboard
+              Create Account &amp; Go to Dashboard
             </Button>
+
+            <div className="flex items-center justify-between pt-1 text-xs text-muted">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep('otp')
+                  setPassword('')
+                  setConfirmPassword('')
+                }}
+                disabled={loading}
+                className="font-semibold text-primary-700 hover:underline"
+              >
+                &larr; Back to verification code
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep('email')
+                  setOtp('')
+                  setPassword('')
+                  setConfirmPassword('')
+                }}
+                disabled={loading}
+                className="font-semibold hover:text-ink hover:underline"
+              >
+                Start Over
+              </button>
+            </div>
           </form>
         )}
       </div>

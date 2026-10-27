@@ -204,6 +204,36 @@ export const requestGuestOtp = async (email, mode = 'any') => {
 };
 
 /**
+ * Validate guest login OTP without persisting user to database or logging in.
+ */
+export const validateGuestOtp = async (email, otp) => {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanOtp = String(otp || '').trim();
+
+  if (!cleanEmail || !cleanOtp) {
+    return { ok: false, message: 'Both email and verification code are required.' };
+  }
+
+  try {
+    const res = await apiClient.post('/auth/guest/validate-otp', {
+      email: cleanEmail,
+      otp: cleanOtp,
+    });
+    return {
+      ok: true,
+      message: res?.message || 'Verification code validated successfully.',
+      data: res?.data,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error.message || 'Verification failed. Please check the code and try again.',
+      error,
+    };
+  }
+};
+
+/**
  * Verify guest login OTP and create/authenticate customer session.
  */
 export const verifyGuestOtp = async (email, otp, password, mode = 'any') => {
@@ -569,6 +599,7 @@ export const logout = async () => {
 export const authService = {
   login,
   requestGuestOtp,
+  validateGuestOtp,
   verifyGuestOtp,
   setPassword,
   registerCustomer,

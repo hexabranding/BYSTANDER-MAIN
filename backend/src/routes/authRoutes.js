@@ -37,6 +37,7 @@ router.post('/logout', authController.logout);
 
 // 6. Urgent Guest Access (Email + OTP)
 router.post('/guest/request-otp', authLimiter, authController.requestGuestOtp);
+router.post('/guest/validate-otp', authLimiter, authController.validateGuestOtp);
 router.post('/guest/verify-otp', authLimiter, authController.verifyGuestOtp);
 
 // 7. Set/Update Password (Requires Authentication)

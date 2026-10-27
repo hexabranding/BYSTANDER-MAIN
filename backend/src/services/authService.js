@@ -428,7 +428,7 @@ export const requestGuestOtp = async (email) => {
 /**
  * Verify guest login OTP and create or authenticate customer session.
  */
-export const verifyGuestOtp = async (email, otp) => {
+export const verifyGuestOtp = async (email, otp, password) => {
   if (!email || !otp) {
     const err = new Error('Email address and 6-digit OTP code are required.');
     err.statusCode = 400;
@@ -500,13 +500,18 @@ export const verifyGuestOtp = async (email, otp) => {
     if (user.fullName && user.fullName.includes(' (Guest)')) {
       user.fullName = user.fullName.replace(' (Guest)', '');
     }
+    if (password && typeof password === 'string' && password.length >= 6) {
+      user.passwordHash = await hashPassword(password);
+    }
     user.lastLoginAt = new Date();
     await user.save();
     profile = await CustomerProfile.findOne({ user: user._id });
   } else {
     // Create new customer account via OTP
-    const randomPassword = crypto.randomUUID();
-    const passwordHash = await hashPassword(randomPassword);
+    const rawPass = password && typeof password === 'string' && password.length >= 6
+      ? password
+      : crypto.randomUUID();
+    const passwordHash = await hashPassword(rawPass);
     const prefix = cleanEmail.split('@')[0];
     const formattedName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
 
@@ -548,4 +553,25 @@ export const verifyGuestOtp = async (email, otp) => {
     isGuest: true,
     isProfileComplete,
   };
+};
+
+/**
+ * Set or update password for authenticated user.
+ */
+export const setPassword = async (userId, newPassword) => {
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    const err = new Error('Password must be at least 6 characters long.');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+  const passwordHash = await hashPassword(newPassword);
+  const user = await User.findByIdAndUpdate(userId, { passwordHash }, { new: true });
+  if (!user) {
+    const err = new Error('User not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+  return { message: 'Password updated successfully' };
 };

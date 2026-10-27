@@ -59,12 +59,17 @@ export function AuthProvider({ children }) {
   }, [])
 
   // 3b. Guest Login via OTP
-  const guestLogin = useCallback(async ({ email, otp }) => {
-    const result = await authService.verifyGuestOtp(email, otp)
+  const guestLogin = useCallback(async ({ email, otp, password }) => {
+    const result = await authService.verifyGuestOtp(email, otp, password)
     if (result.ok && result.user) {
       setUser(result.user)
     }
     return result
+  }, [])
+
+  // 3c. Set/Update password
+  const setPassword = useCallback(async (newPassword) => {
+    return await authService.setPassword(newPassword)
   }, [])
 
   // 4. Register caregiver via POST /api/auth/register/caregiver
@@ -97,12 +102,13 @@ export function AuthProvider({ children }) {
       loading,
       login,
       guestLogin,
+      setPassword,
       logout,
       registerCustomer,
       registerCaregiver,
       updateProfile,
     }),
-    [user, loading, login, guestLogin, logout, registerCustomer, registerCaregiver, updateProfile],
+    [user, loading, login, guestLogin, setPassword, logout, registerCustomer, registerCaregiver, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

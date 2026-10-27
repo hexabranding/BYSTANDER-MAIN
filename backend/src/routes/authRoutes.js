@@ -39,4 +39,7 @@ router.post('/logout', authController.logout);
 router.post('/guest/request-otp', authLimiter, authController.requestGuestOtp);
 router.post('/guest/verify-otp', authLimiter, authController.verifyGuestOtp);
 
+// 7. Set/Update Password (Requires Authentication)
+router.post('/set-password', authenticate, authController.setPassword);
+
 export default router;

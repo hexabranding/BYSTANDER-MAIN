@@ -206,7 +206,7 @@ export const requestGuestOtp = async (email) => {
 /**
  * Verify guest login OTP and create/authenticate customer session.
  */
-export const verifyGuestOtp = async (email, otp) => {
+export const verifyGuestOtp = async (email, otp, password) => {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const cleanOtp = String(otp || '').trim();
 
@@ -215,10 +215,14 @@ export const verifyGuestOtp = async (email, otp) => {
   }
 
   try {
-    const res = await apiClient.post('/auth/guest/verify-otp', {
+    const payload = {
       email: cleanEmail,
       otp: cleanOtp,
-    });
+    };
+    if (password && typeof password === 'string') {
+      payload.password = password;
+    }
+    const res = await apiClient.post('/auth/guest/verify-otp', payload);
 
     const { user, profile, token, isProfileComplete, isGuest } = res?.data || res || {};
     if (token) {
@@ -226,7 +230,7 @@ export const verifyGuestOtp = async (email, otp) => {
     }
 
     const normalized = normalizeUser(user, profile);
-    normalized.isGuest = isGuest ?? true;
+    normalized.isGuest = isGuest ?? false;
     normalized.isProfileComplete = Boolean(isProfileComplete);
 
     return {
@@ -234,13 +238,32 @@ export const verifyGuestOtp = async (email, otp) => {
       user: normalized,
       token,
       isProfileComplete: Boolean(isProfileComplete),
-      isGuest: true,
-      message: res?.message || 'Signed in as guest successfully',
+      isGuest: normalized.isGuest,
+      message: res?.message || 'Signed in successfully',
     };
   } catch (error) {
     return {
       ok: false,
       message: error.message || 'Verification failed. Please check the code and try again.',
+      error,
+    };
+  }
+};
+
+/**
+ * Set password for current authenticated user.
+ */
+export const setPassword = async (password) => {
+  try {
+    const res = await apiClient.post('/auth/set-password', { password });
+    return {
+      ok: true,
+      message: res?.message || 'Password updated successfully',
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error.message || 'Failed to update password',
       error,
     };
   }
@@ -546,6 +569,7 @@ export const authService = {
   login,
   requestGuestOtp,
   verifyGuestOtp,
+  setPassword,
   registerCustomer,
   registerCaregiver,
   getMe,

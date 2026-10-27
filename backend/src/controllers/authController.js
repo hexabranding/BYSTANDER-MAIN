@@ -134,10 +134,11 @@ export const requestGuestOtp = async (req, res, next) => {
  */
 export const verifyGuestOtp = async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp, password } = req.body;
     const { user, profile, token, isGuest, isProfileComplete } = await authService.verifyGuestOtp(
       email,
-      otp
+      otp,
+      password
     );
 
     // Set secure HTTP-only cookie
@@ -153,6 +154,22 @@ export const verifyGuestOtp = async (req, res, next) => {
         isGuest,
         isProfileComplete,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/auth/set-password
+ */
+export const setPassword = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+    const result = await authService.setPassword(req.user._id, password);
+    return res.status(200).json({
+      success: true,
+      message: result.message,
     });
   } catch (error) {
     next(error);

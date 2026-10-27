@@ -327,10 +327,16 @@ export const createBooking = async (customerId, bookingData) => {
 
     for (const cg of verifiedCaregivers) {
       if (cg.user) {
-        safeDispatchNotification(cg.user, 'booking_requested', {
-          bookingId: createdBooking._id,
-          serviceName: service.name,
-          city: location?.city || '',
+        safeDispatchNotification({
+          recipient: cg.user,
+          type: 'booking_created',
+          title: 'New Booking Broadcast',
+          message: `New booking request for ${service.name} in ${location?.city || 'your area'}.`,
+          metadata: {
+            bookingId: createdBooking._id,
+            serviceName: service.name,
+            city: location?.city || '',
+          },
         });
       }
     }
@@ -621,9 +627,15 @@ export const acceptBooking = async (user, bookingId) => {
           caregiverName: caregiver.name || user.name,
         });
       }
-      safeDispatchNotification(booking.customer, 'booking_confirmed', {
-        bookingId: booking._id,
-        caregiverName: caregiver.name || user.name,
+      safeDispatchNotification({
+        recipient: booking.customer,
+        type: 'booking_accepted',
+        title: 'Caretaker Confirmed',
+        message: `${caregiver.name || user.name || 'A caretaker'} has accepted your booking #${String(booking._id).slice(-6)}.`,
+        metadata: {
+          bookingId: booking._id,
+          caregiverName: caregiver.name || user.name,
+        },
       });
     } catch (notifErr) {
       console.error('Acceptance notification error:', notifErr.message);

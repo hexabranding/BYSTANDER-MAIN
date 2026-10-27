@@ -122,8 +122,8 @@ export const createComplaint = async (user, data) => {
     recipient: user._id,
     type: 'complaint_update',
     title: 'Complaint Registered',
-    body: `Your complaint (${complaint.complaintNumber}) has been recorded and queued for investigation.`,
-    data: { complaintId: complaint._id, complaintNumber: complaint.complaintNumber },
+    message: `Your complaint (${complaint.complaintNumber}) has been recorded and queued for investigation.`,
+    metadata: { complaintId: complaint._id, complaintNumber: complaint.complaintNumber },
   });
 
   return sanitizePublicComplaint(complaint);
@@ -394,8 +394,8 @@ export const updateComplaintStatus = async (complaintId, payload, adminUser) => 
     recipient: complaint.complainant,
     type: 'complaint_update',
     title: 'Complaint Update',
-    body: `Your complaint (${complaint.complaintNumber}) is now marked as '${newStatus}'.`,
-    data: { complaintId: complaint._id, status: newStatus },
+    message: `Your complaint (${complaint.complaintNumber}) is now marked as '${newStatus}'.`,
+    metadata: { complaintId: complaint._id, status: newStatus },
   });
 
   return complaint;

@@ -173,6 +173,29 @@ const bookingSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Payment Gateway Tracking (Razorpay Escrow)
+    paymentStatus: {
+      type: String,
+      enum: ['unpaid', 'pending', 'escrow_held', 'released', 'refunded'],
+      default: 'escrow_held',
+      index: true,
+    },
+    gatewayOrderId: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    gatewayPaymentId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+
     // Lifecycle transition audit timestamps & actor tracking
     acceptedAt: {
       type: Date,

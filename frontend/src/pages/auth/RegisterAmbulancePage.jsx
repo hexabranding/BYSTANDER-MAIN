@@ -8,6 +8,7 @@ import { CITIES } from '@/utils/constants'
 import { Button } from '@/components/common/Button'
 import { FormField, Input, Select } from '@/components/forms/FormField'
 import { registerAmbulance } from '@/services/ambulanceService'
+import apiClient from '@/services/apiClient'
 
 const AMBULANCE_TYPES = [
   'Basic Life Support (BLS)',
@@ -66,8 +67,7 @@ export function RegisterAmbulancePage() {
 
       // Authenticate directly if login context method supports it or navigate to login
       if (res?.data?.token) {
-        localStorage.setItem('caremate.token', res.data.token)
-        localStorage.setItem('caremate.user', JSON.stringify(res.data.user))
+        apiClient.setAuthToken(res.data.token)
         window.location.href = '/ambulance/dashboard'
       } else {
         navigate('/login?role=ambulance')

@@ -99,8 +99,44 @@ export const createNotification = async ({
  * Wraps notification creation so that downstream notification issues cannot
  * disrupt or falsely reverse primary business operations (bookings, messages, SOS).
  */
-export const safeDispatchNotification = async (notificationData) => {
+export const safeDispatchNotification = async (firstArg, secondArg, thirdArg) => {
   try {
+    let notificationData;
+    if (firstArg && typeof firstArg === 'object' && !Array.isArray(firstArg) && (firstArg.recipient || firstArg.type)) {
+      notificationData = {
+        ...firstArg,
+        message: firstArg.message || firstArg.body,
+        metadata: firstArg.metadata || firstArg.data || {},
+      };
+    } else if (firstArg && secondArg) {
+      const payload = thirdArg && typeof thirdArg === 'object' ? thirdArg : {};
+      const normType =
+        secondArg === 'booking_requested'
+          ? 'booking_created'
+          : secondArg === 'booking_confirmed'
+            ? 'booking_accepted'
+            : secondArg;
+
+      notificationData = {
+        recipient: firstArg?._id || firstArg,
+        type: normType,
+        title:
+          payload.title ||
+          (normType === 'booking_created'
+            ? 'New Booking Request'
+            : normType === 'booking_accepted'
+              ? 'Booking Confirmed'
+              : 'Notification Update'),
+        message:
+          payload.message ||
+          payload.body ||
+          `Update regarding booking ${payload.bookingId ? '#' + String(payload.bookingId).slice(-6) : ''}`.trim(),
+        metadata: payload,
+      };
+    } else {
+      notificationData = firstArg;
+    }
+
     // In disconnected unit test executions where models are unmocked, skip to prevent 10s Mongoose buffering
     if (
       process.env.NODE_ENV === 'test' &&

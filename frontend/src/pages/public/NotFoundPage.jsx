@@ -13,7 +13,11 @@ export function NotFoundPage() {
   const onSearch = (event) => {
     event.preventDefault()
     const q = term.trim()
-    navigate('/book-caregiver')
+    if (q) {
+      navigate(`/caregivers?search=${encodeURIComponent(q)}`)
+    } else {
+      navigate('/caregivers')
+    }
   }
 
   return (

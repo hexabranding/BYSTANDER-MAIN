@@ -107,12 +107,82 @@ export const getSimulatedBookingPayment = async (bookingId) => {
   return response?.data || response
 }
 
+/**
+ * Dynamically loads the official Razorpay Checkout SDK script
+ * @returns {Promise<boolean>}
+ */
+export const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && window.Razorpay) {
+      resolve(true)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
+}
+
+/**
+ * Retrieves the public Razorpay test key ID
+ * @returns {Promise<string>}
+ */
+export const getRazorpayKey = async () => {
+  try {
+    const response = await apiClient.get('/payments/key')
+    return response?.keyId || response?.data?.keyId || 'rzp_test_bystander_sandbox'
+  } catch (_) {
+    return 'rzp_test_bystander_sandbox'
+  }
+}
+
+/**
+ * Creates a Razorpay Order for a specific booking
+ * @param {string} bookingId
+ * @returns {Promise<Object>}
+ */
+export const createPaymentOrder = async (bookingId) => {
+  if (!bookingId) throw new Error('A valid booking ID is required')
+  const response = await apiClient.post('/payments/create-order', { bookingId })
+  return response?.data || response
+}
+
+/**
+ * Verifies Razorpay payment signature
+ * @param {Object} paymentData - { bookingId, razorpay_order_id, razorpay_payment_id, razorpay_signature }
+ * @returns {Promise<Object>}
+ */
+export const verifyPaymentSignature = async (paymentData) => {
+  const response = await apiClient.post('/payments/verify', paymentData)
+  return response?.data || response
+}
+
+/**
+ * Releases escrow funds upon shift completion
+ * @param {string} bookingId
+ * @returns {Promise<Object>}
+ */
+export const releaseEscrow = async (bookingId) => {
+  if (!bookingId) throw new Error('A valid booking ID is required')
+  const response = await apiClient.post('/payments/release-escrow', { bookingId })
+  return response?.data || response
+}
+
 export const financeService = {
   getCustomerPayments,
   getCaregiverEarnings,
   requestCaregiverPayout,
+  loadRazorpayScript,
+  getRazorpayKey,
+  createPaymentOrder,
+  verifyPaymentSignature,
+  releaseEscrow,
   simulateBookingPayment,
   getSimulatedBookingPayment,
 }
 
 export default financeService
+

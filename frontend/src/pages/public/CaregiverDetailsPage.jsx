@@ -156,7 +156,7 @@ export function CaregiverDetailsPage() {
     verified = false,
     careSettings = [],
     bio = '',
-    joinedOn = new Date().toISOString(),
+    joinedOn = '2024-01-01T00:00:00.000Z',
     trustScore = 95,
     responseRate = 96,
     completedJobs = 0,

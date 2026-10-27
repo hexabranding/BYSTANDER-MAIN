@@ -124,15 +124,41 @@ const transactionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    gateway: {
+      type: String,
+      enum: ['razorpay', 'stripe', 'simulated'],
+      default: 'razorpay',
+      index: true,
+    },
+    gatewayOrderId: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    gatewayPaymentId: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    gatewaySignature: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    gatewayRefundId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     isSimulated: {
       type: Boolean,
-      default: true,
-      immutable: true,
+      default: false,
     },
     auditDisclaimer: {
       type: String,
-      default: 'FINANCIAL AUDIT LEDGER — NO REAL MONETARY FUNDS MOVED OR BANK ACCOUNTS DEBITED',
-      immutable: true,
+      default: 'FINANCIAL AUDIT LEDGER',
     },
   },
   {

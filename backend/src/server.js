@@ -31,6 +31,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
 import ambulanceRoutes from './routes/ambulanceRoutes.js';
 import testPaymentRoutes from './routes/testPaymentRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
 import { assertValidJwtSecret } from './utils/auth.js';
 import { assertValidOtpSecret } from './utils/otpUtils.js';
 
@@ -38,7 +39,7 @@ import { assertValidOtpSecret } from './utils/otpUtils.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Explicitly load environment variables from backend/.env
+// Explicitly load environment variables from backend/.env (including Razorpay Test API keys)
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
@@ -141,6 +142,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/sos', sosRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/payments', paymentRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/admin', adminAnalyticsRoutes);

@@ -12,12 +12,12 @@ const OPTIONS = [
     title: 'Book a caretaker',
     description: 'Find verified caretakers and nurses for your loved one at home.',
     bullets: [
-      'Browse verified caretakers near you',
-      'Escrow-protected payments',
-      'Live booking tracking and SOS support',
+      'Instant access via Email OTP — no passwords required',
+      'Profile details save automatically when you book',
+      'Escrow-protected payments and verified caretakers',
     ],
     to: '/register/customer',
-    cta: 'Register as customer',
+    cta: 'Get instant access',
   },
   {
     id: 'caregiver',

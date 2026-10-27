@@ -12,7 +12,7 @@ const points = [
 export function AuthLayout() {
   return (
     <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 px-12 py-12 lg:flex lg:flex-col lg:justify-between">
+      <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800 px-8 py-8 xl:px-12 xl:py-12 lg:flex lg:flex-col lg:justify-between lg:sticky lg:top-0 lg:h-screen lg:self-start">
         {/* aurora glows */}
         <div
           className="absolute -right-24 -top-24 h-96 w-96 animate-float-slow rounded-full bg-accent-500/30 blur-3xl"

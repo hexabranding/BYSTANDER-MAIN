@@ -628,7 +628,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         className={cn(
           'flex flex-wrap items-center justify-between gap-4 rounded-card border p-4 shadow-sm sm:p-5 transition-colors duration-200',
           isUrgent
-            ? 'border-red-300 bg-red-50/80 shadow-md ring-1 ring-red-400/40'
+            ? 'border-orange-300 bg-orange-50/80 shadow-md ring-1 ring-orange-400/40'
             : 'border-primary-200 bg-mint-50/70',
         )}
       >
@@ -636,7 +636,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           <span
             className={cn(
               'grid h-12 w-12 shrink-0 place-items-center rounded-full font-display text-base font-extrabold text-white shadow-sm transition',
-              isUrgent ? 'bg-red-600' : 'bg-primary-700',
+              isUrgent ? 'bg-orange-500' : 'bg-primary-700',
             )}
           >
             {isUrgent ? <Zap className="h-6 w-6 text-white animate-pulse" /> : <Sparkles className="h-6 w-6 text-white" />}
@@ -650,11 +650,11 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                 className={cn(
                   'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold border',
                   isUrgent
-                    ? 'bg-red-100 text-red-800 border-red-300'
+                    ? 'bg-orange-100 text-orange-900 border-orange-300'
                     : 'bg-success-50 text-success-700 border-success-200',
                 )}
               >
-                {isUrgent ? <Zap className="h-3 w-3 text-red-600" /> : <ShieldCheck className="h-3 w-3" />}
+                {isUrgent ? <Zap className="h-3 w-3 text-orange-600" /> : <ShieldCheck className="h-3 w-3" />}
                 {isUrgent ? '2-Step Urgent Mode' : 'Live Broadcast'}
               </span>
             </div>
@@ -674,11 +674,11 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
               'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition shadow-xs cursor-pointer',
               isUrgent
                 ? 'border-slate-300 bg-white text-ink hover:bg-slate-100'
-                : 'border-red-400 bg-red-600 text-white hover:bg-red-700 shadow-sm',
+                : 'border-orange-500 bg-orange-500 text-white hover:bg-orange-600 shadow-sm',
             )}
           >
-            <Zap className={cn('h-4 w-4', isUrgent ? 'text-red-600' : 'text-white')} />
-            {isUrgent ? 'Switch to Standard (7 Steps)' : '⚡ Urgent Booking (2 Steps)'}
+            <Zap className={cn('h-4 w-4', isUrgent ? 'text-orange-600' : 'text-white')} />
+            {isUrgent ? 'Switch to Standard (7 Steps)' : 'Urgent Booking (2 Steps)'}
           </button>
 
           <div className="text-left sm:text-right border-l border-line pl-3">
@@ -914,11 +914,11 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
                     {isUrgent ? (
                       <div className="space-y-3 pt-2">
-                        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50/70 p-3.5 text-xs text-red-950">
-                          <Zap className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+                        <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50/70 p-3.5 text-xs text-orange-950">
+                          <Zap className="h-4 w-4 shrink-0 text-orange-600 mt-0.5" />
                           <div>
-                            <p className="font-bold text-red-900">Urgent Dispatch Protocol Active</p>
-                            <p className="mt-0.5 text-red-800 leading-relaxed">
+                            <p className="font-bold text-orange-900">Urgent Dispatch Protocol Active</p>
+                            <p className="mt-0.5 text-orange-800 leading-relaxed">
                               Your request will be instantly broadcasted to all available caretakers in {form.city || 'your area'} for an immediate 6-hour shift.
                             </p>
                           </div>
@@ -1212,9 +1212,9 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                 disabled={(!terms && !isUrgent) || (!isCurrentStepValid && isUrgent) || submitting}
                 loading={submitting}
                 icon={isUrgent ? Zap : CheckCircle2}
-                className={cn(isUrgent && 'bg-red-600 hover:bg-red-700 text-white font-bold shadow-md')}
+                className={cn(isUrgent && 'bg-orange-500 hover:bg-orange-600 text-white font-bold shadow-md')}
               >
-                {isUrgent ? '⚡ Confirm & broadcast urgent request' : 'Confirm & broadcast request'}
+                {isUrgent ? 'Confirm & broadcast urgent request' : 'Confirm & broadcast request'}
               </Button>
             )}
           </div>

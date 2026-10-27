@@ -106,11 +106,13 @@ export const normalizeUser = (user, profile = {}) => {
     (user.fullName && user.fullName.includes('(Guest)'))
   );
 
+  const cleanFullName = (user.fullName || user.name || 'User').replace(/\s*\(Guest\)/gi, '').trim() || 'User';
+
   return {
     id: String(user._id || user.id),
     _id: String(user._id || user.id),
-    name: user.fullName || user.name || 'User',
-    fullName: user.fullName || user.name || 'User',
+    name: cleanFullName,
+    fullName: cleanFullName,
     email: user.email || '',
     phone: user.phone || '',
     role: user.role || 'customer',

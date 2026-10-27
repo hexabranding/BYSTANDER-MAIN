@@ -497,23 +497,26 @@ export const verifyGuestOtp = async (email, otp) => {
       throw err;
     }
 
+    if (user.fullName && user.fullName.includes(' (Guest)')) {
+      user.fullName = user.fullName.replace(' (Guest)', '');
+    }
     user.lastLoginAt = new Date();
     await user.save();
     profile = await CustomerProfile.findOne({ user: user._id });
   } else {
-    // Create new customer account for guest
+    // Create new customer account via OTP
     const randomPassword = crypto.randomUUID();
     const passwordHash = await hashPassword(randomPassword);
     const prefix = cleanEmail.split('@')[0];
     const formattedName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
 
     user = await User.create({
-      fullName: `${formattedName} (Guest)`,
+      fullName: formattedName,
       email: cleanEmail,
       passwordHash,
       role: 'customer',
       status: 'active',
-      isGuest: true,
+      isGuest: false,
       isEmailVerified: true,
       lastLoginAt: new Date(),
     });

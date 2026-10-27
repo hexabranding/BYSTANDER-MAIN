@@ -33,7 +33,7 @@ const PUBLIC_ROLE_OPTIONS = [
     label: 'Customer',
     icon: HeartHandshake,
     heading: 'Welcome back',
-    subtitle: 'Sign in to book verified caretakers for your family.',
+    subtitle: 'Sign in with your email and a one-time verification code.',
     demoEmail: 'priya.sharma@example.com',
   },
   {
@@ -95,36 +95,31 @@ export function LoginPage({ adminOnly = false }) {
     ? searchParams.get('role')
     : 'customer'
 
-  const isGuestQuery =
-    searchParams.get('mode') === 'guest' ||
-    searchParams.get('mode') === 'otp' ||
-    searchParams.get('guest') === 'true'
-
   const [role, setRole] = useState(initialRole)
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(Boolean(rememberedEmail))
   const [showDemo, setShowDemo] = useState(false)
   const [statusNotice, setStatusNotice] = useState(null)
 
-  // Urgent Guest Login State
-  const [isGuestMode, setIsGuestMode] = useState(isGuestQuery)
-  const [guestStep, setGuestStep] = useState('email') // 'email' | 'otp'
-  const [guestEmail, setGuestEmail] = useState('')
-  const [guestOtp, setGuestOtp] = useState('')
-  const [guestLoading, setGuestLoading] = useState(false)
+  // Unified Customer OTP Login State
+  const [customerStep, setCustomerStep] = useState('email') // 'email' | 'otp'
+  const [customerEmail, setCustomerEmail] = useState(rememberedEmail || '')
+  const [customerOtp, setCustomerOtp] = useState('')
+  const [customerLoading, setCustomerLoading] = useState(false)
+  const [customerUsePassword, setCustomerUsePassword] = useState(false)
 
-  const handleRequestGuestOtp = async (e) => {
+  const handleRequestCustomerOtp = async (e) => {
     e?.preventDefault?.()
-    const clean = String(guestEmail || '').trim().toLowerCase()
+    const clean = String(customerEmail || '').trim().toLowerCase()
     if (!clean || !clean.includes('@')) {
       toast.error('Please enter a valid email address.')
       return
     }
-    setGuestLoading(true)
+    setCustomerLoading(true)
     try {
       const res = await requestGuestOtp(clean)
       if (res.ok) {
-        setGuestStep('otp')
+        setCustomerStep('otp')
         toast.success('Verification code sent!', {
           description: `Enter the 6-digit code sent to ${clean}`,
         })
@@ -137,23 +132,25 @@ export function LoginPage({ adminOnly = false }) {
     } catch (err) {
       toast.error(err.message || 'Failed to request code')
     } finally {
-      setGuestLoading(false)
+      setCustomerLoading(false)
     }
   }
 
-  const handleVerifyGuestOtp = async (e) => {
+  const handleVerifyCustomerOtp = async (e) => {
     e?.preventDefault?.()
-    const cleanOtp = String(guestOtp || '').trim()
+    const cleanOtp = String(customerOtp || '').trim()
     if (!cleanOtp || cleanOtp.length < 6) {
       toast.error('Please enter the complete 6-digit verification code.')
       return
     }
-    setGuestLoading(true)
+    setCustomerLoading(true)
     try {
-      const res = await guestLogin({ email: guestEmail, otp: cleanOtp })
+      const res = await guestLogin({ email: customerEmail, otp: cleanOtp })
       if (res.ok && res.user) {
+        if (remember) setRememberedEmail(customerEmail.trim())
+        else setRememberedEmail('')
         toast.success(`Welcome, ${res.user.name}!`, {
-          description: 'You are signed in as a guest. You can book a caretaker directly.',
+          description: 'You are signed in to Bystander.',
         })
         const canUseRedirect =
           redirectTo && typeof redirectTo === 'string' && !redirectTo.includes('/login')
@@ -164,7 +161,7 @@ export function LoginPage({ adminOnly = false }) {
     } catch (err) {
       toast.error(err.message || 'Verification failed')
     } finally {
-      setGuestLoading(false)
+      setCustomerLoading(false)
     }
   }
 
@@ -176,30 +173,12 @@ export function LoginPage({ adminOnly = false }) {
     register,
     handleSubmit,
     setValue,
-    getValues,
     setError,
     formState: { errors, isSubmitting },
   } = useForm({
     mode: 'onTouched',
     defaultValues: { email: rememberedEmail || '', password: '' },
   })
-
-  const activateGuestMode = () => {
-    const mainEmail = getValues('email')
-    if (mainEmail && !guestEmail) {
-      setGuestEmail(mainEmail.trim())
-    }
-    setRole('customer')
-    setIsGuestMode(true)
-    setGuestStep('email')
-    setStatusNotice(null)
-    setTimeout(() => {
-      const emailInput = document.getElementById('guest-email-input')
-      if (emailInput) {
-        emailInput.focus()
-      }
-    }, 60)
-  }
 
   const onSubmit = async ({ email, password }) => {
     const effectiveRole = isAdminPortal ? 'admin' : role
@@ -232,14 +211,25 @@ export function LoginPage({ adminOnly = false }) {
 
   const applyDemoAccount = (user) => {
     setStatusNotice(null)
-    setValue('email', user.email, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-    setValue('password', DEMO_PASSWORD, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-    if (!isAdminPortal) {
-      setRole(user.role)
+    if (user.role === 'customer') {
+      setRole('customer')
+      setCustomerEmail(user.email)
+      setCustomerStep('email')
+      setCustomerUsePassword(false)
+      setValue('email', user.email, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+      setValue('password', DEMO_PASSWORD, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+    } else {
+      if (!isAdminPortal) {
+        setRole(user.role)
+      }
+      setValue('email', user.email, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+      setValue('password', DEMO_PASSWORD, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
     }
     setShowDemo(false)
     toast.info(`Filled in ${user.name}'s demo credentials`)
   }
+
+  const isCustomerOtpForm = role === 'customer' && !isAdminPortal && !customerUsePassword
 
   return (
     <div className="space-y-5">
@@ -286,8 +276,8 @@ export function LoginPage({ adminOnly = false }) {
                 onClick={() => {
                   setRole(option.id)
                   setStatusNotice(null)
-                  if (option.id !== 'customer') {
-                    setIsGuestMode(false)
+                  if (option.id === 'customer') {
+                    setCustomerUsePassword(false)
                   }
                 }}
                 aria-pressed={selected}
@@ -314,49 +304,49 @@ export function LoginPage({ adminOnly = false }) {
       {/* ---------------- form ---------------- */}
       <div
         id="login-main-form"
-        className={cn(
-          'rounded-card border bg-white p-5 shadow-card sm:p-6 transition-all duration-200',
-          isGuestMode ? 'border-emerald-400 ring-2 ring-emerald-500/20' : 'border-line',
-        )}
+        className="rounded-card border border-line bg-white p-5 shadow-card sm:p-6 transition-all duration-200"
       >
-        {isGuestMode ? (
+        {isCustomerOtpForm ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-600 text-white shadow-xs">
-                  <Zap className="h-4 w-4" />
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary-700 text-white shadow-xs">
+                  <HeartHandshake className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-800">
-                    Fast-Track Guest Sign-in
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-primary-900">
+                    Direct Email Sign-in
                   </p>
                   <p className="text-[11px] text-muted">
-                    Instant access · Enter email to receive one-time code
+                    Instant access · Enter email to receive a 6-digit one-time code
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsGuestMode(false)}
+                onClick={() => {
+                  setCustomerUsePassword(true)
+                  setValue('email', customerEmail)
+                }}
                 className="rounded-lg border border-line bg-slate-50 px-2.5 py-1 text-xs font-semibold text-ink-soft hover:bg-slate-100 transition"
               >
                 Use Password
               </button>
             </div>
 
-            {guestStep === 'email' ? (
-              <form onSubmit={handleRequestGuestOtp} className="space-y-4">
+            {customerStep === 'email' ? (
+              <form onSubmit={handleRequestCustomerOtp} className="space-y-4">
                 <FormField
                   label="Email address"
-                  htmlFor="guest-email-input"
+                  htmlFor="customer-email-input"
                   required
-                  hint="We will send a 6-digit verification code to this email"
+                  hint="We will send a 6-digit verification code. No upfront password required."
                 >
                   <Input
-                    id="guest-email-input"
+                    id="customer-email-input"
                     type="email"
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
                     placeholder="Enter your email address"
                     autoFocus
                     required
@@ -364,40 +354,46 @@ export function LoginPage({ adminOnly = false }) {
                   />
                 </FormField>
 
+                <div className="flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="customer-remember"
+                    className="flex cursor-pointer items-center gap-2 text-sm text-ink-soft"
+                  >
+                    <input
+                      id="customer-remember"
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
+                      className="h-4 w-4 rounded border-line-strong accent-[#0F766E]"
+                    />
+                    Remember my email
+                  </label>
+                </div>
+
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full bg-primary-700 hover:bg-primary-800 text-white"
-                  loading={guestLoading}
+                  className="w-full bg-primary-700 hover:bg-primary-800 text-white font-bold"
+                  loading={customerLoading}
                   iconRight={ArrowRight}
                 >
                   Send Verification Code (OTP)
                 </Button>
-
-                <div className="pt-1 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setIsGuestMode(false)}
-                    className="text-xs font-semibold text-primary-700 hover:text-primary-800 hover:underline"
-                  >
-                    &larr; Return to regular password sign-in
-                  </button>
-                </div>
               </form>
             ) : (
-              <form onSubmit={handleVerifyGuestOtp} className="space-y-4">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-950 flex items-center justify-between">
+              <form onSubmit={handleVerifyCustomerOtp} className="space-y-4">
+                <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-3.5 text-xs text-primary-950 flex items-center justify-between">
                   <div className="min-w-0 pr-2">
-                    <p className="text-[11px] text-emerald-800">Verification code sent to:</p>
-                    <p className="font-bold truncate text-emerald-950">{guestEmail}</p>
+                    <p className="text-[11px] text-primary-800">Verification code sent to:</p>
+                    <p className="font-bold truncate text-primary-950">{customerEmail}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      setGuestStep('email')
-                      setGuestOtp('')
+                      setCustomerStep('email')
+                      setCustomerOtp('')
                     }}
-                    className="shrink-0 font-bold text-emerald-800 hover:underline text-xs"
+                    className="shrink-0 font-bold text-primary-800 hover:underline text-xs"
                   >
                     Change email
                   </button>
@@ -405,16 +401,16 @@ export function LoginPage({ adminOnly = false }) {
 
                 <FormField
                   label="Enter 6-digit verification code"
-                  htmlFor="guest-otp-input"
+                  htmlFor="customer-otp-input"
                   required
-                  hint="Check your inbox or spam folder for your 6-digit OTP"
+                  hint="Check your inbox or spam folder for your 6-digit code"
                 >
                   <Input
-                    id="guest-otp-input"
+                    id="customer-otp-input"
                     type="text"
                     maxLength={6}
-                    value={guestOtp}
-                    onChange={(e) => setGuestOtp(e.target.value.replace(/\D/g, ''))}
+                    value={customerOtp}
+                    onChange={(e) => setCustomerOtp(e.target.value.replace(/\D/g, ''))}
                     placeholder="• • • • • •"
                     autoFocus
                     required
@@ -425,18 +421,18 @@ export function LoginPage({ adminOnly = false }) {
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full bg-primary-700 hover:bg-primary-800 text-white"
-                  loading={guestLoading}
+                  className="w-full bg-primary-700 hover:bg-primary-800 text-white font-bold"
+                  loading={customerLoading}
                   iconRight={ArrowRight}
                 >
-                  Verify &amp; Sign In as Guest
+                  Verify &amp; Sign In
                 </Button>
 
                 <div className="flex items-center justify-between pt-1 text-xs text-muted">
                   <button
                     type="button"
-                    onClick={handleRequestGuestOtp}
-                    disabled={guestLoading}
+                    onClick={handleRequestCustomerOtp}
+                    disabled={customerLoading}
                     className="font-semibold text-primary-700 hover:underline"
                   >
                     Resend OTP Code
@@ -444,9 +440,8 @@ export function LoginPage({ adminOnly = false }) {
                   <button
                     type="button"
                     onClick={() => {
-                      setIsGuestMode(false)
-                      setGuestStep('email')
-                      setGuestOtp('')
+                      setCustomerUsePassword(true)
+                      setValue('email', customerEmail)
                     }}
                     className="font-semibold hover:text-ink hover:underline"
                   >
@@ -557,14 +552,17 @@ export function LoginPage({ adminOnly = false }) {
               Sign in
             </Button>
 
-            {!isAdminPortal && (
+            {!isAdminPortal && role === 'customer' && (
               <div className="pt-1 text-center">
                 <button
                   type="button"
-                  onClick={activateGuestMode}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                  onClick={() => {
+                    setCustomerUsePassword(false)
+                    setCustomerStep('email')
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-700 hover:text-primary-800 hover:underline"
                 >
-                  <Zap className="h-3.5 w-3.5" /> Need urgent care? Sign in with Email OTP instead &rarr;
+                  <Zap className="h-3.5 w-3.5" /> Sign in with Email OTP code instead &rarr;
                 </button>
               </div>
             )}
@@ -594,8 +592,7 @@ export function LoginPage({ adminOnly = false }) {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-bold text-ink">Demo accounts</span>
                 <span className="block text-xs text-muted">
-                  {availableDemoUsers.length} profile{availableDemoUsers.length > 1 ? 's' : ''} · password{' '}
-                  <span className="font-semibold text-ink-soft">{DEMO_PASSWORD}</span>
+                  {availableDemoUsers.length} profile{availableDemoUsers.length > 1 ? 's' : ''} · quick sign-in
                 </span>
               </span>
               <span className="rounded-full bg-warning-50 px-2 py-0.5 text-[11px] font-bold text-warning-700 ring-1 ring-inset ring-warning-400/50">
@@ -632,70 +629,13 @@ export function LoginPage({ adminOnly = false }) {
                 ))}
                 <li className="flex items-start gap-2 pt-1 text-[11px] leading-relaxed text-faint">
                   <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Selecting a profile fills the form above — then press Sign in.
+                  Customers use Email OTP (dev code: 123456). Caretakers &amp; Ambulance use password: {DEMO_PASSWORD}
                 </li>
               </ul>
             ) : null}
           </div>
         )
       })()}
-
-      {/* ---------------- urgent guest login ---------------- */}
-      {!isAdminPortal && (
-        <div
-          className={cn(
-            'rounded-card border p-4.5 shadow-sm transition-all duration-200',
-            isGuestMode
-              ? 'border-emerald-400 bg-emerald-50/50 ring-2 ring-emerald-500/20'
-              : 'border-emerald-300 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white',
-          )}
-        >
-          <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-700 text-white shadow-sm">
-              <Zap className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-extrabold text-ink">Urgent Care? Fast-Track Guest Login</span>
-                <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-primary-800">
-                  Instant Access
-                </span>
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-muted">
-                Need to book a caretaker immediately? Skip full registration and sign in with just your Email &amp; OTP.
-              </p>
-
-              <div className="mt-3">
-                {isGuestMode ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/80 p-2.5 border border-emerald-200">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      Guest email &amp; OTP fields active in the form above
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsGuestMode(false)}
-                      className="text-xs font-semibold text-muted hover:text-ink hover:underline"
-                    >
-                      Return to password login
-                    </button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={activateGuestMode}
-                    className="border-primary-600 bg-white font-bold text-primary-800 hover:bg-primary-50 text-xs shadow-sm"
-                  >
-                    Continue as Guest with OTP &rarr;
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ---------------- footer links ---------------- */}
       <div className="rounded-card border border-dashed border-line-strong bg-slate-50/60 px-4 py-4 text-center text-sm">

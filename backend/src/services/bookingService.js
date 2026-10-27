@@ -87,8 +87,29 @@ export const executeWithTransactionRetry = async (workFn, maxRetries = 3) => {
  */
 const syncCustomerProfileFromBooking = async (customerId, location, patientDetails) => {
   try {
-    const custProfile = await CustomerProfile.findOne({ user: customerId });
-    if (custProfile) {
+    let custProfile = await CustomerProfile.findOne({ user: customerId });
+    if (!custProfile) {
+      custProfile = await CustomerProfile.create({
+        user: customerId,
+        defaultAddress: {
+          addressLine: location?.addressLine || '',
+          area: location?.area || '',
+          city: location?.city || 'Mumbai, MH',
+          pincode: location?.pincode || '',
+        },
+        patients: patientDetails?.name
+          ? [
+              {
+                name: patientDetails.name,
+                age: patientDetails.age || null,
+                gender: patientDetails.gender || 'Other',
+                relation: patientDetails.relation || 'Self',
+                condition: patientDetails.condition || '',
+              },
+            ]
+          : [],
+      });
+    } else {
       let modified = false;
       if (!custProfile.defaultAddress?.addressLine && location?.addressLine) {
         custProfile.defaultAddress = {
@@ -113,7 +134,23 @@ const syncCustomerProfileFromBooking = async (customerId, location, patientDetai
       }
       if (modified) {
         await custProfile.save();
-        await User.findByIdAndUpdate(customerId, { isGuest: false });
+      }
+    }
+
+    // Clean user metadata
+    const userDoc = await User.findById(customerId);
+    if (userDoc) {
+      let userModified = false;
+      if (userDoc.isGuest) {
+        userDoc.isGuest = false;
+        userModified = true;
+      }
+      if (userDoc.fullName && userDoc.fullName.includes(' (Guest)')) {
+        userDoc.fullName = userDoc.fullName.replace(' (Guest)', '');
+        userModified = true;
+      }
+      if (userModified) {
+        await userDoc.save();
       }
     }
   } catch (profErr) {

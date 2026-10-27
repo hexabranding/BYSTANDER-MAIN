@@ -117,8 +117,8 @@ export const logout = async (req, res, next) => {
  */
 export const requestGuestOtp = async (req, res, next) => {
   try {
-    const { email } = req.body;
-    const result = await authService.requestGuestOtp(email);
+    const { email, mode } = req.body;
+    const result = await authService.requestGuestOtp(email, mode);
     return res.status(200).json({
       success: true,
       message: result.message,
@@ -134,11 +134,12 @@ export const requestGuestOtp = async (req, res, next) => {
  */
 export const verifyGuestOtp = async (req, res, next) => {
   try {
-    const { email, otp, password } = req.body;
+    const { email, otp, password, mode } = req.body;
     const { user, profile, token, isGuest, isProfileComplete } = await authService.verifyGuestOtp(
       email,
       otp,
-      password
+      password,
+      mode
     );
 
     // Set secure HTTP-only cookie

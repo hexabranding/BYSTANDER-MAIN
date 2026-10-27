@@ -116,8 +116,9 @@ export function LoginPage({ adminOnly = false }) {
       return
     }
     setCustomerLoading(true)
+    setStatusNotice(null)
     try {
-      const res = await requestGuestOtp(clean)
+      const res = await requestGuestOtp(clean, 'login')
       if (res.ok) {
         setCustomerStep('otp')
         toast.success('Verification code sent!', {
@@ -127,10 +128,13 @@ export function LoginPage({ adminOnly = false }) {
           toast.info(`Development test code: ${res.data.devOtp}`, { duration: 8000 })
         }
       } else {
-        toast.error(res.message || 'Failed to send OTP')
+        setStatusNotice(res.message || 'No customer account found with this email. Please sign up first.')
+        toast.error(res.message || 'No customer account found with this email.')
       }
     } catch (err) {
-      toast.error(err.message || 'Failed to request code')
+      const msg = err.message || 'Failed to request code'
+      setStatusNotice(msg)
+      toast.error(msg)
     } finally {
       setCustomerLoading(false)
     }
@@ -145,7 +149,7 @@ export function LoginPage({ adminOnly = false }) {
     }
     setCustomerLoading(true)
     try {
-      const res = await guestLogin({ email: customerEmail, otp: cleanOtp })
+      const res = await guestLogin({ email: customerEmail, otp: cleanOtp, mode: 'login' })
       if (res.ok && res.user) {
         if (remember) setRememberedEmail(customerEmail.trim())
         else setRememberedEmail('')
@@ -333,6 +337,35 @@ export function LoginPage({ adminOnly = false }) {
                 Use Password
               </button>
             </div>
+
+            {statusNotice && (
+              <div
+                role="alert"
+                className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm animate-in fade-in slide-in-from-top-1"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+                    <ShieldAlert className="h-4.5 w-4.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                      Account Not Found
+                    </p>
+                    <p className="mt-1 text-sm font-medium leading-relaxed text-amber-800">
+                      {statusNotice}
+                    </p>
+                    <div className="mt-2.5 flex items-center gap-3">
+                      <Link
+                        to="/register/customer"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-primary-700 hover:text-primary-900 hover:underline"
+                      >
+                        Create an account now &rarr;
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {customerStep === 'email' ? (
               <form onSubmit={handleRequestCustomerOtp} className="space-y-4">

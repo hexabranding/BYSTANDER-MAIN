@@ -59,8 +59,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   // 3b. Guest Login via OTP
-  const guestLogin = useCallback(async ({ email, otp, password }) => {
-    const result = await authService.verifyGuestOtp(email, otp, password)
+  const guestLogin = useCallback(async ({ email, otp, password, mode = 'any' }) => {
+    const result = await authService.verifyGuestOtp(email, otp, password, mode)
     if (result.ok && result.user) {
       setUser(result.user)
     }

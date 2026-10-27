@@ -25,6 +25,7 @@ export function RegisterCustomerPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [remember, setRemember] = useState(Boolean(rememberedEmail))
   const [loading, setLoading] = useState(false)
+  const [statusNotice, setStatusNotice] = useState(null)
 
   const handleRequestOtp = async (e) => {
     e?.preventDefault?.()
@@ -35,8 +36,9 @@ export function RegisterCustomerPage() {
     }
 
     setLoading(true)
+    setStatusNotice(null)
     try {
-      const res = await requestGuestOtp(cleanEmail)
+      const res = await requestGuestOtp(cleanEmail, 'signup')
       if (res.ok) {
         setStep('otp')
         toast.success('Verification code sent!', {
@@ -46,10 +48,13 @@ export function RegisterCustomerPage() {
           toast.info(`Development test code: ${res.data.devOtp}`, { duration: 8000 })
         }
       } else {
-        toast.error(res.message || 'Failed to send OTP')
+        setStatusNotice(res.message || 'An account already exists with this email. Please sign in instead.')
+        toast.error(res.message || 'An account already exists with this email.')
       }
     } catch (err) {
-      toast.error(err.message || 'Failed to request verification code')
+      const msg = err.message || 'Failed to request verification code'
+      setStatusNotice(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -65,7 +70,7 @@ export function RegisterCustomerPage() {
 
     setLoading(true)
     try {
-      const res = await guestLogin({ email: email.trim().toLowerCase(), otp: cleanOtp })
+      const res = await guestLogin({ email: email.trim().toLowerCase(), otp: cleanOtp, mode: 'signup' })
       if (res.ok && res.user) {
         if (remember) setRememberedEmail(email.trim().toLowerCase())
         else setRememberedEmail('')
@@ -174,6 +179,35 @@ export function RegisterCustomerPage() {
             Sign In Instead
           </Link>
         </div>
+
+        {statusNotice && (
+          <div
+            role="alert"
+            className="mb-4 rounded-2xl border border-primary-200 bg-mint-50/90 p-4 shadow-sm animate-in fade-in slide-in-from-top-1"
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary-100 text-primary-800">
+                <CheckCircle2 className="h-4.5 w-4.5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-wider text-primary-950">
+                  Account Already Exists
+                </p>
+                <p className="mt-1 text-sm font-medium leading-relaxed text-primary-900">
+                  {statusNotice}
+                </p>
+                <div className="mt-2.5 flex items-center gap-3">
+                  <Link
+                    to="/login?role=customer"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-primary-800 hover:text-primary-950 hover:underline"
+                  >
+                    Go to Sign In &rarr;
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {step === 'email' && (
           <form onSubmit={handleRequestOtp} className="space-y-4">

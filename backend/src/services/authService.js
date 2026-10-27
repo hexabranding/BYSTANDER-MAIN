@@ -386,25 +386,55 @@ const GUEST_OTP_CACHE = new Map();
 /**
  * Request an instant guest login OTP for urgent customer booking.
  */
-export const requestGuestOtp = async (email) => {
+export const requestGuestOtp = async (email, mode = 'any') => {
   if (!email || typeof email !== 'string' || !email.includes('@')) {
-    const err = new Error('Please provide a valid email address for guest login.');
+    const err = new Error('Please provide a valid email address.');
     err.statusCode = 400;
     err.name = 'ValidationError';
     throw err;
   }
 
   const cleanEmail = email.toLowerCase().trim();
-
-  // If user exists and is NOT a customer, reject to protect roles
   const existingUser = await User.findOne({ email: cleanEmail });
-  if (existingUser && existingUser.role !== 'customer') {
-    const err = new Error(
-      `An account with this email already exists with the ${existingUser.role} role. Please use standard login.`
-    );
-    err.statusCode = 409;
-    err.name = 'ConflictError';
-    throw err;
+
+  if (mode === 'login') {
+    if (!existingUser) {
+      const err = new Error('No customer account found with this email. Please sign up first.');
+      err.statusCode = 404;
+      err.name = 'NotFoundError';
+      throw err;
+    }
+    if (existingUser.role !== 'customer') {
+      const err = new Error(
+        `An account with this email exists with the ${existingUser.role} role. Please use the ${existingUser.role} sign-in tab.`
+      );
+      err.statusCode = 409;
+      err.name = 'ConflictError';
+      throw err;
+    }
+    if (existingUser.status === 'blocked' || existingUser.status === 'suspended') {
+      const err = new Error(formatAccountStatusMessage(existingUser));
+      err.statusCode = 403;
+      err.name = 'ForbiddenError';
+      throw err;
+    }
+  } else if (mode === 'signup') {
+    if (existingUser) {
+      const err = new Error('An account already exists with this email. Please sign in instead.');
+      err.statusCode = 409;
+      err.name = 'ConflictError';
+      throw err;
+    }
+  } else {
+    // Default / any mode (legacy fallback)
+    if (existingUser && existingUser.role !== 'customer') {
+      const err = new Error(
+        `An account with this email already exists with the ${existingUser.role} role. Please use standard login.`
+      );
+      err.statusCode = 409;
+      err.name = 'ConflictError';
+      throw err;
+    }
   }
 
   const otp = generateNumericOtp();
@@ -416,7 +446,7 @@ export const requestGuestOtp = async (email) => {
     attempts: 0,
   });
 
-  console.log(`[Guest OTP Dispatch] Code for ${cleanEmail}: ${otp}`);
+  console.log(`[Guest OTP Dispatch] Code for ${cleanEmail} (mode: ${mode}): ${otp}`);
 
   return {
     email: cleanEmail,
@@ -428,7 +458,7 @@ export const requestGuestOtp = async (email) => {
 /**
  * Verify guest login OTP and create or authenticate customer session.
  */
-export const verifyGuestOtp = async (email, otp, password) => {
+export const verifyGuestOtp = async (email, otp, password, mode = 'any') => {
   if (!email || !otp) {
     const err = new Error('Email address and 6-digit OTP code are required.');
     err.statusCode = 400;
@@ -481,6 +511,20 @@ export const verifyGuestOtp = async (email, otp, password) => {
 
   let user = await User.findOne({ email: cleanEmail });
   let profile = null;
+
+  if (mode === 'login' && !user) {
+    const err = new Error('No customer account found with this email. Please sign up first.');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  if (mode === 'signup' && user) {
+    const err = new Error('An account already exists with this email. Please sign in instead.');
+    err.statusCode = 409;
+    err.name = 'ConflictError';
+    throw err;
+  }
 
   if (user) {
     if (user.role !== 'customer') {
@@ -550,7 +594,7 @@ export const verifyGuestOtp = async (email, otp, password) => {
     user: sanitizeUser(user),
     profile,
     token,
-    isGuest: true,
+    isGuest: false,
     isProfileComplete,
   };
 };

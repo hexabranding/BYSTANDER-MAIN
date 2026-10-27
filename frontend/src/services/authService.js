@@ -181,14 +181,14 @@ export const login = async ({ identifier, email, password }) => {
 /**
  * Request guest login OTP for urgent customer care booking.
  */
-export const requestGuestOtp = async (email) => {
+export const requestGuestOtp = async (email, mode = 'any') => {
   const cleanEmail = String(email || '').trim().toLowerCase();
   if (!cleanEmail || !cleanEmail.includes('@')) {
     return { ok: false, message: 'Please provide a valid email address.' };
   }
 
   try {
-    const res = await apiClient.post('/auth/guest/request-otp', { email: cleanEmail });
+    const res = await apiClient.post('/auth/guest/request-otp', { email: cleanEmail, mode });
     return {
       ok: true,
       message: res?.message || 'Verification code sent to your email.',
@@ -206,7 +206,7 @@ export const requestGuestOtp = async (email) => {
 /**
  * Verify guest login OTP and create/authenticate customer session.
  */
-export const verifyGuestOtp = async (email, otp, password) => {
+export const verifyGuestOtp = async (email, otp, password, mode = 'any') => {
   const cleanEmail = String(email || '').trim().toLowerCase();
   const cleanOtp = String(otp || '').trim();
 
@@ -218,6 +218,7 @@ export const verifyGuestOtp = async (email, otp, password) => {
     const payload = {
       email: cleanEmail,
       otp: cleanOtp,
+      mode,
     };
     if (password && typeof password === 'string') {
       payload.password = password;

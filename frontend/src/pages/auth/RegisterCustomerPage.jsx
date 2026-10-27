@@ -122,13 +122,6 @@ export function RegisterCustomerPage() {
     }
   }
 
-  const handleSkipPassword = () => {
-    toast.success('Welcome to Bystander!', {
-      description: 'You can set a password anytime from your profile settings.',
-    })
-    navigate('/customer/dashboard', { replace: true })
-  }
-
   return (
     <div className="space-y-5">
       {/* ---------------- header ---------------- */}
@@ -412,16 +405,6 @@ export function RegisterCustomerPage() {
             >
               Save Password &amp; Go to Dashboard
             </Button>
-
-            <div className="pt-1 text-center">
-              <button
-                type="button"
-                onClick={handleSkipPassword}
-                className="text-xs font-semibold text-muted hover:text-ink hover:underline"
-              >
-                Skip password creation for now &rarr;
-              </button>
-            </div>
           </form>
         )}
       </div>

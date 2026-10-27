@@ -16,7 +16,9 @@ export function ProtectedRoute({ roles, children, fallback }) {
   }
 
   if (!isLoggedIn) {
-    return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />
+    const isTargetingAdmin = roles?.includes('admin') || location.pathname.startsWith('/admin')
+    const redirectTarget = isTargetingAdmin ? '/admin/login' : '/login'
+    return <Navigate to={redirectTarget} state={{ from: location.pathname + location.search }} replace />
   }
 
   if (roles && !roles.includes(user?.role)) {

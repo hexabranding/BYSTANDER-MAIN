@@ -73,7 +73,6 @@ const columns = [
       { label: 'About CareMate', to: '/about' },
       { label: 'Contact & support', to: '/contact' },
       { label: 'FAQs', to: '/#faq' },
-      { label: 'Admin login', to: '/login' },
     ],
   },
 ]

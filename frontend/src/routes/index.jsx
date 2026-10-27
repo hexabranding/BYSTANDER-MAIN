@@ -89,6 +89,7 @@ export function AppRoutes() {
 
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/admin/login" element={<LoginPage adminOnly />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/register/customer" element={<RegisterCustomerPage />} />
         <Route path="/register/caregiver" element={<RegisterCaregiverPage />} />

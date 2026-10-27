@@ -47,20 +47,6 @@ const OPTIONS = [
     to: '/register/ambulance',
     cta: 'Register your ambulance',
   },
-  {
-    id: 'admin',
-    icon: ShieldUser,
-    eyebrow: 'Demo access',
-    title: 'Explore the admin console',
-    description: 'Tour CareMate operations with a seeded admin demo account.',
-    bullets: [
-      'Review caretaker verifications & ambulance fleet',
-      'Monitor bookings, payouts and commissions',
-      'Handle complaints and SOS alerts',
-    ],
-    to: '/login?role=admin',
-    cta: 'Continue as admin',
-  },
 ]
 
 const WHY_POINTS = [

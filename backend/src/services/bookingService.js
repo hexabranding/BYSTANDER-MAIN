@@ -467,10 +467,26 @@ export const getBookings = async (user, query = {}) => {
     filter.customer = user._id;
   } else if (user.role === 'caregiver') {
     // Caregivers see bookings assigned to them OR open broadcast requests available for claiming (excluding ones they declined)
+    const caregiverProfile = await CaregiverProfile.findOne({ user: user._id }).select('gender');
+    const caregiverGender = caregiverProfile?.gender || user.gender;
+
+    let genderMatch = ['Any', null];
+    if (caregiverGender) {
+      const formatted = caregiverGender.charAt(0).toUpperCase() + caregiverGender.slice(1).toLowerCase();
+      genderMatch = ['Any', formatted, caregiverGender.toLowerCase(), null];
+    }
+
+    const openBroadcastQuery = {
+      caregiver: null,
+      status: 'pending',
+      declinedByCaregivers: { $ne: user._id },
+      preferredGender: { $in: genderMatch },
+    };
+
     if (status === 'pending') {
       filter.$or = [
         { caregiverUser: user._id, status: 'pending' },
-        { caregiver: null, status: 'pending', declinedByCaregivers: { $ne: user._id } },
+        openBroadcastQuery,
       ];
     } else if (status) {
       filter.caregiverUser = user._id;
@@ -478,7 +494,7 @@ export const getBookings = async (user, query = {}) => {
     } else {
       filter.$or = [
         { caregiverUser: user._id },
-        { caregiver: null, status: 'pending', declinedByCaregivers: { $ne: user._id } },
+        openBroadcastQuery,
       ];
     }
   } else if (user.role === 'admin') {

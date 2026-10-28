@@ -33,6 +33,7 @@ export function JobsPage() {
 
   const myId = user?.caregiverId || 'cg-101'
   const caregiver = caregivers?.find((c) => c.id === myId) || caregivers?.[0]
+  const caregiverGender = user?.gender || caregiver?.gender || 'Female'
 
   const [realBookings, setRealBookings] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -68,6 +69,10 @@ export function JobsPage() {
   useEffect(() => {
     const unsubBroadcast = onBookingBroadcast((newBooking) => {
       if (!newBooking) return
+      const pref = newBooking.preferredGender || 'Any'
+      if (pref !== 'Any' && caregiverGender && caregiverGender.toLowerCase() !== pref.toLowerCase()) {
+        return // Ignore broadcast when customer specifically requested the other gender
+      }
       setRealBookings((prev) => {
         const id = newBooking._id || newBooking.id
         if (!prev) return [newBooking]
@@ -96,12 +101,21 @@ export function JobsPage() {
       unsubBroadcast()
       unsubClaimed()
     }
-  }, [caregiver])
+  }, [caregiver, caregiverGender])
 
   const myJobs = useMemo(() => {
     if (!realBookings) return []
-    return realBookings.map(adaptBookingToJob)
-  }, [realBookings])
+    return realBookings
+      .map(adaptBookingToJob)
+      .filter((job) => {
+        // Confirmed / Declined / History jobs should remain visible in their tabs
+        if (job.status !== 'Open') return true
+        const pref = job.preferredGender || 'Any'
+        if (!pref || pref === 'Any') return true
+        if (!caregiverGender) return true
+        return caregiverGender.toLowerCase() === pref.toLowerCase()
+      })
+  }, [realBookings, caregiverGender])
 
   const counts = useMemo(
     () => ({

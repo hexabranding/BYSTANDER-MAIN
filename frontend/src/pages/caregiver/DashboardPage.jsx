@@ -121,9 +121,18 @@ export function DashboardPage() {
     [myBookings],
   )
 
+  const caregiverGender = user?.gender || 'Female'
+
   const openJobs = useMemo(
-    () => myBookings.filter((b) => b.status === 'Pending'),
-    [myBookings],
+    () =>
+      myBookings.filter((b) => {
+        if (b.status !== 'Pending') return false
+        const pref = b.preferredGender || 'Any'
+        if (!pref || pref === 'Any') return true
+        if (!caregiverGender) return true
+        return caregiverGender.toLowerCase() === pref.toLowerCase()
+      }),
+    [myBookings, caregiverGender],
   )
 
   const acceptedJobs = useMemo(

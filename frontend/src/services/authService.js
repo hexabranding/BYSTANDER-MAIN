@@ -146,6 +146,7 @@ export const normalizeUser = (user, profile = {}) => {
     address: formattedAddress,
     patientInfo,
     caregiverId: isCaregiver ? String(prof._id || user._id) : undefined,
+    gender: prof.gender || user.gender || '',
     qualification: prof.qualification || '',
     experienceYears: prof.experienceYears ?? 0,
     hourlyRate: prof.hourlyRate ?? 0,

@@ -217,12 +217,17 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       const next = !prev
       if (next) {
         const upcoming = getNextUpcomingTime()
+        const defaultUrgentService =
+          availableServices.find((s) => s.slug === 'patient-monitoring' || s.name?.toLowerCase().includes('patient monitoring')) ||
+          availableServices.find((s) => s.slug === 'companionship') ||
+          availableServices[0] ||
+          null
         setForm((f) => ({
           ...f,
-          service: f.service || availableServices[0] || null,
+          service: f.service || defaultUrgentService,
           date: f.date || upcoming.date,
           startTime: f.startTime || upcoming.startTime,
-          hours: f.hours && f.hours >= 2 ? f.hours : 2,
+          hours: 2,
           careType: f.careType || 'Home Care',
           instructions: f.instructions || 'Urgent on-demand broadcast',
         }))
@@ -244,12 +249,17 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   useEffect(() => {
     if (searchParams.get('urgent') === 'true' && availableServices.length > 0) {
       const upcoming = getNextUpcomingTime()
+      const defaultUrgentService =
+        availableServices.find((s) => s.slug === 'patient-monitoring' || s.name?.toLowerCase().includes('patient monitoring')) ||
+        availableServices.find((s) => s.slug === 'companionship') ||
+        availableServices[0] ||
+        null
       setForm((f) => ({
         ...f,
-        service: f.service || availableServices[0],
+        service: f.service || defaultUrgentService,
         date: f.date || upcoming.date,
         startTime: f.startTime || upcoming.startTime,
-        hours: f.hours && f.hours >= 2 ? f.hours : 2,
+        hours: 2,
         careType: f.careType || 'Home Care',
         instructions: f.instructions || 'Urgent on-demand broadcast',
       }))
@@ -1301,71 +1311,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     </FormField>
 
                     {isUrgent ? (
-                      <div className="space-y-4 pt-2">
-                        {availableServices.length > 0 ? (
-                          <FormField label="Urgent Care Service" hint="Select the type of care needed for this urgent request">
-                            <Select
-                              value={form.service?._id || form.service?.id || availableServices[0]?._id || ''}
-                              onChange={(e) => {
-                                const found = availableServices.find((s) => (s._id || s.id) === e.target.value)
-                                if (found) set({ service: found })
-                              }}
-                            >
-                              {availableServices.map((svc) => (
-                                <option key={svc._id || svc.id} value={svc._id || svc.id}>
-                                  {svc.name} · ₹{svc.baseHourlyRate || svc.startingPrice || 449}/hr
-                                </option>
-                              ))}
-                            </Select>
-                          </FormField>
-                        ) : null}
-
-                        <div className="rounded-xl border border-line bg-slate-50/70 p-4">
-                          <div className="flex items-center justify-between">
-                            <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                              Shift duration (hours) · Min 2 hrs
-                            </label>
-                            <span className="text-xs font-bold text-orange-600">
-                              {form.hours || 2} hours selected
-                            </span>
-                          </div>
-                          <div className="mt-2.5 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                            {[2, 4, 6, 8, 12, 24].map((h) => {
-                              const selected = Number(form.hours) === h
-                              return (
-                                <button
-                                  key={h}
-                                  type="button"
-                                  onClick={() => set({ hours: h })}
-                                  className={cn(
-                                    'rounded-xl border py-2 text-xs font-bold transition',
-                                    selected
-                                      ? 'border-orange-500 bg-orange-500 text-white shadow-sm'
-                                      : 'border-line bg-white text-ink hover:border-orange-300 hover:bg-orange-50/50',
-                                  )}
-                                >
-                                  {h} hrs
-                                </button>
-                              )
-                            })}
-                          </div>
-                          <div className="mt-3 flex items-center gap-2">
-                            <span className="text-xs text-muted">Custom duration:</span>
-                            <input
-                              type="number"
-                              min={2}
-                              max={24}
-                              value={form.hours || 2}
-                              onChange={(e) => {
-                                const val = Math.max(2, Math.min(24, Number(e.target.value) || 2))
-                                set({ hours: val })
-                              }}
-                              className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-orange-500 focus:outline-none"
-                            />
-                            <span className="text-xs text-muted">hours (open freely, min 2 hrs)</span>
-                          </div>
-                        </div>
-
+                      <div className="pt-2">
                         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3">
                           <input
                             type="checkbox"
@@ -1705,12 +1651,12 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                 {isUrgent ? (
                   <Row label="Booking mode" value="Urgent 2-Step (Immediate)" />
                 ) : null}
-                <Row label="Service" value={form.service?.name || (isUrgent && availableServices[0]?.name ? availableServices[0].name : (isUrgent ? 'On-Demand Caretaker Dispatch' : 'Not selected'))} />
+                <Row label="Service" value={isUrgent ? 'On-Demand Caretaker Dispatch' : (form.service?.name || 'Not selected')} />
                 <Row
                   label="Caretaker rate"
                   value={form.service || isUrgent ? `${formatCurrency(rate)} / hour` : '—'}
                 />
-                <Row label="Duration" value={`${form.hours || 2} hours`} />
+                <Row label="Duration" value={isUrgent ? 'Initial dispatch (2 hrs)' : `${form.hours || 2} hours`} />
                 <Row label="Care setting" value={form.careType || '—'} />
                 <Row label="Date" value={form.date ? `${formatDate(form.date)}${isUrgent ? ' (Immediate)' : ''}` : (isUrgent ? 'Today' : '—')} />
                 {form.extras?.length ? (

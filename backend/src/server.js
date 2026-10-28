@@ -63,9 +63,9 @@ if (trustProxyConfig !== undefined) {
   app.set('trust proxy', 1);
 }
 
-// 2. Request Parsing & Cookie Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 2. Request Parsing & Cookie Middleware (supports document uploads up to 50MB)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
 // 3. CORS Configuration for Local Vite Frontend

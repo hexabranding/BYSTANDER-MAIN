@@ -18,6 +18,13 @@ export const errorHandler = (err, req, res, next) => {
   let errorName = err.name || 'InternalServerError';
   let errorMessage = err.message || 'An unexpected server error occurred';
 
+  // Handle payload too large (e.g. large file upload)
+  if (err.type === 'entity.too.large') {
+    statusCode = 413;
+    errorName = 'PayloadTooLargeError';
+    errorMessage = 'Uploaded document files are too large. Please upload files under 20MB.';
+  }
+
   // Handle Mongoose duplicate key error (E11000)
   if (err.code === 11000) {
     statusCode = 409;

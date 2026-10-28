@@ -134,6 +134,35 @@ export const validateUpdateCaregiverProfile = (req, res, next) => {
     }
   }
 
+  if (sanitizedUpdates.gender !== undefined) {
+    if (!['Male', 'Female', 'Other'].includes(sanitizedUpdates.gender)) {
+      errors.push('Gender must be one of: Male, Female, Other');
+    }
+  }
+
+  if (sanitizedUpdates.pincode !== undefined) {
+    sanitizedUpdates.pincode = String(sanitizedUpdates.pincode).trim();
+    if (sanitizedUpdates.pincode && !/^[1-9][0-9]{5}$/.test(sanitizedUpdates.pincode)) {
+      errors.push('Please enter a valid 6-digit Indian PIN code');
+    }
+  }
+
+  if (sanitizedUpdates.street !== undefined) {
+    sanitizedUpdates.street = String(sanitizedUpdates.street).trim();
+  }
+  if (sanitizedUpdates.area !== undefined) {
+    sanitizedUpdates.area = String(sanitizedUpdates.area).trim();
+  }
+  if (sanitizedUpdates.city !== undefined) {
+    sanitizedUpdates.city = String(sanitizedUpdates.city).trim();
+  }
+  if (sanitizedUpdates.district !== undefined) {
+    sanitizedUpdates.district = String(sanitizedUpdates.district).trim();
+  }
+  if (sanitizedUpdates.state !== undefined) {
+    sanitizedUpdates.state = String(sanitizedUpdates.state).trim();
+  }
+
   if (sanitizedUpdates.careSettings !== undefined) {
     if (!Array.isArray(sanitizedUpdates.careSettings)) {
       errors.push('Care settings must be an array');

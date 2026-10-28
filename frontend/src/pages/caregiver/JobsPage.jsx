@@ -374,7 +374,7 @@ export function JobsPage() {
                         {job.status !== 'Open' ? <StatusBadge status={job.status} size="sm" /> : null}
                         {preferredGender && preferredGender !== 'Any' ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-semibold text-pink-700 border border-pink-200">
-                            {preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                            {preferredGender === 'Female' ? 'Female Preferred' : 'Male Preferred'}
                           </span>
                         ) : null}
                         {hasApplied ? (

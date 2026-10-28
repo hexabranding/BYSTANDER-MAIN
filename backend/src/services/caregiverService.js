@@ -105,6 +105,33 @@ export const updateMyCaregiverProfile = async (userId, sanitizedUpdates) => {
     profile[key] = sanitizedUpdates[key];
   });
 
+  if (
+    sanitizedUpdates.street !== undefined ||
+    sanitizedUpdates.area !== undefined ||
+    sanitizedUpdates.city !== undefined ||
+    sanitizedUpdates.district !== undefined ||
+    sanitizedUpdates.state !== undefined ||
+    sanitizedUpdates.pincode !== undefined ||
+    sanitizedUpdates.address !== undefined
+  ) {
+    const rawAddr = sanitizedUpdates.address || {};
+    profile.street = sanitizedUpdates.street !== undefined ? sanitizedUpdates.street : (rawAddr.street || profile.street || '');
+    profile.area = sanitizedUpdates.area !== undefined ? sanitizedUpdates.area : (rawAddr.area || profile.area || '');
+    profile.city = sanitizedUpdates.city !== undefined ? sanitizedUpdates.city : (rawAddr.city || profile.city || 'Kochi, KL');
+    profile.district = sanitizedUpdates.district !== undefined ? sanitizedUpdates.district : (rawAddr.district || profile.district || 'Ernakulam');
+    profile.state = sanitizedUpdates.state !== undefined ? sanitizedUpdates.state : (rawAddr.state || profile.state || 'Kerala');
+    profile.pincode = sanitizedUpdates.pincode !== undefined ? sanitizedUpdates.pincode : (rawAddr.pincode || profile.pincode || '');
+
+    profile.address = {
+      street: profile.street,
+      area: profile.area,
+      city: profile.city,
+      district: profile.district,
+      state: profile.state,
+      pincode: profile.pincode,
+    };
+  }
+
   await profile.save();
 
   return profile.populate([

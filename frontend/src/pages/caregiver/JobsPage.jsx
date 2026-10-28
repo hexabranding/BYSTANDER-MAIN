@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Briefcase, CalendarDays, Clock, MapPin, User, RotateCw } from 'lucide-react'
+import { Briefcase, CalendarDays, Clock, MapPin, User, RotateCw, Zap } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -322,7 +323,17 @@ export function JobsPage() {
               caregiverGender.toLowerCase() !== preferredGender.toLowerCase()
 
             return (
-              <Card key={job.id} hover className="flex flex-col">
+              <Card
+                key={job.id}
+                hover
+                className={cn(
+                  'relative flex flex-col overflow-hidden transition-all duration-200',
+                  job.isUrgent && 'border-orange-300 ring-1 ring-orange-200/80 bg-gradient-to-b from-orange-50/20 via-white to-white shadow-sm hover:border-orange-400'
+                )}
+              >
+                {job.isUrgent ? (
+                  <div className="h-1 w-full bg-gradient-to-r from-red-500 via-orange-500 to-amber-400" />
+                ) : null}
                 <CardBody className="flex flex-1 flex-col gap-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -330,7 +341,18 @@ export function JobsPage() {
                         <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">
                           {job.displayId || job.id}
                         </span>
-                        <StatusBadge status={job.urgency} size="sm" />
+                        {job.isUrgent ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-xs ring-1 ring-orange-300">
+                            <span className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-80" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+                            </span>
+                            <Zap className="h-3 w-3 fill-current" />
+                            Urgent Dispatch
+                          </span>
+                        ) : (
+                          <StatusBadge status={job.urgency} size="sm" />
+                        )}
                         {job.status !== 'Open' ? <StatusBadge status={job.status} size="sm" /> : null}
                         {preferredGender && preferredGender !== 'Any' ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-semibold text-pink-700 border border-pink-200">
@@ -384,7 +406,24 @@ export function JobsPage() {
                     </span>
                   </div>
 
-                  <p className="line-clamp-2 rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-muted">{job.requirements}</p>
+                  {job.isUrgent ? (
+                    <div className="flex items-start gap-2.5 rounded-xl border border-orange-200 bg-orange-50/70 p-3 text-xs text-orange-950">
+                      <div className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-orange-500 text-white shadow-xs">
+                        <Zap className="h-3 w-3 fill-current" />
+                      </div>
+                      <div className="min-w-0 flex-1 leading-relaxed">
+                        <div className="flex items-center gap-1.5 font-bold uppercase tracking-wide text-orange-900 text-[11px]">
+                          <span>Urgent Dispatch Request</span>
+                          <span className="rounded bg-orange-200/90 px-1.5 py-0.2 text-[10px] text-orange-900">Immediate</span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-orange-900/90 font-medium">
+                          {job.requirements?.replace(/URGENT DISPATCH PROTOCOL\s*[·•]?\s*/gi, '') || 'Customer requires immediate caretaker bedside assistance.'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="line-clamp-2 rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-muted">{job.requirements}</p>
+                  )}
                 </CardBody>
 
                 <CardFooter className="flex flex-wrap items-center justify-between gap-2">

@@ -14,6 +14,7 @@ import {
   Star,
   User,
   Wallet,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -240,7 +241,18 @@ export function JobDetailsPage() {
           subtitle={job.service}
           meta={
             <>
-              <StatusBadge status={job.urgency} />
+              {job.isUrgent ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-xs ring-1 ring-orange-300">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-80" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+                  </span>
+                  <Zap className="h-3 w-3 fill-current" />
+                  Urgent Dispatch
+                </span>
+              ) : (
+                <StatusBadge status={job.urgency} />
+              )}
               <StatusBadge status={job.status} />
               {preferredGender && preferredGender !== 'Any' && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-700 border border-pink-200">
@@ -261,6 +273,23 @@ export function JobDetailsPage() {
             </Button>
           }
         />
+
+        {job.isUrgent ? (
+          <div className="flex items-start gap-3 rounded-card border border-orange-300 bg-gradient-to-br from-orange-50 via-amber-50/40 to-white p-5 shadow-sm">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-red-500 to-orange-500 text-white shadow-xs">
+              <Zap className="h-5 w-5 fill-current" />
+            </span>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <p className="font-display text-sm font-bold text-orange-950 uppercase tracking-wide">Urgent Dispatch Request</p>
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">Immediate Need</span>
+              </div>
+              <p className="mt-1 text-xs text-orange-900/90 leading-relaxed font-medium">
+                Customer requested urgent on-demand care. Caretakers responding quickly have the highest priority for confirmation.
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         {hasApplied && job.status === 'Open' ? (
           <div className="flex flex-col gap-3 rounded-card border border-amber-300 bg-gradient-to-br from-amber-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between shadow-sm">
@@ -430,6 +459,12 @@ export function JobDetailsPage() {
         subtitle={booking.service}
         meta={
           <>
+            {(booking.isUrgent || String(booking.specialInstructions || '').includes('URGENT DISPATCH')) && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-xs">
+                <Zap className="h-3 w-3 fill-current" />
+                Urgent Dispatch
+              </span>
+            )}
             <StatusBadge status={booking.status} />
             <StatusBadge status={booking.paymentStatus} />
             <span className="text-sm text-muted">Ref {booking.ref}</span>

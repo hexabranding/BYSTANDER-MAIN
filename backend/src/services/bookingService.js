@@ -350,6 +350,11 @@ export const createBooking = async (customerId, bookingData) => {
             endDateTime,
             timezone: timezone || caregiverTz,
             preferredGender: bookingData.preferredGender || 'Any',
+            isUrgent: Boolean(
+              bookingData.isUrgent ||
+              String(patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT DISPATCH') ||
+              String(patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT ON-DEMAND')
+            ),
             location,
             patientDetails,
             status: 'pending',
@@ -389,6 +394,11 @@ export const createBooking = async (customerId, bookingData) => {
           endDateTime,
           timezone: timezone || 'Asia/Kolkata',
           preferredGender: bookingData.preferredGender || 'Any',
+          isUrgent: Boolean(
+            bookingData.isUrgent ||
+            String(patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT DISPATCH') ||
+            String(patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT ON-DEMAND')
+          ),
           location,
           patientDetails,
           status: 'pending',

@@ -717,6 +717,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       // Broadcast payload: No caregiverId required. Broadcasts to all active caretakers!
       const payload = {
         serviceId,
+        isUrgent: Boolean(isUrgent),
         startDateTime: localStartDate.toISOString(),
         endDateTime: localEndDate.toISOString(),
         timezone: 'Asia/Kolkata',

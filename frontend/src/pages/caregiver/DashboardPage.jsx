@@ -14,6 +14,7 @@ import {
   Star,
   Wallet,
   Lock,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -653,13 +654,34 @@ export function DashboardPage() {
         {recommended.length ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {recommended.map((job) => (
-              <Card key={job.id} hover className="flex flex-col">
+              <Card
+                key={job.id}
+                hover
+                className={cn(
+                  'flex flex-col overflow-hidden transition-all duration-200',
+                  job.isUrgent && 'border-orange-300 ring-1 ring-orange-200/80 bg-gradient-to-b from-orange-50/20 via-white to-white shadow-sm hover:border-orange-400'
+                )}
+              >
+                {job.isUrgent ? (
+                  <div className="h-1 w-full bg-gradient-to-r from-red-500 via-orange-500 to-amber-400" />
+                ) : null}
                 <CardBody className="flex flex-1 flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">{job.id}</span>
-                        <StatusBadge status={job.urgency} size="sm" />
+                        {job.isUrgent ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-xs">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-80" />
+                              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+                            </span>
+                            <Zap className="h-2.5 w-2.5 fill-current" />
+                            Urgent
+                          </span>
+                        ) : (
+                          <StatusBadge status={job.urgency} size="sm" />
+                        )}
                       </div>
                       <h3 className="mt-1 truncate font-display text-base font-bold text-ink">{job.service}</h3>
                       <p className="mt-0.5 truncate text-sm text-muted">

@@ -556,6 +556,11 @@ export const adaptBooking = (raw) => {
         : normalizedStatus === 'Cancelled'
           ? 'Refunded'
           : 'Escrow Held'),
+    isUrgent: Boolean(
+      raw.isUrgent ||
+      String(raw.patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT') ||
+      String(raw.specialInstructions || '').toUpperCase().includes('URGENT')
+    ),
     preferredGender: raw.preferredGender || 'Any',
     applicants: Array.isArray(raw.applicants)
       ? raw.applicants.map((a) => {
@@ -1467,6 +1472,14 @@ export const adaptBookingToJob = (raw) => {
     b.patientDetails?.specialInstructions ||
     'Standard patient bedside monitoring and compassionate care support.'
 
+  const isUrgent = Boolean(
+    b.isUrgent ||
+    raw.isUrgent ||
+    String(requirements).toUpperCase().includes('URGENT DISPATCH') ||
+    String(requirements).toUpperCase().includes('URGENT ON-DEMAND') ||
+    String(b.patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT')
+  )
+
   const hours = Number(b.hours || b.totalHours || 6)
   const payment = Number(b.totalAmount || b.payment || b.subtotal || Math.round(hours * 399))
 
@@ -1494,7 +1507,8 @@ export const adaptBookingToJob = (raw) => {
       condition: b.patient?.condition || b.patientDetails?.condition || '',
     },
     requirements,
-    urgency: b.urgency || (hours >= 8 ? 'High' : 'Medium'),
+    isUrgent,
+    urgency: isUrgent ? 'High' : (b.urgency || (hours >= 8 ? 'High' : 'Medium')),
     preferredGender: b.preferredGender || 'Any',
     applicants: b.applicants || [],
     postedAt: b.postedAt || b.createdAt || new Date().toISOString(),

@@ -41,6 +41,11 @@ const bookingSchema = new mongoose.Schema(
       default: 'Any',
       index: true,
     },
+    isUrgent: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     // Multi-Caregiver Acceptance / Bidding: list of caretakers who accepted this broadcast
     applicants: [
       {

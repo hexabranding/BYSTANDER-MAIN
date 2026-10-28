@@ -22,6 +22,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
+import { cn } from '@/utils/cn'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -253,8 +254,15 @@ export function JobDetailsPage() {
               ) : null}
               <StatusBadge status={job.status} />
               {preferredGender && preferredGender !== 'Any' && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-700 border border-pink-200">
-                  {preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border',
+                    preferredGender === 'Male'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-pink-50 text-pink-700 border-pink-200'
+                  )}
+                >
+                  {preferredGender === 'Female' ? 'Female Preferred' : 'Male Preferred'}
                 </span>
               )}
               {hasApplied && (

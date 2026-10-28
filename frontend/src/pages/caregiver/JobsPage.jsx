@@ -373,7 +373,14 @@ export function JobsPage() {
                         ) : null}
                         {job.status !== 'Open' ? <StatusBadge status={job.status} size="sm" /> : null}
                         {preferredGender && preferredGender !== 'Any' ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-semibold text-pink-700 border border-pink-200">
+                          <span
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border',
+                              preferredGender === 'Male'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-pink-50 text-pink-700 border-pink-200'
+                            )}
+                          >
                             {preferredGender === 'Female' ? 'Female Preferred' : 'Male Preferred'}
                           </span>
                         ) : null}

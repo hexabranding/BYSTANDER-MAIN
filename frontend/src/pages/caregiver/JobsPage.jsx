@@ -175,11 +175,19 @@ export function JobsPage() {
         }
         if (updatedBooking) {
           setRealBookings((prev) =>
-            (prev || []).map((b) => ((b._id || b.id) === (updatedBooking._id || updatedBooking.id) ? updatedBooking : b)),
+            (prev || []).map((b) =>
+              String(b._id || b.id) === String(updatedBooking._id || updatedBooking.id || job.id)
+                ? updatedBooking
+                : b
+            ),
           )
         } else {
           setRealBookings((prev) =>
-            (prev || []).map((b) => (b.id === job.id ? { ...b, status: 'Confirmed', rawStatus: 'confirmed' } : b)),
+            (prev || []).map((b) =>
+              String(b._id || b.id) === String(job.id)
+                ? { ...b, status: 'Confirmed', rawStatus: 'confirmed' }
+                : b
+            ),
           )
         }
         const isBroadcast = !job.caregiverId && !job.rawBooking?.caregiver
@@ -329,11 +337,27 @@ export function JobsPage() {
       ) : filtered.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {filtered.map((job) => {
-            const myCaregiverId = caregiver?._id || caregiver?.id || user?.caregiverId || 'cg-101'
+            const myCaregiverId = String(user?.caregiverId || caregiver?._id || caregiver?.id || '')
+            const myUserId = String(user?._id || user?.id || '')
             const hasApplied = Boolean(
-              job.applicants?.some(
-                (a) => String(a.caregiverId || a.id || a.caregiver) === String(myCaregiverId)
-              )
+              job.applicants?.some((a) => {
+                const cgId = String(
+                  a.caregiverId ||
+                  a.caregiver?._id ||
+                  a.caregiver?.id ||
+                  (typeof a.caregiver === 'string' ? a.caregiver : '') ||
+                  a.id ||
+                  ''
+                )
+                const uId = String(
+                  a.caregiverUserId ||
+                  a.caregiverUser?._id ||
+                  a.caregiverUser?.id ||
+                  (typeof a.caregiverUser === 'string' ? a.caregiverUser : '') ||
+                  ''
+                )
+                return (myCaregiverId && cgId === myCaregiverId) || (myUserId && uId === myUserId)
+              })
             )
             const preferredGender = job.preferredGender || 'Any'
             const caregiverGender = caregiver?.gender || user?.gender || 'Female'

@@ -222,11 +222,27 @@ export function JobDetailsPage() {
 
   if (job) {
     const net = job.payment - Math.round(job.payment * PLATFORM_COMMISSION)
-    const myCaregiverId = caregiver?._id || caregiver?.id || user?.caregiverId || 'cg-101'
+    const myCaregiverId = String(user?.caregiverId || caregiver?._id || caregiver?.id || '')
+    const myUserId = String(user?._id || user?.id || '')
     const hasApplied = Boolean(
-      job.applicants?.some(
-        (a) => String(a.caregiverId || a.id || a.caregiver) === String(myCaregiverId)
-      )
+      job.applicants?.some((a) => {
+        const cgId = String(
+          a.caregiverId ||
+          a.caregiver?._id ||
+          a.caregiver?.id ||
+          (typeof a.caregiver === 'string' ? a.caregiver : '') ||
+          a.id ||
+          ''
+        )
+        const uId = String(
+          a.caregiverUserId ||
+          a.caregiverUser?._id ||
+          a.caregiverUser?.id ||
+          (typeof a.caregiverUser === 'string' ? a.caregiverUser : '') ||
+          ''
+        )
+        return (myCaregiverId && cgId === myCaregiverId) || (myUserId && uId === myUserId)
+      })
     )
     const preferredGender = job.preferredGender || 'Any'
     const caregiverGender = caregiver?.gender || user?.gender || 'Female'

@@ -107,8 +107,36 @@ export function DashboardPage() {
   const myBookings = useMemo(() => realBookings || [], [realBookings])
 
   const bookingRequests = useMemo(
-    () => myBookings.filter((b) => b.status === 'Pending').sort((a, b) => (a.date || '').localeCompare(b.date || '')),
-    [myBookings],
+    () =>
+      myBookings
+        .filter((b) => {
+          if (b.status !== 'Pending') return false
+          const myCaregiverId = String(user?.caregiverId || caregiver?._id || caregiver?.id || '')
+          const myUserId = String(user?._id || user?.id || '')
+          const hasApplied = Boolean(
+            b.applicants?.some((a) => {
+              const cgId = String(
+                a.caregiverId ||
+                a.caregiver?._id ||
+                a.caregiver?.id ||
+                (typeof a.caregiver === 'string' ? a.caregiver : '') ||
+                a.id ||
+                ''
+              )
+              const uId = String(
+                a.caregiverUserId ||
+                a.caregiverUser?._id ||
+                a.caregiverUser?.id ||
+                (typeof a.caregiverUser === 'string' ? a.caregiverUser : '') ||
+                ''
+              )
+              return (myCaregiverId && cgId === myCaregiverId) || (myUserId && uId === myUserId)
+            })
+          )
+          return !hasApplied
+        })
+        .sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+    [myBookings, user, caregiver],
   )
 
   const upcoming = useMemo(
@@ -662,58 +690,94 @@ export function DashboardPage() {
         </SectionLabel>
         {recommended.length ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {recommended.map((job) => (
-              <Card
-                key={job.id}
-                hover
-                className={cn(
-                  'flex flex-col overflow-hidden transition-all duration-200',
-                  job.isUrgent && 'border-orange-300 ring-1 ring-orange-200/80 bg-gradient-to-b from-orange-50/20 via-white to-white shadow-sm hover:border-orange-400'
-                )}
-              >
-                {job.isUrgent ? (
-                  <div className="h-1 w-full bg-gradient-to-r from-red-500 via-orange-500 to-amber-400" />
-                ) : null}
-                <CardBody className="flex flex-1 flex-col gap-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">{job.id}</span>
-                        {job.isUrgent ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-xs">
-                            <span className="relative flex h-1.5 w-1.5">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-80" />
-                              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+            {recommended.map((job) => {
+              const myCaregiverId = String(user?.caregiverId || caregiver?._id || caregiver?.id || '')
+              const myUserId = String(user?._id || user?.id || '')
+              const hasApplied = Boolean(
+                job.applicants?.some((a) => {
+                  const cgId = String(
+                    a.caregiverId ||
+                    a.caregiver?._id ||
+                    a.caregiver?.id ||
+                    (typeof a.caregiver === 'string' ? a.caregiver : '') ||
+                    a.id ||
+                    ''
+                  )
+                  const uId = String(
+                    a.caregiverUserId ||
+                    a.caregiverUser?._id ||
+                    a.caregiverUser?.id ||
+                    (typeof a.caregiverUser === 'string' ? a.caregiverUser : '') ||
+                    ''
+                  )
+                  return (myCaregiverId && cgId === myCaregiverId) || (myUserId && uId === myUserId)
+                })
+              )
+
+              return (
+                <Card
+                  key={job.id}
+                  hover
+                  className={cn(
+                    'flex flex-col overflow-hidden transition-all duration-200',
+                    job.isUrgent && 'border-orange-300 ring-1 ring-orange-200/80 bg-gradient-to-b from-orange-50/20 via-white to-white shadow-sm hover:border-orange-400'
+                  )}
+                >
+                  {job.isUrgent ? (
+                    <div className="h-1 w-full bg-gradient-to-r from-red-500 via-orange-500 to-amber-400" />
+                  ) : null}
+                  <CardBody className="flex flex-1 flex-col gap-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">{job.id}</span>
+                          {job.isUrgent ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-xs">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-80" />
+                                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+                              </span>
+                              <Zap className="h-2.5 w-2.5 fill-current" />
+                              Urgent
                             </span>
-                            <Zap className="h-2.5 w-2.5 fill-current" />
-                            Urgent
-                          </span>
-                        ) : null}
+                          ) : null}
+                          {hasApplied ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                              ⏳ Offer Sent
+                            </span>
+                          ) : null}
+                        </div>
+                        <h3 className="mt-1 truncate font-display text-base font-bold text-ink">{job.service}</h3>
+                        <p className="mt-0.5 truncate text-sm text-muted">
+                          {job.area}, {job.city} · {job.distanceKm} km
+                        </p>
                       </div>
-                      <h3 className="mt-1 truncate font-display text-base font-bold text-ink">{job.service}</h3>
-                      <p className="mt-0.5 truncate text-sm text-muted">
-                        {job.area}, {job.city} · {job.distanceKm} km
+                      <p className="shrink-0 font-display text-lg font-extrabold tabular-nums text-ink">
+                        {formatCurrency(job.payment)}
                       </p>
                     </div>
-                    <p className="shrink-0 font-display text-lg font-extrabold tabular-nums text-ink">
-                      {formatCurrency(job.payment)}
+                    <p className="text-xs text-muted">
+                      {formatDate(job.date, { long: true })} · {job.shift} · est. net{' '}
+                      {formatCurrency(job.payment - Math.round(job.payment * PLATFORM_COMMISSION))}
                     </p>
+                  </CardBody>
+                  <div className="flex gap-2 border-t border-line px-5 py-3.5">
+                    <Button variant="outline" size="sm" className="flex-1" to={`/caregiver/jobs/${job.id}`}>
+                      Details
+                    </Button>
+                    {hasApplied ? (
+                      <span className="flex-1 inline-flex items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                        Offer Sent
+                      </span>
+                    ) : (
+                      <Button variant="primary" size="sm" className="flex-1" onClick={() => setAcceptTarget(job)}>
+                        Accept
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-xs text-muted">
-                    {formatDate(job.date, { long: true })} · {job.shift} · est. net{' '}
-                    {formatCurrency(job.payment - Math.round(job.payment * PLATFORM_COMMISSION))}
-                  </p>
-                </CardBody>
-                <div className="flex gap-2 border-t border-line px-5 py-3.5">
-                  <Button variant="outline" size="sm" className="flex-1" to={`/caregiver/jobs/${job.id}`}>
-                    Details
-                  </Button>
-                  <Button variant="primary" size="sm" className="flex-1" onClick={() => setAcceptTarget(job)}>
-                    Accept
-                  </Button>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
         ) : (
           <Card>

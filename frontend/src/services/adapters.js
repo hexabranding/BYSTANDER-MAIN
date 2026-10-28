@@ -582,6 +582,7 @@ export const adaptBooking = (raw) => {
             (cg && typeof cg.user === 'object' ? cg.user : null) ||
             (a.caregiverUser && typeof a.caregiverUser === 'object' ? a.caregiverUser : null)
           const cgId = String(cg?._id || cg?.id || a.caregiver || '')
+          const cgUserId = String(cgUser?._id || cgUser?.id || a.caregiverUser || '')
           const cgName = cgUser?.fullName || cgUser?.name || cg?.fullName || cg?.name || 'Caregiver'
           const cgRate = Number(a.hourlyRate || cg?.hourlyRate || rate)
           const cgTotal = Number(a.totalAmount || Math.round(cgRate * hours))
@@ -589,6 +590,7 @@ export const adaptBooking = (raw) => {
             ...a,
             id: cgId,
             caregiverId: cgId,
+            caregiverUserId: cgUserId,
             caregiver: cg,
             caregiverUser: cgUser,
             name: cgName,

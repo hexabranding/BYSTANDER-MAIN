@@ -224,12 +224,12 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           null
         setForm((f) => ({
           ...f,
-          service: f.service || defaultUrgentService,
-          date: f.date || upcoming.date,
-          startTime: f.startTime || upcoming.startTime,
+          service: defaultUrgentService,
+          date: upcoming.date,
+          startTime: upcoming.startTime,
           hours: 2,
           careType: f.careType || 'Home Care',
-          instructions: f.instructions || 'Urgent on-demand broadcast',
+          instructions: 'Urgent on-demand broadcast',
         }))
         setTerms(true)
         setStep(0)
@@ -256,12 +256,12 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         null
       setForm((f) => ({
         ...f,
-        service: f.service || defaultUrgentService,
-        date: f.date || upcoming.date,
-        startTime: f.startTime || upcoming.startTime,
+        service: defaultUrgentService,
+        date: upcoming.date,
+        startTime: upcoming.startTime,
         hours: 2,
         careType: f.careType || 'Home Care',
-        instructions: f.instructions || 'Urgent on-demand broadcast',
+        instructions: 'Urgent on-demand broadcast',
       }))
       setTerms(true)
     }
@@ -634,7 +634,14 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
   const handleConfirm = async () => {
     let activeService = form.service
-    if (!activeService && availableServices.length > 0) {
+    if (isUrgent) {
+      const defaultUrgentService =
+        availableServices.find((s) => s.slug === 'patient-monitoring' || s.name?.toLowerCase().includes('patient monitoring')) ||
+        availableServices.find((s) => s.slug === 'companionship') ||
+        availableServices[0] ||
+        null
+      activeService = defaultUrgentService
+    } else if (!activeService && availableServices.length > 0) {
       activeService = availableServices[0]
       setForm((f) => ({ ...f, service: availableServices[0] }))
     }

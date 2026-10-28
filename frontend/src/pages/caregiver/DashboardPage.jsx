@@ -679,9 +679,7 @@ export function DashboardPage() {
                             <Zap className="h-2.5 w-2.5 fill-current" />
                             Urgent
                           </span>
-                        ) : (
-                          <StatusBadge status={job.urgency} size="sm" />
-                        )}
+                        ) : null}
                       </div>
                       <h3 className="mt-1 truncate font-display text-base font-bold text-ink">{job.service}</h3>
                       <p className="mt-0.5 truncate text-sm text-muted">

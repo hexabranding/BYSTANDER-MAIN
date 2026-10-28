@@ -250,9 +250,7 @@ export function JobDetailsPage() {
                   <Zap className="h-3 w-3 fill-current" />
                   Urgent Dispatch
                 </span>
-              ) : (
-                <StatusBadge status={job.urgency} />
-              )}
+              ) : null}
               <StatusBadge status={job.status} />
               {preferredGender && preferredGender !== 'Any' && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-700 border border-pink-200">

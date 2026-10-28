@@ -127,7 +127,14 @@ export function JobsPage() {
         )
       : list
     const byService = service === 'All' ? searched : searched.filter((j) => j.service === service)
-    const byUrgency = urgency === 'All' ? byService : byService.filter((j) => j.urgency === urgency)
+    const byUrgency =
+      urgency === 'All'
+        ? byService
+        : urgency === 'Urgent'
+          ? byService.filter((j) => j.isUrgent)
+          : urgency === 'Standard'
+            ? byService.filter((j) => !j.isUrgent)
+            : byService.filter((j) => j.urgency === urgency)
     const sorted = [...byUrgency]
     if (sort === 'newest') sorted.sort((a, b) => (b.postedAt || '').localeCompare(a.postedAt || ''))
     if (sort === 'oldest') sorted.sort((a, b) => (a.postedAt || '').localeCompare(b.postedAt || ''))
@@ -237,11 +244,10 @@ export function JobsPage() {
           ))}
         </Select>
         <div className="grid grid-cols-2 gap-3">
-          <Select aria-label="Filter by urgency" value={urgency} onChange={(e) => setUrgency(e.target.value)}>
-            <option value="All">Any urgency</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
+          <Select aria-label="Filter by request type" value={urgency} onChange={(e) => setUrgency(e.target.value)}>
+            <option value="All">All requests</option>
+            <option value="Urgent">⚡ Urgent only</option>
+            <option value="Standard">Standard scheduled</option>
           </Select>
           <Select aria-label="Sort jobs" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="newest">Newest first</option>
@@ -350,9 +356,7 @@ export function JobsPage() {
                             <Zap className="h-3 w-3 fill-current" />
                             Urgent Dispatch
                           </span>
-                        ) : (
-                          <StatusBadge status={job.urgency} size="sm" />
-                        )}
+                        ) : null}
                         {job.status !== 'Open' ? <StatusBadge status={job.status} size="sm" /> : null}
                         {preferredGender && preferredGender !== 'Any' ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-semibold text-pink-700 border border-pink-200">

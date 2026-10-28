@@ -604,6 +604,11 @@ export const adaptBooking = (raw) => {
             gender: cg?.gender || 'Caregiver',
             hourlyRate: cgRate,
             totalAmount: cgTotal,
+            city: cg?.city || raw.location?.city || 'Kozhikode',
+            area: cg?.area || raw.location?.area || 'Palayam',
+            distanceKm: Number(cg?.distanceKm || 3.2),
+            bio: cg?.bio || '',
+            badges: Array.isArray(cg?.badges) && cg.badges.length > 0 ? cg.badges : ['ID Verified', 'Background Checked', 'Certified Caretaker'],
             appliedAt: a.appliedAt || new Date().toISOString(),
             status: a.status || 'applied',
           }

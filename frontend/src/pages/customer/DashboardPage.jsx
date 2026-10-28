@@ -14,6 +14,7 @@ import {
   Stethoscope,
   Star,
   UserRound,
+  Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -136,6 +137,16 @@ export function DashboardPage() {
       totalSpent: spent,
     }
   }, [realBookings, realPayments])
+
+  const pendingRequestsWithApplicants = useMemo(() => {
+    return myBookings.filter(
+      (b) => b.status === 'Pending' && !b.caregiverId && Array.isArray(b.applicants) && b.applicants.length > 0
+    )
+  }, [myBookings])
+
+  const totalApplicantsCount = useMemo(() => {
+    return pendingRequestsWithApplicants.reduce((sum, b) => sum + (b.applicants?.length || 0), 0)
+  }, [pendingRequestsWithApplicants])
 
   const spendChartData = useMemo(() => {
     const months = []
@@ -263,6 +274,41 @@ export function DashboardPage() {
           delay={0.15}
         />
       </div>
+
+      {pendingRequestsWithApplicants.length > 0 ? (
+        <div className="relative overflow-hidden rounded-2xl border-2 border-primary-500/40 bg-gradient-to-r from-mint-50/90 via-white to-mint-50/50 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3.5">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary-600 to-mint-600 text-white shadow-xs">
+                <Users className="h-6 w-6" />
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-base font-bold text-ink">
+                    {totalApplicantsCount} Caretaker{totalApplicantsCount === 1 ? '' : 's'} Accepted Your Care Request!
+                  </h3>
+                  <span className="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-bold text-primary-800">
+                    Action Required
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted leading-relaxed max-w-2xl">
+                  Verified caretakers have submitted offers for your care booking{pendingRequestsWithApplicants.length > 1 ? 's' : ''}. Review their profiles, ratings, verified badges, and hourly rates to confirm your caretaker.
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                to="/customer/accepted-caretakers"
+                variant="primary"
+                size="sm"
+                iconRight={ArrowRight}
+              >
+                Review & Choose Caretaker
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">

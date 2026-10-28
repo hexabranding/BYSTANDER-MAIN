@@ -31,6 +31,7 @@ import { BookCaregiverPage } from '@/pages/customer/BookCaregiverPage'
 import { BookingsPage as CustomerBookings } from '@/pages/customer/BookingsPage'
 import { BookingDetailsPage as CustomerBookingDetails } from '@/pages/customer/BookingDetailsPage'
 import { CaregiversPage as CustomerCaregivers } from '@/pages/customer/CaregiversPage'
+import { AcceptedCaregiversPage } from '@/pages/customer/AcceptedCaregiversPage'
 import { PaymentsPage as CustomerPayments } from '@/pages/customer/PaymentsPage'
 import { InvoicesPage as CustomerInvoices } from '@/pages/customer/InvoicesPage'
 import { MessagesPage as CustomerMessages } from '@/pages/customer/MessagesPage'
@@ -112,7 +113,8 @@ export function AppRoutes() {
         <Route path="book-caregiver" element={<BookCaregiverPage />} />
         <Route path="bookings" element={<CustomerBookings />} />
         <Route path="bookings/:id" element={<CustomerBookingDetails />} />
-        <Route path="caregivers" element={<Navigate to="/customer/book-caregiver" replace />} />
+        <Route path="accepted-caretakers" element={<AcceptedCaregiversPage />} />
+        <Route path="caregivers" element={<AcceptedCaregiversPage />} />
         <Route path="payments" element={<CustomerPayments />} />
         <Route path="invoices" element={<CustomerInvoices />} />
         <Route path="messages" element={<CustomerMessages />} />

@@ -32,7 +32,7 @@ import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { SERVICES } from '@/data/services'
-import { CITIES, GST_RATE, PLATFORM_FEE } from '@/utils/constants'
+import { CITIES, GST_RATE, PLATFORM_FEE, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { DURATION_GROUPS, durationBasis, formatDuration } from '@/utils/duration'
 import { cn } from '@/utils/cn'
@@ -194,18 +194,22 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     requirements: patientInfo?.condition || '',
     careType: 'Home Care',
     address:
-      user?.address &&
+      typeof user?.address === 'string' &&
       user?.address !== user?.city &&
       !user?.address.includes('Mumbai, MH')
         ? user.address
-        : '',
-    city: user?.city && user?.city !== 'Mumbai, MH' && user?.city !== 'Mumbai' ? user.city : '',
+        : (user?.street || user?.address?.street || ''),
+    city: user?.city && user?.city !== 'Mumbai, MH' && user?.city !== 'Mumbai' ? user.city : 'Kochi, KL',
     area: user?.area && user?.area !== 'Powai' ? user.area : '',
+    district: user?.district || 'Ernakulam',
+    state: user?.state || 'Kerala',
+    pincode: user?.pincode || '',
     date: '',
     startTime: '08:00',
-    hours: 6,
+    hours: 2,
     instructions: '',
     extras: [],
+    preferredCaregiverGender: 'Any',
   }))
 
   const toggleUrgentMode = () => {
@@ -218,7 +222,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           service: f.service || availableServices[0] || null,
           date: f.date || upcoming.date,
           startTime: f.startTime || upcoming.startTime,
-          hours: f.hours || 6,
+          hours: f.hours && f.hours >= 2 ? f.hours : 2,
           careType: f.careType || 'Home Care',
           instructions: f.instructions || 'Urgent on-demand broadcast',
         }))
@@ -245,7 +249,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         service: f.service || availableServices[0],
         date: f.date || upcoming.date,
         startTime: f.startTime || upcoming.startTime,
-        hours: f.hours || 6,
+        hours: f.hours && f.hours >= 2 ? f.hours : 2,
         careType: f.careType || 'Home Care',
         instructions: f.instructions || 'Urgent on-demand broadcast',
       }))
@@ -319,7 +323,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     matchedCaregiver?.hourlyRate ||
     availableServices[0]?.baseHourlyRate ||
     499
-  const hours = Number(form.hours) || (isUrgent ? 6 : 0)
+  const hours = Number(form.hours) || 2
   const subtotal = rate * hours
   const platformFee = PLATFORM_FEE
   const tax = Math.round((subtotal + platformFee) * GST_RATE)
@@ -335,15 +339,14 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         const settingValid =
           Boolean(form.careType) &&
           Boolean(form.address?.trim()) &&
-          Boolean(form.city) &&
           Boolean(form.area?.trim())
         if (isUrgent) {
-          return settingValid && terms
+          return settingValid && terms && Number(form.hours || 2) >= 2
         }
         return settingValid
       }
       case 'schedule':
-        return Boolean(form.date) && Boolean(form.startTime) && Number(form.hours) > 0
+        return Boolean(form.date) && Boolean(form.startTime) && Number(form.hours) >= 2
       case 'instructions':
         return true
       case 'price':
@@ -494,6 +497,9 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       let detectedCity = ''
       let detectedArea = ''
       let detectedAddress = ''
+      let detectedDistrict = ''
+      let detectedState = ''
+      let detectedPincode = ''
 
       // 3. Reverse Geocode with Nominatim (3.5s timeout)
       try {
@@ -547,6 +553,15 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
             ipData?.city ||
             ''
 
+          detectedDistrict =
+            KERALA_DISTRICTS.find(
+              (d) =>
+                (addr.state_district && addr.state_district.toLowerCase().includes(d.toLowerCase())) ||
+                (addr.county && addr.county.toLowerCase().includes(d.toLowerCase())),
+            ) || ''
+          detectedPincode = addr.postcode ? String(addr.postcode).replace(/\D/g, '').slice(0, 6) : ''
+          detectedState = addr.state || (detectedDistrict ? 'Kerala' : '')
+
           const streetParts = [
             addr.building || addr.amenity || addr.house_name,
             addr.house_number ? `#${addr.house_number}` : '',
@@ -576,6 +591,9 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         ...prev,
         city: detectedCity || prev.city,
         area: detectedArea || prev.area,
+        district: detectedDistrict || prev.district || 'Ernakulam',
+        state: detectedState || prev.state || 'Kerala',
+        pincode: detectedPincode || prev.pincode || '',
         address: detectedAddress,
         coordinates: {
           latitude: lat,
@@ -676,7 +694,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         localStartDate = new Date(uY, uMo - 1, uD, uH, uM, 0)
       }
 
-      const hoursNum = Math.max(0.5, Math.min(24, Number(form.hours) || (isUrgent ? 6 : 1)))
+      const hoursNum = Math.max(2, Math.min(24, Number(form.hours) || 2))
       const localEndDate = new Date(localStartDate.getTime() + hoursNum * 60 * 60 * 1000)
 
       // Broadcast payload: No caregiverId required. Broadcasts to all active caretakers!
@@ -685,10 +703,15 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         startDateTime: localStartDate.toISOString(),
         endDateTime: localEndDate.toISOString(),
         timezone: 'Asia/Kolkata',
+        preferredGender: form.preferredCaregiverGender || 'Any',
         location: {
+          street: form.address.trim(),
           addressLine: form.address.trim(),
-          city: form.city.trim(),
+          city: (form.city || form.area || form.district || 'Kerala').trim(),
           area: form.area.trim(),
+          district: (form.district || 'Ernakulam').trim(),
+          state: (form.state || 'Kerala').trim(),
+          pincode: (form.pincode || '').trim(),
           careSetting: form.careType === 'Hospital Care' ? 'Hospital Care' : 'Home Care',
         },
         patientDetails: {
@@ -699,6 +722,9 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
             isUrgent ? 'URGENT DISPATCH PROTOCOL' : '',
             form.instructions?.trim() ? `Instructions: ${form.instructions.trim()}` : '',
             form.extras?.length > 0 ? `Care Directives: ${form.extras.join(', ')}` : '',
+            form.preferredCaregiverGender && form.preferredCaregiverGender !== 'Any'
+              ? `Preferred Caretaker Gender: ${form.preferredCaregiverGender}`
+              : '',
           ]
             .filter(Boolean)
             .join(' · ') || (isUrgent ? 'Urgent shift protocol' : 'Standard shift protocol'),
@@ -1044,6 +1070,65 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                         />
                       </FormField>
                     </div>
+
+                    {/* Preferred Caretaker Gender Selection */}
+                    <div className="pt-2">
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">
+                        Preferred Caretaker Gender
+                      </label>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {[
+                          {
+                            id: 'Female',
+                            label: 'Female Caretaker',
+                            hint: 'Recommended for female patients & personal hygiene care',
+                            icon: '👩',
+                          },
+                          {
+                            id: 'Male',
+                            label: 'Male Caretaker',
+                            hint: 'Recommended for physical lifting & mobility assistance',
+                            icon: '👨',
+                          },
+                          {
+                            id: 'Any',
+                            label: 'Any / No Preference',
+                            hint: 'Fastest responses from all nearby verified caretakers',
+                            icon: '🤝',
+                          },
+                        ].map((g) => {
+                          const active = (form.preferredCaregiverGender || 'Any') === g.id
+                          return (
+                            <button
+                              key={g.id}
+                              type="button"
+                              onClick={() => set({ preferredCaregiverGender: g.id })}
+                              className={cn(
+                                'flex flex-col items-start rounded-xl border p-3.5 text-left transition',
+                                active
+                                  ? 'border-primary-600 bg-primary-50/70 ring-2 ring-primary-500/20 shadow-sm'
+                                  : 'border-line bg-surface hover:border-slate-300 hover:bg-slate-50/60',
+                              )}
+                            >
+                              <div className="flex w-full items-center justify-between">
+                                <span className="text-xl" role="img" aria-label={g.label}>
+                                  {g.icon}
+                                </span>
+                                {active ? (
+                                  <span className="grid h-5 w-5 place-items-center rounded-full bg-primary-600 text-white">
+                                    <Check className="h-3 w-3" />
+                                  </span>
+                                ) : (
+                                  <span className="h-5 w-5 rounded-full border border-line bg-surface" />
+                                )}
+                              </div>
+                              <p className="mt-2 text-sm font-bold text-ink">{g.label}</p>
+                              <p className="mt-0.5 text-xs leading-relaxed text-muted">{g.hint}</p>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
                   </CardBody>
                 </Card>
               ) : null}
@@ -1166,36 +1251,121 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                       </div>
                     )}
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <FormField label="City" required>
-                        <Select value={form.city} onChange={(e) => set({ city: e.target.value })}>
-                          <option value="">Select City</option>
-                          {Array.from(new Set([form.city, ...CITIES].filter(Boolean))).map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </Select>
-                      </FormField>
-                      <FormField label="Locality / Area" required>
-                        <Input
-                          placeholder="e.g. Bandra West, Indiranagar"
-                          value={form.area}
-                          onChange={(e) => set({ area: e.target.value })}
-                        />
-                      </FormField>
-                    </div>
-
-                    <FormField label="Full street address / Hospital room no." required>
+                    <FormField label="House / Building / Flat Name & Street Address / Hospital Room" required>
                       <Input
-                        placeholder="e.g. Flat 402, Sunshine Apts, Linking Road / Room 312, Lilavati Hospital"
+                        placeholder="e.g. House No. 12/450, Greenfield Villa, MG Road / Room 312, Aster Medcity"
                         value={form.address}
                         onChange={(e) => set({ address: e.target.value })}
                       />
                     </FormField>
 
+                    <FormField label="Locality / Town / Landmark" required hint="e.g. Koyilandy, Edappally, Kaloor, Thalassery">
+                      <Input
+                        placeholder="e.g. Koyilandy, Edappally, Kaloor"
+                        value={form.area}
+                        onChange={(e) => set({ area: e.target.value })}
+                      />
+                    </FormField>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField label="District" required>
+                        <Select value={form.district || 'Ernakulam'} onChange={(e) => set({ district: e.target.value })}>
+                          {KERALA_DISTRICTS.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+
+                      <FormField label="State" required>
+                        <Select value={form.state || 'Kerala'} onChange={(e) => set({ state: e.target.value })}>
+                          {INDIAN_STATES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+                    </div>
+
+                    <FormField label="PIN Code (Postal Code)" hint="6-digit Indian PIN code">
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="e.g. 682024"
+                        value={form.pincode || ''}
+                        onChange={(e) => set({ pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                      />
+                    </FormField>
+
                     {isUrgent ? (
-                      <div className="pt-2">
+                      <div className="space-y-4 pt-2">
+                        {availableServices.length > 0 ? (
+                          <FormField label="Urgent Care Service" hint="Select the type of care needed for this urgent request">
+                            <Select
+                              value={form.service?._id || form.service?.id || availableServices[0]?._id || ''}
+                              onChange={(e) => {
+                                const found = availableServices.find((s) => (s._id || s.id) === e.target.value)
+                                if (found) set({ service: found })
+                              }}
+                            >
+                              {availableServices.map((svc) => (
+                                <option key={svc._id || svc.id} value={svc._id || svc.id}>
+                                  {svc.name} · ₹{svc.baseHourlyRate || svc.startingPrice || 449}/hr
+                                </option>
+                              ))}
+                            </Select>
+                          </FormField>
+                        ) : null}
+
+                        <div className="rounded-xl border border-line bg-slate-50/70 p-4">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                              Shift duration (hours) · Min 2 hrs
+                            </label>
+                            <span className="text-xs font-bold text-orange-600">
+                              {form.hours || 2} hours selected
+                            </span>
+                          </div>
+                          <div className="mt-2.5 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                            {[2, 4, 6, 8, 12, 24].map((h) => {
+                              const selected = Number(form.hours) === h
+                              return (
+                                <button
+                                  key={h}
+                                  type="button"
+                                  onClick={() => set({ hours: h })}
+                                  className={cn(
+                                    'rounded-xl border py-2 text-xs font-bold transition',
+                                    selected
+                                      ? 'border-orange-500 bg-orange-500 text-white shadow-sm'
+                                      : 'border-line bg-white text-ink hover:border-orange-300 hover:bg-orange-50/50',
+                                  )}
+                                >
+                                  {h} hrs
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <div className="mt-3 flex items-center gap-2">
+                            <span className="text-xs text-muted">Custom duration:</span>
+                            <input
+                              type="number"
+                              min={2}
+                              max={24}
+                              value={form.hours || 2}
+                              onChange={(e) => {
+                                const val = Math.max(2, Math.min(24, Number(e.target.value) || 2))
+                                set({ hours: val })
+                              }}
+                              className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-orange-500 focus:outline-none"
+                            />
+                            <span className="text-xs text-muted">hours (open freely, min 2 hrs)</span>
+                          </div>
+                        </div>
+
                         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3">
                           <input
                             type="checkbox"
@@ -1248,11 +1418,16 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                        Shift duration (hours)
-                      </label>
-                      <div className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-6">
-                        {[4, 6, 8, 10, 12, 24].map((h) => {
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                          Shift duration (hours) · Min 2 hrs
+                        </label>
+                        <span className="text-xs font-semibold text-primary-700">
+                          {form.hours || 2} hours selected
+                        </span>
+                      </div>
+                      <div className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-7">
+                        {[2, 4, 6, 8, 10, 12, 24].map((h) => {
                           const selected = Number(form.hours) === h
                           return (
                             <button
@@ -1270,6 +1445,21 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                             </button>
                           )
                         })}
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="text-xs text-muted">Custom duration:</span>
+                        <input
+                          type="number"
+                          min={2}
+                          max={24}
+                          value={form.hours || 2}
+                          onChange={(e) => {
+                            const val = Math.max(2, Math.min(24, Number(e.target.value) || 2))
+                            set({ hours: val })
+                          }}
+                          className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-primary-600 focus:outline-none"
+                        />
+                        <span className="text-xs text-muted">hours (open freely, min 2 hrs)</span>
                       </div>
                     </div>
                   </CardBody>
@@ -1400,14 +1590,28 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     <SummaryGrid
                       items={[
                         { icon: UserRound, label: 'Patient', value: `${form.patientName} (${form.patientAge} yrs, ${form.relation})` },
-                        { icon: Home, label: 'Service', value: `${form.service?.name} · ${form.careType}` },
-                        { icon: MapPin, label: 'Location', value: `${form.address}, ${form.area}, ${form.city}` },
+                        {
+                          icon: UserRound,
+                          label: 'Preferred Caretaker',
+                          value: `${form.preferredCaregiverGender || 'Any'} Gender (${
+                            form.preferredCaregiverGender === 'Female'
+                              ? 'Female caretaker requested'
+                              : form.preferredCaregiverGender === 'Male'
+                                ? 'Male caretaker requested'
+                                : 'Any gender / fastest match'
+                          })`,
+                        },
+                        {
+                          icon: MapPin,
+                          label: 'Location',
+                          value: `${form.address}, ${form.area}${form.district ? `, ${form.district}` : ''}${form.pincode ? ` - ${form.pincode}` : ''}`,
+                        },
                         {
                           icon: CalendarDays,
                           label: 'Schedule',
                           value: `${formatDate(form.date, { long: true })} · ${form.startTime} · ${formatDuration(form.hours)}`,
                         },
-                        { icon: Sparkles, label: 'Dispatch mechanism', value: 'Instant Platform Broadcast (First-come acceptance)' },
+                        { icon: Sparkles, label: 'Selection Mode', value: 'Multi-Caretaker Offers · You Choose Best Match' },
                         {
                           icon: ShieldCheck,
                           label: 'Care requirements',
@@ -1424,9 +1628,9 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     <div className="flex items-start gap-3 rounded-xl border border-primary-200 bg-mint-50/70 p-4">
                       <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary-700" />
                       <div className="text-xs leading-relaxed text-ink">
-                        <p className="font-bold text-primary-900">On-Demand Caretaker Broadcast</p>
+                        <p className="font-bold text-primary-900">Multi-Caretaker Offer & Selection Flow</p>
                         <p className="mt-0.5 text-muted">
-                          When you confirm, your request is broadcasted simultaneously to all verified caretakers in {form.city}. The first available caretaker will accept the request and be assigned immediately.
+                          When you confirm, your request is broadcasted to verified {form.preferredCaregiverGender && form.preferredCaregiverGender !== 'Any' ? `${form.preferredCaregiverGender.toLowerCase()} ` : ''}caretakers in {form.city}. Multiple caretakers can accept with their rating and hourly rate, allowing you to choose the exact caretaker you prefer.
                         </p>
                       </div>
                     </div>
@@ -1501,12 +1705,12 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                 {isUrgent ? (
                   <Row label="Booking mode" value="Urgent 2-Step (Immediate)" />
                 ) : null}
-                <Row label="Service" value={form.service?.name || (isUrgent ? 'On-Demand Caretaker Dispatch' : 'Not selected')} />
+                <Row label="Service" value={form.service?.name || (isUrgent && availableServices[0]?.name ? availableServices[0].name : (isUrgent ? 'On-Demand Caretaker Dispatch' : 'Not selected'))} />
                 <Row
                   label="Caretaker rate"
                   value={form.service || isUrgent ? `${formatCurrency(rate)} / hour` : '—'}
                 />
-                <Row label="Duration" value={`${form.hours || (isUrgent ? 6 : 0)} hours`} />
+                <Row label="Duration" value={`${form.hours || 2} hours`} />
                 <Row label="Care setting" value={form.careType || '—'} />
                 <Row label="Date" value={form.date ? `${formatDate(form.date)}${isUrgent ? ' (Immediate)' : ''}` : (isUrgent ? 'Today' : '—')} />
                 {form.extras?.length ? (

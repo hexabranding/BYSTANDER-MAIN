@@ -556,6 +556,39 @@ export const adaptBooking = (raw) => {
         : normalizedStatus === 'Cancelled'
           ? 'Refunded'
           : 'Escrow Held'),
+    preferredGender: raw.preferredGender || 'Any',
+    applicants: Array.isArray(raw.applicants)
+      ? raw.applicants.map((a) => {
+          const cg = a.caregiver && typeof a.caregiver === 'object' ? a.caregiver : null
+          const cgUser =
+            (cg && typeof cg.user === 'object' ? cg.user : null) ||
+            (a.caregiverUser && typeof a.caregiverUser === 'object' ? a.caregiverUser : null)
+          const cgId = String(cg?._id || cg?.id || a.caregiver || '')
+          const cgName = cgUser?.fullName || cgUser?.name || cg?.fullName || cg?.name || 'Caregiver'
+          const cgRate = Number(a.hourlyRate || cg?.hourlyRate || rate)
+          const cgTotal = Number(a.totalAmount || Math.round(cgRate * hours))
+          return {
+            ...a,
+            id: cgId,
+            caregiverId: cgId,
+            caregiver: cg,
+            caregiverUser: cgUser,
+            name: cgName,
+            fullName: cgName,
+            photo: cg?.avatar || cgUser?.avatar || '',
+            avatar: cg?.avatar || cgUser?.avatar || '',
+            qualification: cg?.qualification || 'Caregiver',
+            experienceYears: Number(cg?.experienceYears ?? 0),
+            rating: typeof cg?.rating === 'object' ? Number(cg.rating.average ?? 5.0) : Number(cg?.rating ?? 5.0),
+            reviewCount: typeof cg?.rating === 'object' ? Number(cg.rating.count ?? 0) : Number(cg?.reviewCount ?? 0),
+            gender: cg?.gender || 'Caregiver',
+            hourlyRate: cgRate,
+            totalAmount: cgTotal,
+            appliedAt: a.appliedAt || new Date().toISOString(),
+            status: a.status || 'applied',
+          }
+        })
+      : [],
     createdAt: raw.createdAt || new Date().toISOString(),
     startDateTime: raw.startDateTime || null,
     endDateTime: raw.endDateTime || null,
@@ -1462,6 +1495,8 @@ export const adaptBookingToJob = (raw) => {
     },
     requirements,
     urgency: b.urgency || (hours >= 8 ? 'High' : 'Medium'),
+    preferredGender: b.preferredGender || 'Any',
+    applicants: b.applicants || [],
     postedAt: b.postedAt || b.createdAt || new Date().toISOString(),
     status,
     rawBooking: b,

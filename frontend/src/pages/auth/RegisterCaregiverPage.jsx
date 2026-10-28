@@ -13,7 +13,9 @@ import {
   Eye,
   EyeOff,
   FileCheck2,
+  Home,
   Landmark,
+  MapPin,
   PhoneCall,
   UserRound,
 } from 'lucide-react'
@@ -26,7 +28,7 @@ import { Button } from '@/components/common/Button'
 import { Card, CardBody } from '@/components/common/Card'
 import { ProgressBar, Chip } from '@/components/common/Tabs'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { QUALIFICATIONS, LANGUAGES } from '@/utils/constants'
+import { QUALIFICATIONS, LANGUAGES, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
 import { cn } from '@/utils/cn'
 
 const STEPS = [
@@ -37,7 +39,7 @@ const STEPS = [
 ]
 
 const STEP_FIELDS = [
-  ['fullName', 'mobile', 'email', 'dob', 'password'],
+  ['fullName', 'mobile', 'email', 'dob', 'gender', 'street', 'area', 'district', 'state', 'pincode', 'password'],
   ['qualification', 'experience', 'nursingRegNo', 'languages', 'careSettings'],
   [],
   ['emergencyName', 'emergencyRelationship', 'emergencyPhone', 'bankHolder', 'accountNumber', 'ifsc', 'declaration'],
@@ -125,6 +127,13 @@ export function RegisterCaregiverPage() {
       mobile: '',
       email: '',
       dob: '',
+      gender: 'Female',
+      street: '',
+      area: '',
+      city: '',
+      district: 'Ernakulam',
+      state: 'Kerala',
+      pincode: '',
       password: '',
       qualification: '',
       experience: '',
@@ -276,11 +285,27 @@ export function RegisterCaregiverPage() {
       optional: key === 'bankProof',
     }))
 
-    const payload = {
-      fullName: values.fullName.trim(),
-      mobile: values.mobile.trim(),
-      email: values.email.trim(),
-      dob: values.dob,
+      const resolvedCity = values.area?.trim() || values.district?.trim() || 'Kerala'
+      const payload = {
+        fullName: values.fullName.trim(),
+        mobile: values.mobile.trim(),
+        email: values.email.trim(),
+        dob: values.dob,
+        gender: values.gender || 'Female',
+        street: values.street?.trim() || '',
+        area: values.area?.trim() || '',
+        city: resolvedCity,
+        district: values.district?.trim() || 'Ernakulam',
+        state: values.state?.trim() || 'Kerala',
+        pincode: values.pincode?.trim() || '',
+        address: {
+          street: values.street?.trim() || '',
+          area: values.area?.trim() || '',
+          city: resolvedCity,
+          district: values.district?.trim() || 'Ernakulam',
+          state: values.state?.trim() || 'Kerala',
+          pincode: values.pincode?.trim() || '',
+        },
       password: values.password,
       qualification: values.qualification,
       experience: Number(values.experience),
@@ -309,8 +334,14 @@ export function RegisterCaregiverPage() {
     registerCaregiverProfile({
       caregiverId: result.user?.id || 'cg-new',
       name: payload.fullName,
-      city: payload.city,
+      gender: payload.gender,
+      street: payload.street,
       area: payload.area,
+      city: payload.city,
+      district: payload.district,
+      state: payload.state,
+      pincode: payload.pincode,
+      address: payload.address,
       qualification: payload.qualification,
       experience: payload.experience,
       nursingRegNo: payload.nursingRegNo,
@@ -452,6 +483,129 @@ export function RegisterCaregiverPage() {
                     })}
                   />
                 </FormField>
+
+                <FormField label="Gender" htmlFor="g-gender" required error={errors.gender?.message}>
+                  <Select
+                    id="g-gender"
+                    error={errors.gender?.message}
+                    {...register('gender', { required: 'Please select your gender' })}
+                  >
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Other">Other</option>
+                  </Select>
+                </FormField>
+
+                <div className="pt-3 border-t border-slate-100">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Home className="h-4 w-4 text-primary-700" />
+                    <h3 className="text-sm font-bold text-ink">Residential Address</h3>
+                  </div>
+                  <p className="text-xs text-muted mb-4">
+                    Complete physical address required for verified registration and zone matching in Kerala.
+                  </p>
+
+                  <div className="space-y-4">
+                    <FormField
+                      label="House / Building / Flat Name & Street Address"
+                      htmlFor="g-street"
+                      required
+                      error={errors.street?.message}
+                      hint="e.g. House No. 12/450, Greenfield Villa, MG Road"
+                    >
+                      <Input
+                        id="g-street"
+                        placeholder="House / Flat No., Building Name, Street"
+                        error={errors.street?.message}
+                        {...register('street', {
+                          required: 'Street address is required',
+                          minLength: { value: 5, message: 'Please enter your complete street address' },
+                        })}
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="Locality / Town / Landmark"
+                      htmlFor="g-area"
+                      required
+                      error={errors.area?.message}
+                      hint="e.g. Koyilandy, Edappally, Kaloor, Thalassery"
+                    >
+                      <Input
+                        id="g-area"
+                        placeholder="e.g. Koyilandy, Edappally, Kaloor"
+                        error={errors.area?.message}
+                        {...register('area', {
+                          required: 'Locality / Town is required',
+                        })}
+                      />
+                    </FormField>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        label="District"
+                        htmlFor="g-district"
+                        required
+                        error={errors.district?.message}
+                      >
+                        <Select
+                          id="g-district"
+                          error={errors.district?.message}
+                          {...register('district', { required: 'Select your district' })}
+                        >
+                          {KERALA_DISTRICTS.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+
+                      <FormField
+                        label="State"
+                        htmlFor="g-state"
+                        required
+                        error={errors.state?.message}
+                      >
+                        <Select
+                          id="g-state"
+                          error={errors.state?.message}
+                          {...register('state', { required: 'Select your state' })}
+                        >
+                          {INDIAN_STATES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+                    </div>
+
+                    <FormField
+                      label="PIN Code (Postal Code)"
+                      htmlFor="g-pincode"
+                      required
+                      error={errors.pincode?.message}
+                      hint="6-digit Indian Postal PIN code (e.g. 682024)"
+                    >
+                      <Input
+                        id="g-pincode"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="e.g. 682024"
+                        error={errors.pincode?.message}
+                        {...register('pincode', {
+                          required: 'PIN code is required',
+                          pattern: {
+                            value: /^[1-9][0-9]{5}$/,
+                            message: 'Enter a valid 6-digit Indian PIN code (e.g. 682024)',
+                          },
+                        })}
+                      />
+                    </FormField>
+                  </div>
+                </div>
 
                 <FormField label="Password" htmlFor="g-password" required error={errors.password?.message}>
                   <div className="relative">

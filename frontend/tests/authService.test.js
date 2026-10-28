@@ -331,4 +331,35 @@ describe('Step 12B - Authentication Service & Security Integration', () => {
     assert.strictEqual(logoutResult.ok, true);
     assert.strictEqual(getAuthToken(), null, 'In-memory token was not cleared after logout failure');
   });
+
+  it('9. normalizeUser safely handles structured object address (CaregiverProfile) without throwing prof.address.includes is not a function', () => {
+    const rawUser = {
+      _id: '6711cg999',
+      fullName: 'Reshma Nair',
+      email: 'reshma@care.in',
+      role: 'caregiver',
+    };
+    const rawProfile = {
+      address: {
+        street: 'Flat 4B, Lotus Heights',
+        area: 'Edappally',
+        district: 'Ernakulam',
+        state: 'Kerala',
+        pincode: '682024',
+      },
+      qualification: 'GNM',
+      hourlyRate: 250,
+      verificationStatus: 'verified',
+    };
+
+    const user = normalizeUser(rawUser, rawProfile);
+    assert.strictEqual(user.name, 'Reshma Nair');
+    assert.strictEqual(user.area, 'Edappally');
+    assert.strictEqual(user.district, 'Ernakulam');
+    assert.strictEqual(user.state, 'Kerala');
+    assert.strictEqual(user.pincode, '682024');
+    assert.strictEqual(user.street, 'Flat 4B, Lotus Heights');
+    assert.strictEqual(user.address, 'Flat 4B, Lotus Heights, Edappally, Ernakulam, 682024');
+  });
 });
+

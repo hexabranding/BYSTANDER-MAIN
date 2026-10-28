@@ -123,6 +123,9 @@ export const validateCreateBooking = (req, res, next) => {
     if (!location.addressLine || typeof location.addressLine !== 'string' || location.addressLine.trim().length < 3) {
       errors.push('location.addressLine is required (minimum 3 characters)');
     }
+    if (!location.city && (location.area || location.district)) {
+      location.city = location.area || location.district;
+    }
     if (!location.city || typeof location.city !== 'string' || location.city.trim().length < 2) {
       errors.push('location.city is required');
     }
@@ -162,17 +165,31 @@ export const validateCreateBooking = (req, res, next) => {
     });
   }
 
+  // Caretaker Gender Preference (Default: 'Any')
+  let preferredCaregiverGender = 'Any';
+  const rawPref = req.body?.preferredGender || req.body?.preferredCaregiverGender;
+  if (rawPref && typeof rawPref === 'string') {
+    const lower = rawPref.trim().toLowerCase();
+    if (lower === 'female') preferredCaregiverGender = 'Female';
+    else if (lower === 'male') preferredCaregiverGender = 'Male';
+    else preferredCaregiverGender = 'Any';
+  }
+
   // Attach sanitized, typed booking request payload to request context
   req.bookingData = {
-    caregiverId: String(caregiverId),
+    caregiverId: caregiverId ? String(caregiverId) : null,
     serviceId: String(serviceId),
     startDateTime: parsedStart,
     endDateTime: parsedEnd,
     timezone: effectiveTimezone,
+    preferredGender: preferredCaregiverGender,
     location: {
+      street: location.street ? String(location.street).trim() : '',
       addressLine: location.addressLine.trim(),
       city: location.city.trim(),
       area: location.area ? String(location.area).trim() : '',
+      district: location.district ? String(location.district).trim() : 'Ernakulam',
+      state: location.state ? String(location.state).trim() : 'Kerala',
       pincode: location.pincode ? String(location.pincode).trim() : '',
       careSetting: location.careSetting || 'Home Care',
     },
@@ -184,6 +201,22 @@ export const validateCreateBooking = (req, res, next) => {
     },
   };
 
+  next();
+};
+
+/**
+ * Validate customer selection of a caregiver from applicants list.
+ */
+export const validateSelectCaregiver = (req, res, next) => {
+  const { caregiverId } = req.body || {};
+  if (!caregiverId || !mongoose.Types.ObjectId.isValid(String(caregiverId))) {
+    return res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: 'caregiverId is required and must be a valid 24-character hexadecimal ObjectId',
+    });
+  }
+  req.selectedCaregiverId = String(caregiverId);
   next();
 };
 

@@ -65,7 +65,7 @@ export const DEFAULT_SERVICES = Object.freeze([
       'Strict timetable-based medicine reminders, refill alerts, prescription logging and escalation to the family if a dose is missed.',
     features: ['Prescription logging', 'Dose alerts', 'Refill tracking', 'Escalation to family'],
     baseHourlyRate: 299,
-    minimumDurationHours: 1,
+    minimumDurationHours: 2,
     isActive: true,
   },
   {
@@ -87,7 +87,7 @@ export const DEFAULT_SERVICES = Object.freeze([
       'Calm, structured support for memory-care patients — orientation cues, wandering prevention, safe nutrition, behavioural de-escalation and caretaker respite.',
     features: ['Memory cues', 'Wandering prevention', 'Behavioural support', 'Respite relief'],
     baseHourlyRate: 649,
-    minimumDurationHours: 3,
+    minimumDurationHours: 2,
     isActive: true,
   },
   {
@@ -98,7 +98,7 @@ export const DEFAULT_SERVICES = Object.freeze([
       'Specialised bed care including 2-hourly turning schedules for bed sore prevention, sponge baths, back care, catheter care and passive range-of-motion movements.',
     features: ['2-hourly turning schedule', 'Bed baths', 'Bed sore prevention', 'Catheter hygiene'],
     baseHourlyRate: 699,
-    minimumDurationHours: 3,
+    minimumDurationHours: 2,
     isActive: true,
   },
   {
@@ -109,7 +109,7 @@ export const DEFAULT_SERVICES = Object.freeze([
       '12-hour overnight bedside care to assist with washroom visits, night vitals, hydration, emergency response and peaceful sleep for patients and families.',
     features: ['12-hour overnight shift', 'Night vitals observation', 'Washroom assistance', 'Emergency alerts'],
     baseHourlyRate: 749,
-    minimumDurationHours: 8,
+    minimumDurationHours: 2,
     isActive: true,
   },
 ]);

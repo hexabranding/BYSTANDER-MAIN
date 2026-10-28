@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { Eye, MapPin, Save, ShieldCheck } from 'lucide-react'
+import { Eye, Home, MapPin, Save, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
-import { CITIES, LANGUAGES, QUALIFICATIONS } from '@/utils/constants'
+import { CITIES, LANGUAGES, QUALIFICATIONS, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
@@ -49,14 +49,19 @@ export function ProfilePage() {
   } = useForm({
     defaultValues: {
       name: caregiver?.name || user?.name || '',
+      gender: caregiver?.gender || 'Female',
       qualification: caregiver?.qualification || QUALIFICATIONS[0],
       experienceYears: caregiver?.experienceYears ?? 0,
       hourlyRate: caregiver?.hourlyRate ?? 0,
       languages: caregiver?.languages || [],
       careSettings: caregiver?.careSettings || ['Home Care'],
       bio: caregiver?.bio || '',
-      city: caregiver?.city || CITIES[0],
+      street: caregiver?.street || caregiver?.address?.street || '',
+      city: caregiver?.city || 'Kochi, KL',
       area: caregiver?.area || '',
+      district: caregiver?.district || caregiver?.address?.district || 'Ernakulam',
+      state: caregiver?.state || caregiver?.address?.state || 'Kerala',
+      pincode: caregiver?.pincode || caregiver?.address?.pincode || '',
     },
   })
 
@@ -69,14 +74,19 @@ export function ProfilePage() {
         setRealProfile(data)
         reset({
           name: data.fullName || data.name || user?.name || '',
+          gender: data.gender || 'Female',
           qualification: data.qualification || QUALIFICATIONS[0],
           experienceYears: data.experienceYears ?? 0,
           hourlyRate: data.hourlyRate ?? 0,
           languages: data.languages || [],
           careSettings: data.careSettings || ['Home Care'],
           bio: data.bio || '',
-          city: data.city || CITIES[0],
+          street: data.street || data.address?.street || '',
+          city: data.city || 'Kochi, KL',
           area: data.area || '',
+          district: data.district || data.address?.district || 'Ernakulam',
+          state: data.state || data.address?.state || 'Kerala',
+          pincode: data.pincode || data.address?.pincode || '',
         })
       })
       .catch(() => {})
@@ -105,14 +115,28 @@ export function ProfilePage() {
 
   const onSubmit = async (data) => {
     try {
+      const resolvedCity = data.area?.trim() || data.district || 'Kerala'
       const sanitized = {
+        gender: data.gender || 'Female',
         bio: data.bio.trim(),
         experienceYears: Number(data.experienceYears) || 0,
         hourlyRate: Number(data.hourlyRate) || 0,
         languages: data.languages,
         careSettings: data.careSettings,
-        city: data.city,
+        street: data.street?.trim() || '',
+        city: resolvedCity,
         area: data.area.trim(),
+        district: data.district || 'Ernakulam',
+        state: data.state || 'Kerala',
+        pincode: data.pincode?.trim() || '',
+        address: {
+          street: data.street?.trim() || '',
+          area: data.area.trim(),
+          city: resolvedCity,
+          district: data.district || 'Ernakulam',
+          state: data.state || 'Kerala',
+          pincode: data.pincode?.trim() || '',
+        },
       }
       const updated = await profileService.updateCaregiverProfile(sanitized)
       setRealProfile(updated)
@@ -337,19 +361,85 @@ export function ProfilePage() {
                 />
               </FormField>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="City" htmlFor="pf-city" required>
-                  <Select id="pf-city" {...register('city')}>
-                    {CITIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-                <FormField label="Area" htmlFor="pf-area" required error={errors.area?.message}>
-                  <Input id="pf-area" placeholder="Powai" error={errors.area} {...register('area', { required: 'Area is required' })} />
-                </FormField>
+              <FormField label="Gender" htmlFor="pf-gender" required error={errors.gender?.message}>
+                <Select id="pf-gender" {...register('gender', { required: 'Gender is required' })}>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Other">Other</option>
+                </Select>
+              </FormField>
+
+              <div className="pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <Home className="h-4 w-4 text-primary-700" />
+                  <h3 className="text-sm font-bold text-ink">Residential Address</h3>
+                </div>
+                <p className="text-xs text-muted mb-3">
+                  Verified physical address used for Kerala territory matching and future radius broadcasts.
+                </p>
+
+                <div className="space-y-4">
+                  <FormField
+                    label="House / Building / Flat Name & Street Address"
+                    htmlFor="pf-street"
+                    error={errors.street?.message}
+                  >
+                    <Input
+                      id="pf-street"
+                      placeholder="e.g. House No. 12/450, Greenfield Villa, MG Road"
+                      error={errors.street}
+                      {...register('street')}
+                    />
+                  </FormField>
+
+                  <FormField label="Locality / Town / Landmark" htmlFor="pf-area" required error={errors.area?.message}>
+                    <Input
+                      id="pf-area"
+                      placeholder="e.g. Koyilandy, Edappally, Kaloor, Thalassery"
+                      error={errors.area}
+                      {...register('area', { required: 'Locality / Town is required' })}
+                    />
+                  </FormField>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField label="District" htmlFor="pf-district" required>
+                      <Select id="pf-district" {...register('district')}>
+                        {KERALA_DISTRICTS.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
+
+                    <FormField label="State" htmlFor="pf-state" required>
+                      <Select id="pf-state" {...register('state')}>
+                        {INDIAN_STATES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
+                  </div>
+
+                  <FormField label="PIN Code (Postal Code)" htmlFor="pf-pincode" error={errors.pincode?.message}>
+                    <Input
+                      id="pf-pincode"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="e.g. 682024"
+                      error={errors.pincode}
+                      {...register('pincode', {
+                        pattern: {
+                          value: /^([1-9][0-9]{5})?$/,
+                          message: 'Enter a valid 6-digit Indian PIN code',
+                        },
+                      })}
+                    />
+                  </FormField>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 border-t border-line pt-4">

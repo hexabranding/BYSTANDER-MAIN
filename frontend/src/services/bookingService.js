@@ -69,6 +69,20 @@ export const acceptBooking = async (id) => {
 }
 
 /**
+ * Customer chooses a caregiver from the applicants list who accepted the broadcast.
+ * @param {string} id - Booking ObjectId
+ * @param {string} caregiverId - Chosen CaregiverProfile ObjectId
+ * @returns {Promise<Object>} Updated and adapted booking
+ */
+export const selectCaregiver = async (id, caregiverId) => {
+  if (!id) throw new Error('Booking ID is required')
+  if (!caregiverId) throw new Error('Caregiver ID is required')
+  const response = await apiClient.patch(`/bookings/${id}/select-caregiver`, { caregiverId })
+  const rawBooking = response?.data || response
+  return adaptBooking(rawBooking)
+}
+
+/**
  * Caregiver or admin declines a pending booking request.
  * @param {string} id - Booking ObjectId
  * @param {string} [reason=''] - Rejection reason

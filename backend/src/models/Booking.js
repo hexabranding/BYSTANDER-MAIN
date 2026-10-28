@@ -34,6 +34,45 @@ const bookingSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    // Preferred Caretaker Gender: 'Any', 'Female', 'Male'
+    preferredGender: {
+      type: String,
+      enum: ['Any', 'Female', 'Male'],
+      default: 'Any',
+      index: true,
+    },
+    // Multi-Caregiver Acceptance / Bidding: list of caretakers who accepted this broadcast
+    applicants: [
+      {
+        caregiver: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'CaregiverProfile',
+          required: true,
+        },
+        caregiverUser: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        hourlyRate: {
+          type: Number,
+          required: true,
+        },
+        totalAmount: {
+          type: Number,
+          required: true,
+        },
+        appliedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        status: {
+          type: String,
+          enum: ['applied', 'selected', 'rejected'],
+          default: 'applied',
+        },
+      },
+    ],
 
     // Service reference & immutable snapshot
     service: {
@@ -97,6 +136,12 @@ const bookingSchema = new mongoose.Schema(
 
     // Care service location
     location: {
+      street: {
+        type: String,
+        trim: true,
+        default: '',
+        maxlength: [200, 'Street cannot exceed 200 characters'],
+      },
       addressLine: {
         type: String,
         required: [true, 'Address line is required'],
@@ -114,6 +159,18 @@ const bookingSchema = new mongoose.Schema(
         trim: true,
         default: '',
         maxlength: [100, 'Area cannot exceed 100 characters'],
+      },
+      district: {
+        type: String,
+        trim: true,
+        default: 'Ernakulam',
+        maxlength: [100, 'District cannot exceed 100 characters'],
+      },
+      state: {
+        type: String,
+        trim: true,
+        default: 'Kerala',
+        maxlength: [100, 'State cannot exceed 100 characters'],
       },
       pincode: {
         type: String,

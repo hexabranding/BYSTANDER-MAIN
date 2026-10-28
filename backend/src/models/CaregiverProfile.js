@@ -97,6 +97,12 @@ const caregiverProfileSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    gender: {
+      type: String,
+      enum: ['Male', 'Female', 'Other'],
+      default: 'Female',
+      index: true,
+    },
     qualification: {
       type: String,
       enum: {
@@ -137,17 +143,48 @@ const caregiverProfileSchema = new mongoose.Schema(
       type: [String],
       default: ['English'],
     },
-    city: {
+    street: {
       type: String,
       trim: true,
-      required: [true, 'City is required'],
-      default: 'Mumbai, MH',
-      index: true,
+      default: '',
     },
     area: {
       type: String,
       trim: true,
       default: '',
+    },
+    city: {
+      type: String,
+      trim: true,
+      required: [true, 'City is required'],
+      default: 'Kochi, KL',
+      index: true,
+    },
+    district: {
+      type: String,
+      trim: true,
+      default: 'Ernakulam',
+      index: true,
+    },
+    state: {
+      type: String,
+      trim: true,
+      default: 'Kerala',
+      index: true,
+    },
+    pincode: {
+      type: String,
+      trim: true,
+      default: '',
+      match: [/^(|[1-9][0-9]{5})$/, 'Please enter a valid 6-digit Indian PIN code'],
+    },
+    address: {
+      street: { type: String, trim: true, default: '' },
+      area: { type: String, trim: true, default: '' },
+      city: { type: String, trim: true, default: 'Kochi, KL' },
+      district: { type: String, trim: true, default: 'Ernakulam' },
+      state: { type: String, trim: true, default: 'Kerala' },
+      pincode: { type: String, trim: true, default: '' },
     },
     maxDistanceKm: {
       type: Number,

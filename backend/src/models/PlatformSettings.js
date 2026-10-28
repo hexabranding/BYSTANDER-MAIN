@@ -28,7 +28,7 @@ const platformSettingsSchema = new mongoose.Schema(
       },
       defaultCity: {
         type: String,
-        default: 'Mumbai, MH',
+        default: 'Kochi, KL',
         trim: true,
       },
       timezone: {

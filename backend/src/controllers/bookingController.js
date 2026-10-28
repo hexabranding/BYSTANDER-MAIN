@@ -185,3 +185,26 @@ export const verifyCheckOut = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * PATCH /api/bookings/:id/select-caregiver
+ * Customer selects their preferred caregiver from the applicants list.
+ */
+export const selectCaregiver = async (req, res, next) => {
+  try {
+    const booking = await bookingService.selectCaregiver(
+      req.user,
+      req.params.id,
+      req.selectedCaregiverId || req.body?.caregiverId,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Caretaker selected and booking confirmed successfully',
+      data: booking,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

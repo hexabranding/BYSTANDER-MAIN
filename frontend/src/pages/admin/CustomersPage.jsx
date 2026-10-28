@@ -34,7 +34,7 @@ import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/State
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 
 const STATUS_TABS = ['All', 'Active', 'Inactive']
-const DEFAULT_CITIES = ['All', 'Mumbai, MH', 'New Delhi, DL', 'Bengaluru, KA', 'Chennai, TN', 'Kolkata, WB', 'Hyderabad, TS', 'Pune, MH']
+const DEFAULT_CITIES = ['All', 'Kochi, KL', 'Thiruvananthapuram, KL', 'Kozhikode, KL', 'Thrissur, KL', 'Kollam, KL', 'Alappuzha, KL', 'Kottayam, KL', 'Palakkad, KL', 'Kannur, KL', 'Malappuram, KL']
 
 export function CustomersPage() {
   useDocumentTitle('Customers')

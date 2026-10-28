@@ -98,6 +98,13 @@ export const validateCaregiverRegistration = (req, res, next) => {
     errors.push('Hourly rate must be a valid positive number');
   }
 
+  if (req.body.pincode) {
+    const pin = String(req.body.pincode).trim();
+    if (pin && !/^[1-9][0-9]{5}$/.test(pin)) {
+      errors.push('Please provide a valid 6-digit Indian PIN code');
+    }
+  }
+
   if (errors.length > 0) {
     return res.status(400).json({
       success: false,
@@ -112,6 +119,12 @@ export const validateCaregiverRegistration = (req, res, next) => {
   if (email) req.body.email = email.trim().toLowerCase();
   if (phone) req.body.phone = phone.trim().replace(/[\s-]/g, '');
   if (hourlyRate !== undefined) req.body.hourlyRate = Number(hourlyRate);
+  if (req.body.street) req.body.street = String(req.body.street).trim();
+  if (req.body.area) req.body.area = String(req.body.area).trim();
+  if (req.body.city) req.body.city = String(req.body.city).trim();
+  if (req.body.district) req.body.district = String(req.body.district).trim();
+  if (req.body.state) req.body.state = String(req.body.state).trim();
+  if (req.body.pincode) req.body.pincode = String(req.body.pincode).trim();
 
   next();
 };

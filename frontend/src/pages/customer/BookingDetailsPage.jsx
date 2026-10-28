@@ -12,12 +12,14 @@ import {
   MapPin,
   MessageSquare,
   QrCode,
+  Radio,
   RotateCw,
   ShieldAlert,
   ShieldCheck,
   Smartphone,
   Star,
   UserRound,
+  Users,
   Wallet,
   XCircle,
 } from 'lucide-react'
@@ -42,7 +44,14 @@ import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePri
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Modal } from '@/components/common/Modal'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
-import { bookingService, complaintService, reviewService, financeService } from '@/services'
+import {
+  bookingService,
+  complaintService,
+  reviewService,
+  financeService,
+  onApplicantAdded,
+  onCaregiverSelected,
+} from '@/services'
 
 const isMongoObjectId = (id) => Boolean(id && typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id))
 
@@ -111,6 +120,30 @@ export function BookingDetailsPage() {
     loadBooking()
   }, [loadBooking])
 
+  // Real-time listener for applicant additions and caregiver selection on broadcast bookings
+  useEffect(() => {
+    if (!id) return
+    const unsubApplicant = onApplicantAdded((data) => {
+      if (String(data?.bookingId) === String(id)) {
+        toast.info('New Caretaker Offer Received!', {
+          description: `${data.applicant?.name || 'A qualified caretaker'} accepted your request. Review their profile and rate.`,
+        })
+        loadBooking()
+      }
+    })
+
+    const unsubSelected = onCaregiverSelected((data) => {
+      if (String(data?.bookingId) === String(id)) {
+        loadBooking()
+      }
+    })
+
+    return () => {
+      unsubApplicant()
+      unsubSelected()
+    }
+  }, [id, loadBooking])
+
   useEffect(() => {
     if (cooldownSeconds <= 0) return
     const interval = setInterval(() => {
@@ -135,6 +168,8 @@ export function BookingDetailsPage() {
     return caregivers.find((c) => c.id === booking.caregiverId) || null
   }, [booking, caregivers])
 
+  const [selectedApplicant, setSelectedApplicant] = useState(null)
+  const [selectingApplicant, setSelectingApplicant] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [complaintOpen, setComplaintOpen] = useState(false)
   const [complaint, setComplaint] = useState({ category: 'Misbehavior', subject: '', description: '' })
@@ -146,6 +181,26 @@ export function BookingDetailsPage() {
   const [settleOpen, setSettleOpen] = useState(false)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [reschedule, setReschedule] = useState(() => ({ date: '', startTime: '', hours: 0 }))
+
+  const handleSelectApplicant = async () => {
+    if (!selectedApplicant || !booking?.id) return
+    setSelectingApplicant(true)
+    try {
+      const caregiverId = selectedApplicant.caregiverId || selectedApplicant.id
+      const updated = await bookingService.selectCaregiver(booking.id, caregiverId)
+      setRealBooking(updated)
+      toast.success('Caretaker confirmed!', {
+        description: `${selectedApplicant.name} has been assigned to your booking at ${formatCurrency(selectedApplicant.hourlyRate)}/hr.`,
+      })
+      setSelectedApplicant(null)
+    } catch (err) {
+      toast.error('Unable to select caretaker', {
+        description: err.message || 'Please try again.',
+      })
+    } finally {
+      setSelectingApplicant(false)
+    }
+  }
 
   const handleRequestCheckInOtp = async () => {
     if (otpLoading || cooldownSeconds > 0 || !booking) return
@@ -557,6 +612,11 @@ export function BookingDetailsPage() {
           <>
             <StatusBadge status={booking.status} />
             <StatusBadge status={booking.paymentStatus} />
+            {booking.preferredGender && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
+                {booking.preferredGender === 'Female' ? '👩 Female Caretaker Preferred' : booking.preferredGender === 'Male' ? '👨 Male Caretaker Preferred' : '🤝 Any Caretaker'}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1.5 text-xs text-muted">
               <CalendarDays className="h-3.5 w-3.5" /> {formatDate(booking.date, { long: true })}
             </span>
@@ -605,10 +665,10 @@ export function BookingDetailsPage() {
               <div>
                 <p className="text-sm font-bold text-ink">
                   {canSettle
-                    ? 'Service completed — confirm to release payment'
-                    : canRate
-                      ? 'How was your experience with ' + (caregiver?.name || 'your caretaker') + '?'
-                      : 'Your caretaker has checked in'}
+                     ? 'Service completed — confirm to release payment'
+                     : canRate
+                       ? 'How was your experience with ' + (caregiver?.name || 'your caretaker') + '?'
+                       : 'Your caretaker has checked in'}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
                   {canSettle
@@ -637,6 +697,122 @@ export function BookingDetailsPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {/* Caretaker Applicants or Radar Search Section */}
+          {booking.status?.toLowerCase() === 'pending' && !booking.caregiverId && (
+            booking.applicants && booking.applicants.length > 0 ? (
+              <Card className="border-2 border-primary-500/30 bg-gradient-to-br from-mint-50/50 via-white to-white shadow-md">
+                <CardHeader
+                  icon={Users}
+                  title={`Caretakers Who Accepted Your Request (${booking.applicants.length})`}
+                  subtitle="Compare ratings, qualifications, and hourly rates to choose your preferred caretaker."
+                  action={
+                    booking.preferredGender && booking.preferredGender !== 'Any' ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-800">
+                        {booking.preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                      </span>
+                    ) : null
+                  }
+                />
+                <CardBody className="space-y-4">
+                  <div className="grid gap-3">
+                    {booking.applicants.map((applicant) => (
+                      <div
+                        key={applicant.caregiverId || applicant.id}
+                        className="group flex flex-col justify-between gap-4 rounded-2xl border border-line bg-white p-4 transition-all hover:border-primary-400 hover:shadow-card sm:flex-row sm:items-center"
+                      >
+                        <div className="flex items-start gap-3.5">
+                          <Avatar
+                            src={applicant.photo || applicant.avatar}
+                            name={applicant.name}
+                            size="lg"
+                            verified={true}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-display text-base font-bold text-ink">
+                                {applicant.name}
+                              </h4>
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                {applicant.gender === 'Female' ? '👩 Female' : applicant.gender === 'Male' ? '👨 Male' : applicant.gender}
+                              </span>
+                              {applicant.experienceYears > 0 ? (
+                                <span className="inline-flex items-center rounded-full bg-mint-100 px-2 py-0.5 text-[11px] font-semibold text-primary-800">
+                                  {applicant.experienceYears} yrs exp
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-0.5 text-sm font-medium text-primary-700">
+                              {applicant.qualification || 'Caregiver'}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2">
+                              <RatingStars
+                                value={applicant.rating || 5.0}
+                                count={applicant.reviewCount || 0}
+                                showValue
+                                size={13}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4 border-t border-line/60 pt-3 sm:border-t-0 sm:pt-0 sm:justify-end">
+                          <div className="text-left sm:text-right">
+                            <div className="flex items-baseline gap-1 sm:justify-end">
+                              <span className="font-display text-lg font-extrabold text-ink">
+                                {formatCurrency(applicant.hourlyRate)}
+                              </span>
+                              <span className="text-xs text-muted">/hr</span>
+                            </div>
+                            <p className="text-[11px] text-faint">
+                              Est. total: {formatCurrency(applicant.totalAmount)}
+                            </p>
+                          </div>
+                          <Button
+                            variant="primary"
+                            icon={CheckCircle2}
+                            size="sm"
+                            onClick={() => setSelectedApplicant(applicant)}
+                          >
+                            Choose Caretaker
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            ) : (
+              <Card className="border border-primary-200 bg-gradient-to-r from-mint-50/60 to-primary-50/30">
+                <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-600 text-white shadow-md">
+                      <Radio className="h-6 w-6 animate-pulse" />
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-400 opacity-75"></span>
+                        <span className="relative inline-flex h-3 w-3 rounded-full bg-primary-500"></span>
+                      </span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-display text-base font-bold text-ink">
+                          Broadcasting Request to Caretakers
+                        </h4>
+                        {booking.preferredGender && booking.preferredGender !== 'Any' ? (
+                          <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-bold text-primary-800">
+                            {booking.preferredGender === 'Female' ? '👩 Female Caretakers' : '👨 Male Caretakers'}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-sm text-muted">
+                        Your request has been dispatched to verified caregivers in {booking.city || 'your area'}. As caregivers accept, their profiles and individual rates will appear here for you to compare and select.
+                      </p>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+            )
+          )}
+
           <Card>
             <CardHeader title="Booking timeline" subtitle="Live progress of this care visit" />
             <CardBody>
@@ -830,6 +1006,7 @@ export function BookingDetailsPage() {
               <CardBody className="space-y-3 text-sm">
                 <InfoRow label="Service" value={booking.service} />
                 <InfoRow label="Care setting" value={booking.careType} />
+                <InfoRow label="Preferred caretaker" value={booking.preferredGender ? `${booking.preferredGender} Caretaker` : 'Any Caretaker'} />
                 <InfoRow label="Patient" value={`${booking.patient?.name} (${booking.patient?.age} yrs)`} />
                 <InfoRow label="Relation" value={booking.patient?.relation} />
                 <InfoRow label="Requested on" value={formatDate(booking.createdAt, { long: true })} />
@@ -911,8 +1088,28 @@ export function BookingDetailsPage() {
                     View profile
                   </Button>
                 </>
+              ) : booking.applicants && booking.applicants.length > 0 ? (
+                <div className="rounded-xl border border-primary-200 bg-mint-50/60 p-4 text-center">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-primary-800">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <h4 className="mt-2 text-sm font-bold text-ink">
+                    {booking.applicants.length} Caretaker{booking.applicants.length > 1 ? 's' : ''} Ready
+                  </h4>
+                  <p className="mt-1 text-xs text-muted">
+                    {booking.applicants.length} verified caretaker{booking.applicants.length > 1 ? 's' : ''} accepted your request. Review their profiles on the left and select your preferred caretaker.
+                  </p>
+                </div>
               ) : (
-                <p className="text-sm text-muted">A verified caretaker will be assigned shortly.</p>
+                <div className="rounded-xl border border-dashed border-line p-4 text-center">
+                  <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                    <RotateCw className="h-4 w-4 animate-spin text-primary-600" />
+                  </div>
+                  <h4 className="mt-2 text-xs font-semibold text-ink">Broadcasting to Caretakers</h4>
+                  <p className="mt-1 text-xs text-muted">
+                    Notifying verified {booking.preferredGender && booking.preferredGender !== 'Any' ? `${booking.preferredGender.toLowerCase()} ` : ''}caregivers... Offers will appear here shortly.
+                  </p>
+                </div>
               )}
             </CardBody>
           </Card>
@@ -1061,6 +1258,42 @@ export function BookingDetailsPage() {
         message="By confirming, you verify the service was delivered as scheduled and authorise release of escrow funds to your caretaker. This cannot be undone."
         confirmLabel="Yes, release payment"
         cancelLabel="Not yet"
+      />
+
+      <ConfirmationDialog
+        open={Boolean(selectedApplicant)}
+        onClose={() => setSelectedApplicant(null)}
+        onConfirm={handleSelectApplicant}
+        tone="success"
+        title="Select this caretaker?"
+        message={
+          selectedApplicant ? (
+            <div className="space-y-3">
+              <p>
+                Assign <strong>{selectedApplicant.name}</strong> ({selectedApplicant.qualification}) to your booking?
+              </p>
+              <div className="rounded-xl border border-line bg-slate-50 p-3 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted">Hourly Rate:</span>
+                  <span className="font-semibold text-ink">{formatCurrency(selectedApplicant.hourlyRate)}/hr</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">Duration:</span>
+                  <span className="font-semibold text-ink">{formatDuration(booking.hours)}</span>
+                </div>
+                <div className="flex justify-between border-t border-line/60 pt-1.5 font-bold">
+                  <span>Total Shift Amount:</span>
+                  <span className="text-primary-800">{formatCurrency(selectedApplicant.totalAmount)}</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted">
+                Your booking will be confirmed immediately and {selectedApplicant.name} will be scheduled for your care visit.
+              </p>
+            </div>
+          ) : ''
+        }
+        confirmLabel={selectingApplicant ? 'Confirming…' : 'Confirm selection'}
+        loading={selectingApplicant}
       />
 
       <Modal

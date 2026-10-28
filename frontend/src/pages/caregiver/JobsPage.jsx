@@ -144,18 +144,32 @@ export function JobsPage() {
 
     try {
       if (type === 'accept') {
+        let updatedBooking = null
         if (isMongoObjectId(job.id)) {
-          await bookingService.acceptBooking(job.id)
+          updatedBooking = await bookingService.acceptBooking(job.id)
         }
         if (acceptJob) {
           acceptJob(job.id, caregiver?.id)
         }
-        setRealBookings((prev) =>
-          (prev || []).map((b) => (b.id === job.id ? { ...b, status: 'Confirmed', rawStatus: 'confirmed' } : b)),
-        )
-        toast.success('Job accepted — added to your schedule', {
-          description: `${job.service} for ${job.customerName} is confirmed.`,
-        })
+        if (updatedBooking) {
+          setRealBookings((prev) =>
+            (prev || []).map((b) => ((b._id || b.id) === (updatedBooking._id || updatedBooking.id) ? updatedBooking : b)),
+          )
+        } else {
+          setRealBookings((prev) =>
+            (prev || []).map((b) => (b.id === job.id ? { ...b, status: 'Confirmed', rawStatus: 'confirmed' } : b)),
+          )
+        }
+        const isBroadcast = !job.caregiverId && !job.rawBooking?.caregiver
+        if (isBroadcast) {
+          toast.success('Offer submitted to customer!', {
+            description: `Your profile and rate for ${job.service} have been sent to ${job.customerName}. You'll be notified once they make a choice.`,
+          })
+        } else {
+          toast.success('Job accepted — added to your schedule', {
+            description: `${job.service} for ${job.customerName} is confirmed.`,
+          })
+        }
       } else {
         if (isMongoObjectId(job.id)) {
           await bookingService.rejectBooking(job.id, 'Declined by caretaker')
@@ -293,82 +307,122 @@ export function JobsPage() {
         </Card>
       ) : filtered.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          {filtered.map((job) => (
-            <Card key={job.id} hover className="flex flex-col">
-              <CardBody className="flex flex-1 flex-col gap-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">
-                        {job.displayId || job.id}
-                      </span>
-                      <StatusBadge status={job.urgency} size="sm" />
-                      {job.status !== 'Open' ? <StatusBadge status={job.status} size="sm" /> : null}
+          {filtered.map((job) => {
+            const myCaregiverId = caregiver?._id || caregiver?.id || user?.caregiverId || 'cg-101'
+            const hasApplied = Boolean(
+              job.applicants?.some(
+                (a) => String(a.caregiverId || a.id || a.caregiver) === String(myCaregiverId)
+              )
+            )
+            const preferredGender = job.preferredGender || 'Any'
+            const caregiverGender = caregiver?.gender || user?.gender || 'Female'
+            const isGenderMismatch =
+              preferredGender !== 'Any' &&
+              caregiverGender &&
+              caregiverGender.toLowerCase() !== preferredGender.toLowerCase()
+
+            return (
+              <Card key={job.id} hover className="flex flex-col">
+                <CardBody className="flex flex-1 flex-col gap-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700">
+                          {job.displayId || job.id}
+                        </span>
+                        <StatusBadge status={job.urgency} size="sm" />
+                        {job.status !== 'Open' ? <StatusBadge status={job.status} size="sm" /> : null}
+                        {preferredGender && preferredGender !== 'Any' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-semibold text-pink-700 border border-pink-200">
+                            {preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                          </span>
+                        ) : null}
+                        {hasApplied ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 border border-amber-200">
+                            ⏳ Offer Sent
+                          </span>
+                        ) : null}
+                        {job.applicants && job.applicants.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                            {job.applicants.length} interested
+                          </span>
+                        ) : null}
+                      </div>
+                      <h3 className="mt-1.5 font-display text-base font-bold text-ink">{job.service}</h3>
+                      <p className="mt-0.5 text-sm text-muted">
+                        {job.customerName} · {job.careType}
+                      </p>
                     </div>
-                    <h3 className="mt-1.5 font-display text-base font-bold text-ink">{job.service}</h3>
-                    <p className="mt-0.5 text-sm text-muted">
-                      {job.customerName} · {job.careType}
-                    </p>
+                    <div className="shrink-0 text-right">
+                      <p className="font-display text-lg font-extrabold tabular-nums text-ink">{formatCurrency(job.payment)}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-faint">
+                        {formatDuration(job.hours, { short: true })} · net {formatCurrency(job.payment - Math.round(job.payment * PLATFORM_COMMISSION))}
+                      </p>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="font-display text-lg font-extrabold tabular-nums text-ink">{formatCurrency(job.payment)}</p>
-                    <p className="text-[11px] uppercase tracking-wide text-faint">
-                      {formatDuration(job.hours, { short: true })} · net {formatCurrency(job.payment - Math.round(job.payment * PLATFORM_COMMISSION))}
-                    </p>
+
+                  <div className="grid gap-2 text-sm text-muted sm:grid-cols-2">
+                    <span className="inline-flex items-center gap-2">
+                      <MapPin className="h-4 w-4 shrink-0 text-faint" />
+                      <span className="truncate">
+                        {job.area}, {job.city} · {job.distanceKm} km
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 shrink-0 text-faint" />
+                      {formatDate(job.date, { long: true })}
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <Clock className="h-4 w-4 shrink-0 text-faint" />
+                      {job.shift}
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <User className="h-4 w-4 shrink-0 text-faint" />
+                      <span className="truncate">
+                        {job.patient?.name}, {job.patient?.age} · {job.patient?.relation}
+                      </span>
+                    </span>
                   </div>
-                </div>
 
-                <div className="grid gap-2 text-sm text-muted sm:grid-cols-2">
-                  <span className="inline-flex items-center gap-2">
-                    <MapPin className="h-4 w-4 shrink-0 text-faint" />
-                    <span className="truncate">
-                      {job.area}, {job.city} · {job.distanceKm} km
-                    </span>
-                  </span>
-                  <span className="inline-flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4 shrink-0 text-faint" />
-                    {formatDate(job.date, { long: true })}
-                  </span>
-                  <span className="inline-flex items-center gap-2">
-                    <Clock className="h-4 w-4 shrink-0 text-faint" />
-                    {job.shift}
-                  </span>
-                  <span className="inline-flex items-center gap-2">
-                    <User className="h-4 w-4 shrink-0 text-faint" />
-                    <span className="truncate">
-                      {job.patient?.name}, {job.patient?.age} · {job.patient?.relation}
-                    </span>
-                  </span>
-                </div>
+                  <p className="line-clamp-2 rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-muted">{job.requirements}</p>
+                </CardBody>
 
-                <p className="line-clamp-2 rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-muted">{job.requirements}</p>
-              </CardBody>
-
-              <CardFooter className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-faint">Posted {relativeTime(job.postedAt)}</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="ghost" size="xs" to={`/caregiver/jobs/${job.id}`}>
-                    Details
-                  </Button>
-                  {job.status === 'Open' ? (
-                    <>
-                      <Button variant="outline" size="sm" onClick={() => setDialog({ type: 'reject', job })}>
-                        Decline
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => setDialog({ type: 'accept', job })}>
-                        Accept
-                      </Button>
-                    </>
-                  ) : null}
-                  {job.status === 'Accepted' ? (
-                    <Button variant="secondary" size="sm" to="/caregiver/bookings">
-                      View booking
+                <CardFooter className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-faint">Posted {relativeTime(job.postedAt)}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="ghost" size="xs" to={`/caregiver/jobs/${job.id}`}>
+                      Details
                     </Button>
-                  ) : null}
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
+                    {job.status === 'Open' ? (
+                      hasApplied ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                          Offer Sent · Awaiting Customer Decision
+                        </span>
+                      ) : isGenderMismatch ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500">
+                          Requires {preferredGender} Caretaker
+                        </span>
+                      ) : (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => setDialog({ type: 'reject', job })}>
+                            Decline
+                          </Button>
+                          <Button variant="primary" size="sm" onClick={() => setDialog({ type: 'accept', job })}>
+                            Accept & Send Offer
+                          </Button>
+                        </>
+                      )
+                    ) : null}
+                    {job.status === 'Accepted' ? (
+                      <Button variant="secondary" size="sm" to="/caregiver/bookings">
+                        View booking
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardFooter>
+              </Card>
+            )
+          })}
         </div>
       ) : (
         <Card>
@@ -407,15 +461,15 @@ export function JobsPage() {
         onClose={() => setDialog(null)}
         onConfirm={handleConfirm}
         tone={dialog?.type === 'accept' ? 'success' : 'danger'}
-        title={dialog?.type === 'accept' ? 'Accept this job?' : 'Decline this job?'}
+        title={dialog?.type === 'accept' ? 'Accept job & send offer?' : 'Decline this job?'}
         message={
           dialog
             ? dialog.type === 'accept'
-              ? `${dialog.job.service} on ${formatDate(dialog.job.date, { long: true })} · ${dialog.job.shift} in ${dialog.job.area}. The shift is added to your schedule and the customer is notified.`
+              ? `${dialog.job.service} on ${formatDate(dialog.job.date, { long: true })} · ${dialog.job.shift} in ${dialog.job.area}. Your profile and hourly rate will be submitted to ${dialog.job.customerName}. When selected by the customer, this booking is confirmed.`
               : `${dialog.job.service} on ${formatDate(dialog.job.date, { long: true })} will be released to other verified caretakers. This cannot be undone.`
             : ''
         }
-        confirmLabel={dialog?.type === 'accept' ? (actionLoading ? 'Accepting…' : 'Accept job') : (actionLoading ? 'Declining…' : 'Decline job')}
+        confirmLabel={dialog?.type === 'accept' ? (actionLoading ? 'Submitting offer…' : 'Send offer') : (actionLoading ? 'Declining…' : 'Decline job')}
       />
     </div>
   )

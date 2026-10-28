@@ -92,9 +92,12 @@ const syncCustomerProfileFromBooking = async (customerId, location, patientDetai
       custProfile = await CustomerProfile.create({
         user: customerId,
         defaultAddress: {
+          street: location?.street || '',
           addressLine: location?.addressLine || '',
           area: location?.area || '',
-          city: location?.city || 'Mumbai, MH',
+          city: location?.city || 'Kochi, KL',
+          district: location?.district || 'Ernakulam',
+          state: location?.state || 'Kerala',
           pincode: location?.pincode || '',
         },
         patients: patientDetails?.name
@@ -113,9 +116,12 @@ const syncCustomerProfileFromBooking = async (customerId, location, patientDetai
       let modified = false;
       if (!custProfile.defaultAddress?.addressLine && location?.addressLine) {
         custProfile.defaultAddress = {
+          street: location.street || custProfile.defaultAddress?.street || '',
           addressLine: location.addressLine || '',
           area: location.area || '',
-          city: location.city || 'Mumbai, MH',
+          city: location.city || 'Kochi, KL',
+          district: location.district || 'Ernakulam',
+          state: location.state || 'Kerala',
           pincode: location.pincode || '',
         };
         modified = true;
@@ -214,12 +220,12 @@ export const createBooking = async (customerId, bookingData) => {
     throw err;
   }
 
-  // 4. Validate Duration Bounds against Service
+  // 4. Validate Duration Bounds (Universal rule: Minimum 2 hours, customer freedom beyond 2 hrs)
   const durationHours = calculateTotalHours(startDateTime, endDateTime);
-  const minRequiredHours = service.minimumDurationHours || 1;
-  if (durationHours < minRequiredHours) {
+  const MIN_BOOKING_HOURS = 2;
+  if (durationHours < MIN_BOOKING_HOURS) {
     const err = new Error(
-      `Booking duration (${durationHours} hrs) is below the minimum required duration for ${service.name} (${minRequiredHours} hrs)`,
+      `Booking duration must be at least ${MIN_BOOKING_HOURS} hours (selected: ${durationHours} hrs)`,
     );
     err.statusCode = 400;
     err.name = 'ValidationError';
@@ -343,6 +349,7 @@ export const createBooking = async (customerId, bookingData) => {
             startDateTime,
             endDateTime,
             timezone: timezone || caregiverTz,
+            preferredGender: bookingData.preferredGender || 'Any',
             location,
             patientDetails,
             status: 'pending',
@@ -381,6 +388,7 @@ export const createBooking = async (customerId, bookingData) => {
           startDateTime,
           endDateTime,
           timezone: timezone || 'Asia/Kolkata',
+          preferredGender: bookingData.preferredGender || 'Any',
           location,
           patientDetails,
           status: 'pending',
@@ -400,7 +408,12 @@ export const createBooking = async (customerId, bookingData) => {
       io.emit('booking:broadcast', createdBooking);
     }
 
-    const verifiedCaregivers = await CaregiverProfile.find({ verificationStatus: 'verified' })
+    const verifiedFilter = { verificationStatus: 'verified' };
+    if (bookingData.preferredGender && bookingData.preferredGender !== 'Any') {
+      verifiedFilter.gender = bookingData.preferredGender;
+    }
+
+    const verifiedCaregivers = await CaregiverProfile.find(verifiedFilter)
       .select('user')
       .lean();
 
@@ -410,11 +423,12 @@ export const createBooking = async (customerId, bookingData) => {
           recipient: cg.user,
           type: 'booking_created',
           title: 'New Booking Broadcast',
-          message: `New booking request for ${service.name} in ${location?.city || 'your area'}.`,
+          message: `New booking request for ${service.name} in ${location?.city || 'your area'}${bookingData.preferredGender && bookingData.preferredGender !== 'Any' ? ` (${bookingData.preferredGender} requested)` : ''}.`,
           metadata: {
             bookingId: createdBooking._id,
             serviceName: service.name,
             city: location?.city || '',
+            preferredGender: bookingData.preferredGender || 'Any',
           },
         });
       }
@@ -484,13 +498,18 @@ export const getBookings = async (user, query = {}) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parsedLimit)
-      .populate('customer', 'fullName email phone')
       .populate({
         path: 'caregiver',
-        select: 'qualification city hourlyRate avatar',
+        select: 'qualification city hourlyRate avatar gender rating experienceYears bio',
         populate: { path: 'user', select: 'fullName email phone avatar' },
       })
-      .populate('service', 'name slug category baseHourlyRate'),
+      .populate('service', 'name slug category baseHourlyRate')
+      .populate({
+        path: 'applicants.caregiver',
+        select: 'qualification city hourlyRate avatar gender rating experienceYears bio trustScore badges',
+        populate: { path: 'user', select: 'fullName email phone avatar' },
+      })
+      .populate('applicants.caregiverUser', 'fullName email phone avatar'),
     Booking.countDocuments(filter),
   ]);
 
@@ -518,11 +537,22 @@ export const getBookingById = async (user, bookingId) => {
 
   const booking = await Booking.findById(bookingId)
     .populate('customer', 'fullName email phone')
-    .populate({
-      path: 'caregiver',
-      select: 'qualification city hourlyRate avatar',
-      populate: { path: 'user', select: 'fullName email phone avatar' },
-    })
+    .populate([
+      {
+        path: 'caregiver',
+        select: 'qualification city hourlyRate avatar gender rating experienceYears bio',
+        populate: { path: 'user', select: 'fullName email phone avatar' },
+      },
+      {
+        path: 'applicants.caregiver',
+        select: 'qualification city hourlyRate avatar gender rating experienceYears bio trustScore badges',
+        populate: { path: 'user', select: 'fullName email phone avatar' },
+      },
+      {
+        path: 'applicants.caregiverUser',
+        select: 'fullName email phone avatar',
+      },
+    ])
     .populate('service', 'name slug category baseHourlyRate');
 
   if (!booking) {
@@ -537,10 +567,17 @@ export const getBookingById = async (user, bookingId) => {
   const isAssignedCaregiver = Boolean(
     booking.caregiverUser && booking.caregiverUser.toString() === user._id.toString(),
   );
+  const isApplicant = Boolean(
+    booking.applicants &&
+      booking.applicants.some((a) => {
+        const uId = a.caregiverUser?._id || a.caregiverUser;
+        return uId && uId.toString() === user._id.toString();
+      }),
+  );
   const isBroadcastOpen = !booking.caregiver && booking.status === 'pending' && user.role === 'caregiver';
   const isAdmin = user.role === 'admin';
 
-  if (!isCustomer && !isAssignedCaregiver && !isBroadcastOpen && !isAdmin) {
+  if (!isCustomer && !isAssignedCaregiver && !isApplicant && !isBroadcastOpen && !isAdmin) {
     const err = new Error('You are not authorized to view this booking record');
     err.statusCode = 403;
     err.name = 'ForbiddenError';
@@ -649,81 +686,328 @@ export const acceptBooking = async (user, bookingId) => {
       throw conflictErr;
     }
 
-    // 6. ATOMIC COMPARE-AND-SWAP (CAS)
-    // If broadcast booking, query enforces { caregiver: null, status: 'pending' }
-    // If 100 caretakers click Accept in the same millisecond, exactly 1 wins; other 99 get null updated
-    const filterQuery = booking.caregiver
-      ? { _id: booking._id, status: 'pending' }
-      : { _id: booking._id, status: 'pending', caregiver: null };
-
-    const updated = await Booking.findOneAndUpdate(
-      filterQuery,
-      {
-        $set: {
-          caregiver: caregiver._id,
-          caregiverUser: caregiver.user._id,
-          status: 'confirmed',
-          acceptedAt: new Date(),
+    // 6. Acceptance Logic:
+    // Case A: Targeted Booking (caregiver was specifically chosen at booking time) -> Instantly confirm
+    if (booking.caregiver) {
+      const updated = await Booking.findOneAndUpdate(
+        { _id: booking._id, status: 'pending' },
+        {
+          $set: {
+            caregiver: caregiver._id,
+            caregiverUser: caregiver.user._id,
+            status: 'confirmed',
+            acceptedAt: new Date(),
+          },
         },
-      },
-      { returnDocument: 'after', session },
-    );
+        { returnDocument: 'after', session },
+      );
 
-    if (!updated) {
-      // Racing cancellation or another caretaker claimed it
-      const freshBooking = await Booking.findById(booking._id).session(session);
-      if (freshBooking && freshBooking.caregiver) {
+      if (!updated) {
+        const freshBooking = await Booking.findById(booking._id).session(session);
         const conflictErr = new Error(
-          'This booking request has already been claimed by another caretaker.',
+          `Cannot accept booking: status changed concurrently to '${freshBooking ? freshBooking.status : 'unknown'}'`,
         );
         conflictErr.statusCode = 409;
         conflictErr.name = 'ConflictError';
         throw conflictErr;
       }
-      const conflictErr = new Error(
-        `Cannot accept booking: status changed concurrently to '${freshBooking ? freshBooking.status : 'unknown'}'`,
+
+      // Update transaction ledger with the winning caregiver
+      if (mongoose.connection?.readyState !== 0 || Object.prototype.hasOwnProperty.call(Transaction, 'updateOne')) {
+        await Transaction.updateOne(
+          { booking: booking._id },
+          { $set: { caregiver: caregiver._id, caregiverUser: caregiver.user._id } },
+          { session },
+        ).catch(() => {});
+      }
+
+      // Real-time broadcast and customer notification
+      try {
+        const io = getIO();
+        if (io) {
+          io.emit('booking:claimed', {
+            bookingId: booking._id.toString(),
+            caregiverId: caregiver._id.toString(),
+            caregiverName: caregiver.name || user.name,
+          });
+        }
+        safeDispatchNotification({
+          recipient: booking.customer,
+          type: 'booking_accepted',
+          title: 'Caretaker Confirmed',
+          message: `${caregiver.name || user.name || 'A caretaker'} has accepted your booking #${String(booking._id).slice(-6)}.`,
+          metadata: {
+            bookingId: booking._id,
+            caregiverName: caregiver.name || user.name,
+          },
+        });
+      } catch (notifErr) {
+        console.error('Acceptance notification error:', notifErr.message);
+      }
+
+      return updated.populate([
+        { path: 'customer', select: 'fullName email phone' },
+        {
+          path: 'caregiver',
+          select: 'qualification city hourlyRate avatar gender rating experienceYears bio',
+          populate: { path: 'user', select: 'fullName email phone avatar' },
+        },
+        { path: 'service', select: 'name slug category baseHourlyRate' },
+      ]);
+    }
+
+    // Case B: On-Demand Broadcast Booking -> Multi-Caregiver Acceptance / Bidding Model
+    // 1. Gender Requirement Check
+    if (
+      booking.preferredGender &&
+      booking.preferredGender !== 'Any' &&
+      caregiver.gender &&
+      caregiver.gender !== booking.preferredGender
+    ) {
+      const err = new Error(
+        `This booking specifically requested a ${booking.preferredGender} caretaker.`,
       );
-      conflictErr.statusCode = 409;
-      conflictErr.name = 'ConflictError';
-      throw conflictErr;
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
     }
 
-    // 7. Update transaction ledger with the winning caregiver
-    if (mongoose.connection?.readyState !== 0 || Object.prototype.hasOwnProperty.call(Transaction, 'updateOne')) {
-      await Transaction.updateOne(
-        { booking: booking._id },
-        { $set: { caregiver: caregiver._id, caregiverUser: caregiver.user._id } },
-        { session },
-      ).catch(() => {});
+    // 2. Duplicate Application Check
+    const alreadyApplied = booking.applicants?.some(
+      (a) =>
+        String(a.caregiver) === String(caregiver._id) ||
+        String(a.caregiverUser) === String(caregiver.user._id),
+    );
+    if (alreadyApplied) {
+      const err = new Error('You have already accepted/applied for this booking request.');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
     }
 
-    // 8. Real-time broadcast and customer notification
+    const applicantTotal = Math.round(caregiver.hourlyRate * booking.totalHours);
+    booking.applicants = booking.applicants || [];
+    booking.applicants.push({
+      caregiver: caregiver._id,
+      caregiverUser: caregiver.user._id,
+      hourlyRate: caregiver.hourlyRate,
+      totalAmount: applicantTotal,
+      appliedAt: new Date(),
+      status: 'applied',
+    });
+
+    await booking.save({ session });
+
+    // Real-time Socket.IO and Customer Notification
     try {
       const io = getIO();
       if (io) {
-        io.emit('booking:claimed', {
+        io.to(`booking:${booking._id}`).emit('booking:applicant_added', {
           bookingId: booking._id.toString(),
-          caregiverId: caregiver._id.toString(),
-          caregiverName: caregiver.name || user.name,
+          applicant: {
+            caregiver: caregiver._id,
+            caregiverUser: caregiver.user._id,
+            hourlyRate: caregiver.hourlyRate,
+            totalAmount: applicantTotal,
+            caregiverName: caregiver.user?.fullName || caregiver.name,
+            avatar: caregiver.avatar,
+            gender: caregiver.gender,
+            qualification: caregiver.qualification,
+            rating: caregiver.rating,
+          },
+        });
+        io.to(`user:${booking.customer}`).emit('booking:applicant_added', {
+          bookingId: booking._id.toString(),
         });
       }
       safeDispatchNotification({
         recipient: booking.customer,
         type: 'booking_accepted',
-        title: 'Caretaker Confirmed',
-        message: `${caregiver.name || user.name || 'A caretaker'} has accepted your booking #${String(booking._id).slice(-6)}.`,
+        title: 'Caretaker Offer Received',
+        message: `${caregiver.user?.fullName || caregiver.name || 'A caretaker'} has accepted your booking request (₹${caregiver.hourlyRate}/hr). Review and choose your caretaker.`,
         metadata: {
           bookingId: booking._id,
-          caregiverName: caregiver.name || user.name,
+          caregiverId: caregiver._id,
+          caregiverName: caregiver.user?.fullName || caregiver.name,
+          hourlyRate: caregiver.hourlyRate,
         },
       });
     } catch (notifErr) {
       console.error('Acceptance notification error:', notifErr.message);
     }
 
-    return updated.populate([
+    return booking.populate([
       { path: 'customer', select: 'fullName email phone' },
       { path: 'service', select: 'name slug category baseHourlyRate' },
+      {
+        path: 'applicants.caregiver',
+        select: 'qualification city hourlyRate avatar gender rating experienceYears bio trustScore badges',
+        populate: { path: 'user', select: 'fullName email phone avatar' },
+      },
+      { path: 'applicants.caregiverUser', select: 'fullName email phone avatar' },
+    ]);
+  });
+};
+
+/**
+ * Customer chooses a caretaker from the applicants list who accepted the broadcast.
+ * Confirms the booking with the selected caretaker and updates pricing to that caretaker's rate.
+ */
+export const selectCaregiver = async (user, bookingId, caregiverId) => {
+  if (!mongoose.Types.ObjectId.isValid(bookingId) || !mongoose.Types.ObjectId.isValid(caregiverId)) {
+    const err = new Error('Valid booking and caregiver identifiers are required');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  return executeWithTransactionRetry(async (session) => {
+    const booking = await Booking.findById(bookingId).session(session);
+    if (!booking) {
+      const err = new Error('Booking not found');
+      err.statusCode = 404;
+      err.name = 'NotFoundError';
+      throw err;
+    }
+
+    const isCustomer = booking.customer.toString() === user._id.toString();
+    const isAdmin = user.role === 'admin';
+    if (!isCustomer && !isAdmin) {
+      const err = new Error('Only the customer who created this booking can choose the caretaker');
+      err.statusCode = 403;
+      err.name = 'ForbiddenError';
+      throw err;
+    }
+
+    if (booking.status !== 'pending') {
+      const err = new Error(`Cannot select caretaker for a booking with status '${booking.status}'`);
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
+    const applicant = booking.applicants?.find(
+      (a) => String(a.caregiver) === String(caregiverId) || String(a.caregiverUser) === String(caregiverId),
+    );
+    if (!applicant) {
+      const err = new Error('The selected caretaker has not applied for or accepted this booking');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
+    const caregiver = await CaregiverProfile.findById(applicant.caregiver)
+      .populate('user')
+      .session(session);
+    if (
+      !caregiver ||
+      caregiver.verificationStatus !== 'verified' ||
+      !caregiver.user ||
+      caregiver.user.status !== 'active'
+    ) {
+      const err = new Error('Selected caregiver is not currently active or verified');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
+    // Serialize conflict lock on caregiver
+    await CaregiverProfile.updateOne(
+      { _id: caregiver._id },
+      { $inc: { bookingLockVersion: 1 } },
+      { session },
+    );
+
+    // Verify conflict
+    const conflict = await Booking.findOne({
+      _id: { $ne: booking._id },
+      caregiver: caregiver._id,
+      status: { $in: ['confirmed', 'in_progress'] },
+      startDateTime: { $lt: booking.endDateTime },
+      endDateTime: { $gt: booking.startDateTime },
+    }).session(session);
+
+    if (conflict) {
+      const err = new Error('Selected caretaker has another conflicting booking during this time');
+      err.statusCode = 409;
+      err.name = 'ConflictError';
+      throw err;
+    }
+
+    // Assign caregiver & update pricing to chosen caretaker's rate
+    booking.caregiver = caregiver._id;
+    booking.caregiverUser = caregiver.user._id;
+    booking.hourlyRate = applicant.hourlyRate || caregiver.hourlyRate;
+    booking.totalAmount = Math.round(booking.hourlyRate * booking.totalHours);
+    booking.status = 'confirmed';
+    booking.acceptedAt = new Date();
+
+    // Mark applicant status
+    booking.applicants.forEach((a) => {
+      if (String(a.caregiver) === String(caregiver._id)) {
+        a.status = 'selected';
+      } else {
+        a.status = 'rejected';
+      }
+    });
+
+    await booking.save({ session });
+
+    // Update financial transaction ledger with the chosen rate and caregiver
+    await recordBookingTransaction(booking, 'escrow_held', { session }).catch(() => {});
+
+    // Notify selected caregiver
+    safeDispatchNotification({
+      recipient: caregiver.user._id,
+      type: 'booking_confirmed',
+      title: 'You were selected!',
+      message: `The customer selected you for booking #${String(booking._id).slice(-6)}! Please be ready for your shift.`,
+      metadata: { bookingId: booking._id },
+    });
+
+    // Notify other applicants
+    for (const app of booking.applicants) {
+      if (String(app.caregiver) !== String(caregiver._id) && app.caregiverUser) {
+        safeDispatchNotification({
+          recipient: app.caregiverUser,
+          type: 'booking_declined',
+          title: 'Booking Assigned to Another Caretaker',
+          message: `The customer has selected another caretaker for booking #${String(booking._id).slice(-6)}.`,
+          metadata: { bookingId: booking._id },
+        });
+      }
+    }
+
+    // Emit Socket.IO event
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`booking:${booking._id}`).emit('booking:caregiver_selected', {
+          bookingId: booking._id.toString(),
+          caregiverId: caregiver._id.toString(),
+          caregiverName: caregiver.user.fullName || caregiver.name,
+        });
+        io.emit('booking:claimed', {
+          bookingId: booking._id.toString(),
+          caregiverId: caregiver._id.toString(),
+        });
+      }
+    } catch (_) {}
+
+    return booking.populate([
+      { path: 'customer', select: 'fullName email phone' },
+      {
+        path: 'caregiver',
+        select: 'qualification city hourlyRate avatar gender rating experienceYears bio',
+        populate: { path: 'user', select: 'fullName email phone avatar' },
+      },
+      { path: 'service', select: 'name slug category baseHourlyRate' },
+      {
+        path: 'applicants.caregiver',
+        select: 'qualification city hourlyRate avatar gender rating experienceYears bio trustScore badges',
+        populate: { path: 'user', select: 'fullName email phone avatar' },
+      },
+      { path: 'applicants.caregiverUser', select: 'fullName email phone avatar' },
     ]);
   });
 };

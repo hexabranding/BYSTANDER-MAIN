@@ -96,6 +96,18 @@ export const validateUpdateCustomerProfile = (req, res, next) => {
         cleanDa.area = typeof da.area === 'string' ? da.area.trim().slice(0, 100) : '';
       }
 
+      if (da.street !== undefined) {
+        cleanDa.street = typeof da.street === 'string' ? da.street.trim().slice(0, 200) : '';
+      }
+
+      if (da.district !== undefined) {
+        cleanDa.district = typeof da.district === 'string' ? da.district.trim().slice(0, 100) : '';
+      }
+
+      if (da.state !== undefined) {
+        cleanDa.state = typeof da.state === 'string' ? da.state.trim().slice(0, 100) : '';
+      }
+
       if (da.pincode !== undefined) {
         cleanDa.pincode = typeof da.pincode === 'string' ? da.pincode.trim().slice(0, 20) : '';
       }

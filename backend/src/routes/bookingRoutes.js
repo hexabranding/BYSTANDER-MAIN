@@ -5,6 +5,7 @@ import {
   validateCreateBooking,
   validateCancelBooking,
   validateRejectBooking,
+  validateSelectCaregiver,
 } from '../middleware/validateBooking.js';
 import { validateVerifyOtp } from '../middleware/validateOtp.js';
 
@@ -22,8 +23,16 @@ router.get('/', bookingController.getBookings);
 // 3. Participant/Admin detail view
 router.get('/:id', bookingController.getBookingById);
 
-// 4. Caregiver-only acceptance
+// 4. Caregiver acceptance (targeted confirmation or broadcast application)
 router.patch('/:id/accept', authorizeRoles('caregiver'), bookingController.acceptBooking);
+
+// 4b. Customer chooses a caregiver from applicants
+router.patch(
+  '/:id/select-caregiver',
+  authorizeRoles('customer', 'admin'),
+  validateSelectCaregiver,
+  bookingController.selectCaregiver,
+);
 
 // 5. Caregiver rejection of pending request
 router.patch(

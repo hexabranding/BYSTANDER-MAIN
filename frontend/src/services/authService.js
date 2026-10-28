@@ -72,13 +72,31 @@ export const normalizeUser = (user, profile = {}) => {
     formattedAddress = [
       prof.defaultAddress.addressLine || prof.defaultAddress.addressLine1,
       prof.defaultAddress.area || prof.defaultAddress.addressLine2,
-      prof.defaultAddress.city,
+      prof.defaultAddress.city || prof.defaultAddress.district,
       prof.defaultAddress.pincode || prof.defaultAddress.postalCode,
     ]
       .filter(Boolean)
       .join(', ');
-  } else if (prof.address && !prof.address.includes('Mumbai, MH')) {
-    formattedAddress = prof.address;
+  } else if (prof.address && typeof prof.address === 'object') {
+    formattedAddress = [
+      prof.address.street,
+      prof.address.area,
+      prof.address.district || prof.address.city,
+      prof.address.pincode,
+    ]
+      .filter(Boolean)
+      .join(', ');
+  } else if (typeof prof.address === 'string' && prof.address.trim()) {
+    formattedAddress = prof.address.includes('Mumbai, MH') ? '' : prof.address;
+  } else if (prof.street || prof.area || prof.district) {
+    formattedAddress = [
+      prof.street,
+      prof.area,
+      prof.district || prof.city,
+      prof.pincode,
+    ]
+      .filter(Boolean)
+      .join(', ');
   }
 
   // Patient info extraction
@@ -119,9 +137,12 @@ export const normalizeUser = (user, profile = {}) => {
     avatar: user.avatar || prof.avatar || '',
     status: user.status || 'active',
     isGuest,
-    isProfileComplete,
-    city: prof.city || prof.defaultAddress?.city || '',
-    area: prof.area || prof.defaultAddress?.area || '',
+    city: prof.city || prof.defaultAddress?.city || (typeof prof.address === 'object' ? prof.address.city : ''),
+    area: prof.area || prof.defaultAddress?.area || (typeof prof.address === 'object' ? prof.address.area : ''),
+    district: prof.district || prof.defaultAddress?.district || (typeof prof.address === 'object' ? prof.address.district : 'Ernakulam'),
+    state: prof.state || prof.defaultAddress?.state || (typeof prof.address === 'object' ? prof.address.state : 'Kerala'),
+    pincode: prof.pincode || prof.defaultAddress?.pincode || (typeof prof.address === 'object' ? prof.address.pincode : ''),
+    street: prof.street || (typeof prof.address === 'object' ? prof.address.street : ''),
     address: formattedAddress,
     patientInfo,
     caregiverId: isCaregiver ? String(prof._id || user._id) : undefined,
@@ -482,12 +503,18 @@ export const registerCaregiver = async (payload) => {
       email,
       phone,
       password,
+      gender: payload.gender || undefined,
       qualification,
       hourlyRate,
       nursingRegNo: payload.nursingRegNo || undefined,
       experienceYears: Number(payload.experience || payload.experienceYears || 0),
-      city: payload.city || undefined,
-      area: payload.area || undefined,
+      street: payload.street || payload.address?.street || undefined,
+      city: payload.city || payload.address?.city || undefined,
+      area: payload.area || payload.address?.area || undefined,
+      district: payload.district || payload.address?.district || undefined,
+      state: payload.state || payload.address?.state || undefined,
+      pincode: payload.pincode || payload.address?.pincode || undefined,
+      address: payload.address || undefined,
       languages: payload.languages || undefined,
       careSettings: normalizedCareSettings,
       bio: payload.bio || undefined,
@@ -500,15 +527,21 @@ export const registerCaregiver = async (payload) => {
       setAuthToken(token);
     }
 
-    // Follow-up: Dispatch Caregiver Profile update if bio, languages, or careSettings provided
+    // Follow-up: Dispatch Caregiver Profile update if bio, languages, careSettings, or address provided
     try {
       const caregiverPatch = {};
       if (payload.bio) caregiverPatch.bio = payload.bio;
+      if (payload.gender) caregiverPatch.gender = payload.gender;
       if (Array.isArray(payload.languages) && payload.languages.length) caregiverPatch.languages = payload.languages;
       if (Array.isArray(normalizedCareSettings) && normalizedCareSettings.length) caregiverPatch.careSettings = normalizedCareSettings;
       if (payload.experience || payload.experienceYears) caregiverPatch.experienceYears = Number(payload.experience || payload.experienceYears);
+      if (payload.street) caregiverPatch.street = payload.street;
       if (payload.city) caregiverPatch.city = payload.city;
       if (payload.area) caregiverPatch.area = payload.area;
+      if (payload.district) caregiverPatch.district = payload.district;
+      if (payload.state) caregiverPatch.state = payload.state;
+      if (payload.pincode) caregiverPatch.pincode = payload.pincode;
+      if (payload.address) caregiverPatch.address = payload.address;
       if (payload.nursingRegNo) caregiverPatch.nursingRegNo = payload.nursingRegNo;
 
       if (Object.keys(caregiverPatch).length > 0) {

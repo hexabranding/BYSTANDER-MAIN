@@ -58,9 +58,12 @@ const customerProfileSchema = new mongoose.Schema(
       relation: { type: String, trim: true, default: '' },
     },
     defaultAddress: {
+      street: { type: String, trim: true, default: '' },
       addressLine: { type: String, trim: true, default: '' },
       area: { type: String, trim: true, default: '' },
-      city: { type: String, trim: true, default: 'Mumbai, MH' },
+      city: { type: String, trim: true, default: 'Kochi, KL' },
+      district: { type: String, trim: true, default: 'Ernakulam' },
+      state: { type: String, trim: true, default: 'Kerala' },
       pincode: { type: String, trim: true, default: '' },
       coordinates: {
         lat: { type: Number, default: null },

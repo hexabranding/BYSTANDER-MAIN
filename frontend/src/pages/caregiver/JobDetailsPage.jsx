@@ -139,14 +139,22 @@ export function JobDetailsPage() {
     setActionLoading(true)
     try {
       if (dialog === 'accept') {
+        let updated = null
         if (isMongoObjectId(job.id)) {
-          const updated = await bookingService.acceptBooking(job.id)
+          updated = await bookingService.acceptBooking(job.id)
           setRealBooking(updated)
         }
         if (acceptJob) acceptJob(job.id, caregiver?.id)
-        toast.success('Job accepted — added to your schedule', {
-          description: `${job.service} on ${formatDate(job.date, { long: true })} is confirmed.`,
-        })
+        const isBroadcast = !job.caregiverId && !job.rawBooking?.caregiver
+        if (isBroadcast) {
+          toast.success('Offer submitted to customer!', {
+            description: `Your offer for ${job.service} has been sent. The customer will review interested caretakers and select their caregiver.`,
+          })
+        } else {
+          toast.success('Job accepted — added to your schedule', {
+            description: `${job.service} on ${formatDate(job.date, { long: true })} is confirmed.`,
+          })
+        }
       } else {
         if (isMongoObjectId(job.id)) {
           const updated = await bookingService.rejectBooking(job.id, 'Declined by caretaker')
@@ -212,7 +220,18 @@ export function JobDetailsPage() {
 
   if (job) {
     const net = job.payment - Math.round(job.payment * PLATFORM_COMMISSION)
-
+    const myCaregiverId = caregiver?._id || caregiver?.id || user?.caregiverId || 'cg-101'
+    const hasApplied = Boolean(
+      job.applicants?.some(
+        (a) => String(a.caregiverId || a.id || a.caregiver) === String(myCaregiverId)
+      )
+    )
+    const preferredGender = job.preferredGender || 'Any'
+    const caregiverGender = caregiver?.gender || user?.gender || 'Female'
+    const isGenderMismatch =
+      preferredGender !== 'Any' &&
+      caregiverGender &&
+      caregiverGender.toLowerCase() !== preferredGender.toLowerCase()
 
     return (
       <div className="space-y-6">
@@ -223,6 +242,16 @@ export function JobDetailsPage() {
             <>
               <StatusBadge status={job.urgency} />
               <StatusBadge status={job.status} />
+              {preferredGender && preferredGender !== 'Any' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-700 border border-pink-200">
+                  {preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                </span>
+              )}
+              {hasApplied && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 border border-amber-200">
+                  ⏳ Offer Sent
+                </span>
+              )}
               <span className="text-sm text-muted">Posted {formatDate(job.postedAt)} · for {job.customerName}</span>
             </>
           }
@@ -233,6 +262,25 @@ export function JobDetailsPage() {
           }
         />
 
+        {hasApplied && job.status === 'Open' ? (
+          <div className="flex flex-col gap-3 rounded-card border border-amber-300 bg-gradient-to-br from-amber-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+                <Clock className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="font-display text-sm font-bold text-amber-900">Offer Submitted to Customer</p>
+                <p className="mt-0.5 text-xs text-amber-800/90">
+                  You accepted this broadcast request. The customer is reviewing interested caretakers and their individual rates. You will be notified as soon as they select you.
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">
+              Awaiting Customer Choice
+            </span>
+          </div>
+        ) : null}
+
         {job.status === 'Accepted' ? (
           <div className="flex flex-col gap-3 rounded-card border border-success-500/30 bg-gradient-to-br from-success-50 to-white p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -240,9 +288,9 @@ export function JobDetailsPage() {
                 <CheckCircle2 className="h-5 w-5" />
               </span>
               <div>
-                <p className="font-display text-sm font-bold text-success-700">You accepted this job</p>
+                <p className="font-display text-sm font-bold text-success-700">You are the confirmed caretaker for this shift</p>
                 <p className="mt-0.5 text-sm text-success-700/80">
-                  The shift is on your schedule. Check in from the bookings page when you arrive.
+                  The shift is confirmed on your schedule. Check in from the bookings page when you arrive.
                 </p>
               </div>
             </div>
@@ -333,12 +381,24 @@ export function JobDetailsPage() {
               {formatDate(job.date)} · {job.shift}
             </p>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button variant="outline" onClick={() => setDialog('reject')}>
-                Decline job
-              </Button>
-              <Button variant="primary" icon={CheckCircle2} onClick={() => setDialog('accept')}>
-                Accept job
-              </Button>
+              {hasApplied ? (
+                <Button variant="outline" disabled className="border-amber-300 bg-amber-50 text-amber-800">
+                  Offer Sent · Waiting for Customer Selection
+                </Button>
+              ) : isGenderMismatch ? (
+                <Button variant="outline" disabled className="text-muted">
+                  Requires {preferredGender} Caretaker
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => setDialog('reject')}>
+                    Decline job
+                  </Button>
+                  <Button variant="primary" icon={CheckCircle2} onClick={() => setDialog('accept')}>
+                    Accept & Send Offer
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         ) : null}
@@ -348,17 +408,18 @@ export function JobDetailsPage() {
           onClose={() => setDialog(null)}
           onConfirm={handleConfirm}
           tone={dialog === 'accept' ? 'success' : 'danger'}
-          title={dialog === 'accept' ? 'Accept this job?' : 'Decline this job?'}
+          title={dialog === 'accept' ? 'Accept job & submit offer?' : 'Decline this job?'}
           message={
             dialog === 'accept'
-              ? `${job.service} on ${formatDate(job.date, { long: true })} at ${job.shift}. The shift is added to your schedule immediately.`
+              ? `${job.service} on ${formatDate(job.date, { long: true })} at ${job.shift}. Your profile and hourly rate will be presented to ${job.customerName}. When selected, the booking confirms immediately.`
               : 'This shift will be released to other verified caretakers. This cannot be undone.'
           }
-          confirmLabel={dialog === 'accept' ? (actionLoading ? 'Accepting…' : 'Accept job') : (actionLoading ? 'Declining…' : 'Decline job')}
+          confirmLabel={dialog === 'accept' ? (actionLoading ? 'Submitting…' : 'Submit offer') : (actionLoading ? 'Declining…' : 'Decline job')}
         />
       </div>
     )
   }
+
 
   const netEarning = booking.subtotal - booking.commission
 
@@ -390,7 +451,7 @@ export function JobDetailsPage() {
             <div>
               <p className="font-display text-sm font-bold text-primary-900">This shift is on your schedule</p>
               <p className="mt-0.5 text-sm text-primary-800/80">
-                Check in when you arrive at {booking.address.split(',')[0]} to start the service clock.
+                Check in when you arrive at {typeof booking.address === 'string' ? booking.address.split(',')[0] : (booking.address?.street || booking.location?.addressLine || 'the patient location')} to start the service clock.
               </p>
             </div>
           </div>

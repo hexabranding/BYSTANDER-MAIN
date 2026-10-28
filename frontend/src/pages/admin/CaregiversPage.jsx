@@ -38,7 +38,7 @@ import { FormField, Input, Select, Textarea } from '@/components/forms/FormField
 
 const STATUS_TABS = ['All', 'Verified', 'Pending', 'Rejected']
 const PENDING_STATUSES = ['Pending', 'Under Review']
-const DEFAULT_CITIES = ['All', 'Mumbai, MH', 'New Delhi, DL', 'Bengaluru, KA', 'Chennai, TN', 'Kolkata, WB', 'Hyderabad, TS', 'Pune, MH']
+const DEFAULT_CITIES = ['All', 'Kochi, KL', 'Thiruvananthapuram, KL', 'Kozhikode, KL', 'Thrissur, KL', 'Kollam, KL', 'Alappuzha, KL', 'Kottayam, KL', 'Palakkad, KL', 'Kannur, KL', 'Malappuram, KL']
 const DEFAULT_QUALIFICATIONS = ['All', 'GNM', 'BSc Nursing', 'nursing_student', 'ANM', 'MBBS', 'Certified Elder Care Giver', 'Paramedic', 'other']
 
 const SORTS = [

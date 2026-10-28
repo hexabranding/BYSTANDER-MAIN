@@ -190,6 +190,36 @@ export const onNewNotification = (callback) => {
   };
 };
 
+/**
+ * Listen for new applicants accepting/applying to a broadcast booking.
+ * @param {Function} callback
+ * @returns {Function} Unsubscribe function
+ */
+export const onApplicantAdded = (callback) => {
+  const s = socket || initSocketConnection();
+  if (!s || typeof callback !== 'function') return () => {};
+
+  s.on('booking:applicant_added', callback);
+  return () => {
+    s.off('booking:applicant_added', callback);
+  };
+};
+
+/**
+ * Listen for customer caregiver selection confirmation.
+ * @param {Function} callback
+ * @returns {Function} Unsubscribe function
+ */
+export const onCaregiverSelected = (callback) => {
+  const s = socket || initSocketConnection();
+  if (!s || typeof callback !== 'function') return () => {};
+
+  s.on('booking:caregiver_selected', callback);
+  return () => {
+    s.off('booking:caregiver_selected', callback);
+  };
+};
+
 export default {
   initSocketConnection,
   getSocket,
@@ -203,4 +233,7 @@ export default {
   onBookingBroadcast,
   onBookingClaimed,
   onNewNotification,
+  onApplicantAdded,
+  onCaregiverSelected,
 };
+

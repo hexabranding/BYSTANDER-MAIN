@@ -8,7 +8,7 @@ import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatDate } from '@/utils/format'
-import { CARE_TYPES, CITIES } from '@/utils/constants'
+import { CARE_TYPES, CITIES, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { Avatar } from '@/components/common/Avatar'
@@ -89,8 +89,12 @@ export function ProfilePage() {
       fullName: user?.name || '',
       email: user?.email || '',
       mobile: user?.phone || '',
-      city: user?.city || CITIES[0],
+      city: user?.city || 'Kochi, KL',
       area: user?.area || '',
+      street: user?.street || user?.address || '',
+      district: user?.district || 'Ernakulam',
+      state: user?.state || 'Kerala',
+      pincode: user?.pincode || '',
       address: user?.address || '',
     },
   })
@@ -117,8 +121,12 @@ export function ProfilePage() {
           fullName: data.fullName || user?.name || '',
           email: data.email || user?.email || '',
           mobile: data.phone || user?.phone || '',
-          city: data.defaultAddress?.city || user?.city || CITIES[0],
+          city: data.defaultAddress?.city || user?.city || 'Kochi, KL',
           area: data.defaultAddress?.area || user?.area || '',
+          street: data.defaultAddress?.street || data.defaultAddress?.addressLine || user?.address || '',
+          district: data.defaultAddress?.district || user?.district || 'Ernakulam',
+          state: data.defaultAddress?.state || user?.state || 'Kerala',
+          pincode: data.defaultAddress?.pincode || user?.pincode || '',
           address: data.defaultAddress?.addressLine || user?.address || '',
         })
         const p = data.patients?.[0]
@@ -151,21 +159,31 @@ export function ProfilePage() {
   const onPersonal = async (values) => {
     setSavingPersonal(true)
     try {
+      const streetVal = (values.street || values.address || '').trim()
+      const resolvedCity = values.area?.trim() || values.district || 'Kerala'
       await profileService.updateCustomerProfile({
         fullName: values.fullName.trim(),
         defaultAddress: {
-          addressLine: values.address.trim(),
-          city: values.city,
+          street: streetVal,
+          addressLine: streetVal,
+          city: resolvedCity,
           area: values.area.trim(),
+          district: values.district || 'Ernakulam',
+          state: values.state || 'Kerala',
+          pincode: values.pincode?.trim() || '',
         },
       })
       updateProfile({
         name: values.fullName.trim(),
         email: values.email.trim(),
         phone: values.mobile.trim(),
-        city: values.city,
+        city: resolvedCity,
         area: values.area.trim(),
-        address: values.address.trim(),
+        street: streetVal,
+        district: values.district || 'Ernakulam',
+        state: values.state || 'Kerala',
+        pincode: values.pincode?.trim() || '',
+        address: streetVal,
       })
       toast.success('Profile updated successfully')
     } catch (err) {
@@ -345,33 +363,60 @@ export function ProfilePage() {
                 />
               </FormField>
 
-              <FormField label="City" htmlFor="pf-city" error={personal.formState.errors.city?.message}>
-                <Select id="pf-city" {...personal.register('city')}>
-                  {CITIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+              <FormField label="Locality / Town / Landmark" htmlFor="pf-area" error={personal.formState.errors.area?.message}>
+                <Input
+                  id="pf-area"
+                  placeholder="e.g. Koyilandy, Edappally, Kaloor, Thalassery"
+                  error={personal.formState.errors.area?.message}
+                  {...personal.register('area')}
+                />
+              </FormField>
+
+              <FormField label="District" htmlFor="pf-district" error={personal.formState.errors.district?.message}>
+                <Select id="pf-district" {...personal.register('district')}>
+                  {KERALA_DISTRICTS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
                     </option>
                   ))}
                 </Select>
               </FormField>
 
-              <FormField label="Area / locality" htmlFor="pf-area" error={personal.formState.errors.area?.message}>
+              <FormField label="State" htmlFor="pf-state" error={personal.formState.errors.state?.message}>
+                <Select id="pf-state" {...personal.register('state')}>
+                  {INDIAN_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+
+              <FormField label="PIN Code (Postal Code)" htmlFor="pf-pincode" error={personal.formState.errors.pincode?.message}>
                 <Input
-                  id="pf-area"
-                  placeholder="e.g. Powai"
-                  error={personal.formState.errors.area?.message}
-                  {...personal.register('area')}
+                  id="pf-pincode"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="e.g. 682024"
+                  error={personal.formState.errors.pincode?.message}
+                  {...personal.register('pincode', {
+                    pattern: {
+                      value: /^([1-9][0-9]{5})?$/,
+                      message: 'Enter a valid 6-digit Indian PIN code',
+                    },
+                  })}
                 />
               </FormField>
             </div>
 
-            <FormField label="Address" htmlFor="pf-address" error={personal.formState.errors.address?.message}>
+            <FormField label="House / Building / Flat Name & Street Address" htmlFor="pf-street" error={personal.formState.errors.street?.message}>
               <Textarea
-                id="pf-address"
-                rows={3}
-                placeholder="Flat, building, street, landmark, pincode"
-                error={personal.formState.errors.address?.message}
-                {...personal.register('address')}
+                id="pf-street"
+                rows={2}
+                placeholder="e.g. House No. 12/450, Greenfield Villa, MG Road"
+                error={personal.formState.errors.street?.message}
+                {...personal.register('street')}
               />
             </FormField>
 

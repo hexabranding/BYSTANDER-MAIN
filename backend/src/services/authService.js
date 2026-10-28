@@ -81,13 +81,19 @@ export const registerCaregiver = async (data) => {
     email,
     phone,
     password,
+    gender,
     qualification,
     nursingRegNo,
     experienceYears,
     bio,
     languages,
-    city,
+    street,
     area,
+    city,
+    district,
+    state,
+    pincode,
+    address,
     hourlyRate,
     services,
     careSettings,
@@ -148,15 +154,35 @@ export const registerCaregiver = async (data) => {
       initialServices = activeCatalog.map((s) => s.name);
     }
 
+    const resolvedStreet = street || address?.street || data.addressLine1 || '';
+    const resolvedArea = area || address?.area || data.locality || '';
+    const resolvedDistrict = district || address?.district || 'Ernakulam';
+    const resolvedCity = city || address?.city || resolvedArea || resolvedDistrict || 'Kochi, KL';
+    const resolvedState = state || address?.state || 'Kerala';
+    const resolvedPincode = pincode || address?.pincode || '';
+
     profile = await CaregiverProfile.create({
       user: user._id,
+      gender: gender && ['Male', 'Female', 'Other'].includes(gender) ? gender : 'Female',
       qualification,
       nursingRegNo: nursingRegNo || null,
       experienceYears: experienceYears || 0,
       bio: bio || '',
       languages: languages && Array.isArray(languages) ? languages : ['English'],
-      city: city || 'Mumbai, MH',
-      area: area || '',
+      street: resolvedStreet,
+      area: resolvedArea,
+      city: resolvedCity,
+      district: resolvedDistrict,
+      state: resolvedState,
+      pincode: resolvedPincode,
+      address: {
+        street: resolvedStreet,
+        area: resolvedArea,
+        city: resolvedCity,
+        district: resolvedDistrict,
+        state: resolvedState,
+        pincode: resolvedPincode,
+      },
       hourlyRate: hourlyRate !== undefined ? hourlyRate : 499,
       servicesOffered: initialServicesOffered,
       services: initialServices,

@@ -178,7 +178,7 @@ export function BookingDetailsPage() {
   const [paying, setPaying] = useState(false)
   const [rateOpen, setRateOpen] = useState(false)
   const [isMandatoryReview, setIsMandatoryReview] = useState(false)
-  const [rateForm, setRateForm] = useState({ serviceQuality: 5, behaviour: 5, punctuality: 5, overall: 5, comment: '' })
+  const [rateForm, setRateForm] = useState({ rating: 5, comment: '' })
   const [settleOpen, setSettleOpen] = useState(false)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [reschedule, setReschedule] = useState(() => ({ date: '', startTime: '', hours: 0 }))
@@ -546,27 +546,25 @@ export function BookingDetailsPage() {
 
   const handleRate = async () => {
     if (!rateForm.comment || !rateForm.comment.trim()) {
-      toast.error('Review feedback is mandatory (*)', {
+      toast.error('Review feedback is required', {
         description: 'Please write your review comments before submitting.',
       })
       return
     }
 
-    const avg = Number((
-      (rateForm.serviceQuality + rateForm.behaviour + rateForm.punctuality + rateForm.overall) / 4
-    ).toFixed(1))
+    const selectedRating = Math.max(1, Math.min(5, Number(rateForm.rating || 5)))
     const targetBookingId = booking?.dbId || booking?._id || booking?.id
 
     if (isMongoObjectId(targetBookingId)) {
       try {
         await reviewService.submitReview({
           bookingId: targetBookingId,
-          rating: avg,
+          rating: selectedRating,
           criteria: {
-            serviceQuality: rateForm.serviceQuality,
-            behaviour: rateForm.behaviour,
-            punctuality: rateForm.punctuality,
-            overall: rateForm.overall,
+            serviceQuality: selectedRating,
+            behaviour: selectedRating,
+            punctuality: selectedRating,
+            overall: selectedRating,
           },
           comment: rateForm.comment.trim(),
         })
@@ -579,14 +577,28 @@ export function BookingDetailsPage() {
       }
     }
 
-    const ratingObj = { ...rateForm, average: avg, at: new Date().toISOString() }
+    const ratingObj = {
+      rating: selectedRating,
+      average: selectedRating,
+      serviceQuality: selectedRating,
+      behaviour: selectedRating,
+      punctuality: selectedRating,
+      overall: selectedRating,
+      comment: rateForm.comment.trim(),
+      at: new Date().toISOString(),
+    }
     addReview({
       bookingId: booking.id,
       caregiverId: booking.caregiverId,
       customerId: booking.customerId,
       customerName: customer?.name || user?.name || 'Customer',
-      rating: avg,
-      criteria: { ...rateForm, comment: undefined },
+      rating: selectedRating,
+      criteria: {
+        serviceQuality: selectedRating,
+        behaviour: selectedRating,
+        punctuality: selectedRating,
+        overall: selectedRating,
+      },
       comment: rateForm.comment.trim(),
     })
     updateBooking(booking.id, {
@@ -596,7 +608,7 @@ export function BookingDetailsPage() {
     setIsMandatoryReview(false)
     setRateOpen(false)
     toast.success('Thank you for your review!', {
-      description: `${caregiver?.name || 'Your caretaker'} received your ${avg}-star rating.`,
+      description: `${caregiver?.name || 'Your caretaker'} received your ${selectedRating}-star rating.`,
     })
     loadBooking()
   }
@@ -1458,7 +1470,7 @@ export function BookingDetailsPage() {
           }
         }}
         hideClose={isMandatoryReview}
-        title={isMandatoryReview ? 'Rate your caretaker (Mandatory *)' : 'Rate your caretaker'}
+        title="Rate your caretaker"
         subtitle={`${caregiver?.name || 'Your caretaker'} · ${booking.service}`}
         size="md"
         footer={
@@ -1469,7 +1481,7 @@ export function BookingDetailsPage() {
               </Button>
             ) : null}
             <Button type="submit" form="bd-rate-form" icon={Star}>
-              Submit review *
+              Submit review
             </Button>
           </div>
         }
@@ -1482,58 +1494,49 @@ export function BookingDetailsPage() {
           }}
           className="space-y-4"
         >
-          {isMandatoryReview ? (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 flex items-start gap-3 shadow-xs">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-200 font-bold text-amber-900 text-xs">*</span>
-              <div>
-                <p className="font-bold text-amber-950">Review is Mandatory *</p>
-                <p className="mt-0.5 text-amber-800">
-                  Payment has been completed. Please rate and review {caregiver?.name || 'your caretaker'} before continuing. All ratings and feedback fields marked with * are required.
-                </p>
-              </div>
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-gradient-to-b from-slate-50/80 to-white py-5 px-4 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">Tap to rate</p>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setRateForm((f) => ({ ...f, rating: v }))}
+                  aria-label={`${v} star${v > 1 ? 's' : ''}`}
+                  className="p-1 transition hover:scale-125 focus:outline-none"
+                >
+                  <Star
+                    className={cn(
+                      'h-9 w-9 transition-colors',
+                      v <= (rateForm.rating || 5)
+                        ? 'fill-amber-400 text-amber-400 drop-shadow-sm'
+                        : 'text-slate-200 hover:text-slate-300',
+                    )}
+                  />
+                </button>
+              ))}
             </div>
-          ) : null}
+            <p className="text-sm font-bold text-ink">
+              {(rateForm.rating || 5) === 5
+                ? '5.0 · Excellent'
+                : (rateForm.rating || 5) === 4
+                ? '4.0 · Good'
+                : (rateForm.rating || 5) === 3
+                ? '3.0 · Average'
+                : (rateForm.rating || 5) === 2
+                ? '2.0 · Poor'
+                : '1.0 · Very Poor'}
+            </p>
+          </div>
 
-          {RATING_CRITERIA.map((c) => (
-            <div key={c.key} className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-ink">
-                {c.label} <span className="text-danger-500 font-bold">*</span>
-              </span>
-              <div className="flex gap-1">
-                {[1, 2, 3, 4, 5].map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setRateForm((f) => ({ ...f, [c.key]: v }))}
-                    aria-label={`${c.label}: ${v} stars`}
-                    className="transition hover:scale-110"
-                  >
-                    <Star
-                      className={cn(
-                        'h-6 w-6',
-                        v <= rateForm[c.key] ? 'fill-warning-400 text-warning-400' : 'text-slate-300',
-                      )}
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          <FormField
-            label={
-              <span>
-                Review feedback <span className="text-danger-500 font-bold">*</span>
-              </span>
-            }
-            htmlFor="rate-comment"
-          >
+          <FormField label="Review feedback" htmlFor="rate-comment">
             <Textarea
               id="rate-comment"
               rows={3}
               required
               value={rateForm.comment}
               onChange={(e) => setRateForm((f) => ({ ...f, comment: e.target.value }))}
-              placeholder="Share your experience with the caretaker (mandatory *)..."
+              placeholder="Share your experience with the caretaker..."
             />
           </FormField>
         </form>

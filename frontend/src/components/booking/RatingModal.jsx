@@ -96,7 +96,7 @@ export function RatingModal({
         if (!mandatory) onClose?.()
       }}
       hideClose={mandatory}
-      title={mandatory ? `${title} (Mandatory *)` : title}
+      title={title}
       subtitle={subjectName ? `Your feedback helps ${subjectName} and keeps CareMate trustworthy.` : 'Your feedback keeps CareMate trustworthy.'}
       footer={
         <div className="flex w-full items-center justify-between gap-3">
@@ -110,7 +110,7 @@ export function RatingModal({
               </Button>
             ) : null}
             <Button type="submit" form="rating-modal-form" disabled={!allRated || (mandatory && !form.comment.trim())}>
-              {mandatory ? 'Submit review *' : 'Submit review'}
+              Submit review
             </Button>
           </div>
         </div>
@@ -124,17 +124,6 @@ export function RatingModal({
         }}
         className="space-y-4"
       >
-        {mandatory ? (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 flex items-start gap-3 shadow-xs">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-200 font-bold text-amber-900 text-xs">*</span>
-            <div>
-              <p className="font-bold text-amber-950">Review is Mandatory *</p>
-              <p className="mt-0.5 text-amber-800">
-                Payment has been completed. Please rate and review {subjectName || 'your counterpart'} before continuing. All ratings and feedback fields marked with * are required.
-              </p>
-            </div>
-          </div>
-        ) : null}
 
         <div className="space-y-3">
           {criteria.map((c) => (

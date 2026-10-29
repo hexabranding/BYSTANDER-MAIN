@@ -117,7 +117,7 @@ export function AcceptedCaregiversPage() {
     setActionLoading(true)
 
     try {
-      const caregiverId = applicant.caregiverId || applicant.id
+      const caregiverId = applicant.caregiverId || applicant.caregiver || applicant.id || applicant._id
       const bookingId = booking.id || booking._id
 
       await bookingService.selectCaregiver(bookingId, caregiverId)

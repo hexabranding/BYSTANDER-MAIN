@@ -182,6 +182,7 @@ export const bookingService = {
   getBookings,
   getBookingById,
   acceptBooking,
+  selectCaregiver,
   rejectBooking,
   cancelBooking,
   requestCheckInOtp,
@@ -191,3 +192,4 @@ export const bookingService = {
 }
 
 export default bookingService
+

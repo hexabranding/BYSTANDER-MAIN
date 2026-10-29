@@ -30,7 +30,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { getBookingById, CUSTOMERS } from '@/data/bookings'
 import { downloadText, formatCurrency, formatDate, formatDateTime, toCSV } from '@/utils/format'
 import { GST_RATE, PLATFORM_COMMISSION, PLATFORM_FEE } from '@/utils/constants'
-import { durationBasis, DURATION_GROUPS, formatDuration } from '@/utils/duration'
+import { durationBasis, formatDuration } from '@/utils/duration'
 import { cn } from '@/utils/cn'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -197,8 +197,6 @@ export function BookingDetailsPage() {
   const [isMandatoryReview, setIsMandatoryReview] = useState(false)
   const [rateForm, setRateForm] = useState({ rating: 5, comment: '' })
   const [settleOpen, setSettleOpen] = useState(false)
-  const [rescheduleOpen, setRescheduleOpen] = useState(false)
-  const [reschedule, setReschedule] = useState(() => ({ date: '', startTime: '', hours: 0 }))
 
   const isPaid = ['paid', 'released', 'settled'].includes(String(booking?.paymentStatus || '').toLowerCase())
 
@@ -349,8 +347,6 @@ export function BookingDetailsPage() {
   const canRate = booking.status === 'Completed' && isPaid && !booking.customerRating
   const hasCheckedIn = Boolean(booking.checkIn?.at) || ['In Progress', 'Completed'].includes(booking.status)
   const hasCheckedOut = Boolean(booking.checkOut?.at) || booking.status === 'Completed'
-  const canReschedule = canCancel && !hasCheckedIn
-
 
   const handleDownloadInvoice = () => {
     const rows = [
@@ -642,44 +638,6 @@ export function BookingDetailsPage() {
     navigate(`/customer/messages?thread=${threadId}`)
   }
 
-  const openReschedule = () => {
-    setReschedule({ date: booking.date, startTime: booking.startTime, hours: booking.hours })
-    setRescheduleOpen(true)
-  }
-
-  const handleReschedule = () => {
-    if (!reschedule.date || !reschedule.startTime) {
-      toast.error('Pick a new date and start time')
-      return
-    }
-    const hours = Number(reschedule.hours) || booking.hours
-    const hourlyRate = Number(booking.hourlyRate) || 0
-    const subtotal = hourlyRate * hours
-    const platformFee = Number(booking.platformFee) || PLATFORM_FEE
-    const tax = Math.round((subtotal + platformFee) * GST_RATE)
-    updateBooking(booking.id, {
-      date: reschedule.date,
-      startTime: reschedule.startTime,
-      hours,
-      subtotal,
-      tax,
-      total: subtotal + platformFee + tax,
-      ...(booking.commission != null ? { commission: Math.round(subtotal * PLATFORM_COMMISSION) } : {}),
-      timeline: [
-        ...(booking.timeline || []),
-        {
-          at: new Date().toISOString(),
-          label: `Rescheduled to ${formatDate(reschedule.date, { long: true })} at ${reschedule.startTime}`,
-          status: 'completed',
-        },
-      ],
-    })
-    setRescheduleOpen(false)
-    toast.success('Booking rescheduled', {
-      description: `${booking.id} moved to ${formatDate(reschedule.date, { long: true })}, ${reschedule.startTime}.`,
-    })
-  }
-
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: 'Bookings', to: '/customer/bookings' }, { label: booking.id }]} />
@@ -715,11 +673,6 @@ export function BookingDetailsPage() {
             <Button variant="dangerGhost" size="sm" icon={ShieldAlert} onClick={() => setComplaintOpen(true)}>
               Raise complaint
             </Button>
-            {canReschedule ? (
-              <Button variant="outline" size="sm" icon={CalendarDays} onClick={openReschedule}>
-                Reschedule
-              </Button>
-            ) : null}
             {canCancel ? (
               <Button variant="danger" size="sm" icon={XCircle} onClick={() => setCancelOpen(true)}>
                 Cancel booking
@@ -1282,87 +1235,6 @@ export function BookingDetailsPage() {
           </Button>
         </div>
       </div>
-
-      <Modal
-        open={rescheduleOpen}
-        onClose={() => setRescheduleOpen(false)}
-        title="Reschedule booking"
-        subtitle={`${booking.id} · ${booking.service}`}
-        size="sm"
-        footer={
-          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setRescheduleOpen(false)}>
-              Keep original time
-            </Button>
-            <Button type="submit" form="reschedule-form" icon={CalendarDays}>
-              Confirm new time
-            </Button>
-          </div>
-        }
-      >
-        <form
-          id="reschedule-form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            handleReschedule()
-          }}
-          className="space-y-4"
-        >
-          <FormField label="New date" htmlFor="rs-date" required>
-            <Input
-              id="rs-date"
-              type="date"
-              value={reschedule.date}
-              onChange={(e) => setReschedule((r) => ({ ...r, date: e.target.value }))}
-            />
-          </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Start time" htmlFor="rs-time" required>
-              <Input
-                id="rs-time"
-                type="time"
-                value={reschedule.startTime}
-                onChange={(e) => setReschedule((r) => ({ ...r, startTime: e.target.value }))}
-              />
-            </FormField>
-            <FormField
-              label="Duration"
-              htmlFor="rs-hours"
-              required
-              hint="Same presets as booking — hours, whole days or weeks"
-            >
-              <Select
-                id="rs-hours"
-                value={reschedule.hours}
-                onChange={(e) => setReschedule((r) => ({ ...r, hours: Number(e.target.value) }))}
-              >
-                {DURATION_GROUPS.map((group) => (
-                  <optgroup key={group.id} label={group.label}>
-                    {group.options.map((h) => (
-                      <option key={h} value={h}>
-                        {formatDuration(h)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </Select>
-            </FormField>
-          </div>
-
-          <p className="rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
-            Your caretaker is notified of the change immediately. Rescheduling more than 24 hours ahead is free;
-            inside 24 hours the caretaker must agree before the slot moves.
-            {Number(reschedule.hours) !== booking.hours ? (
-              <>
-                {' '}
-                The price is recalculated at {formatCurrency(booking.hourlyRate)}/hr for{' '}
-                {durationBasis(reschedule.hours)}.
-              </>
-            ) : null}
-          </p>
-        </form>
-      </Modal>
 
       <ConfirmationDialog
         open={cancelOpen}

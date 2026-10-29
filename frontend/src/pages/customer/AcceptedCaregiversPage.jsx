@@ -32,6 +32,7 @@ import { RatingStars } from '@/components/common/RatingStars'
 import { EmptyState, CardSkeleton } from '@/components/common/States'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { CaregiverReviewsModal } from '@/components/caregiver/CaregiverReviewsModal'
+import { CaregiverProfileModal } from '@/components/caregiver/CaregiverProfileModal'
 import { bookingService } from '@/services/bookingService'
 
 export function AcceptedCaregiversPage() {
@@ -47,6 +48,7 @@ export function AcceptedCaregiversPage() {
   const [actionLoading, setActionLoading] = useState(false)
 
   // Modals state
+  const [profileTarget, setProfileTarget] = useState(null)
   const [reviewsTarget, setReviewsTarget] = useState(null)
   const [confirmSelectTarget, setConfirmSelectTarget] = useState(null)
 
@@ -230,22 +232,31 @@ export function AcceptedCaregiversPage() {
 
                 {/* Caretaker Header */}
                 <div className="relative flex items-start gap-3.5 p-5 pb-3">
-                  <Avatar
-                    src={applicant.photo || applicant.avatar}
-                    name={applicant.name}
-                    size="xl"
-                    verified={true}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setProfileTarget(item)}
+                    className="shrink-0 transition hover:opacity-85 cursor-pointer text-left focus:outline-none"
+                    title="Click to view full profile & credentials"
+                  >
+                    <Avatar
+                      src={applicant.photo || applicant.avatar}
+                      name={applicant.name}
+                      size="xl"
+                      verified={true}
+                    />
+                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-1">
                       <div className="min-w-0">
                         <h4 className="truncate font-display text-base font-bold text-ink">
-                          <Link
-                            to={`/caregivers/${applicantId}`}
-                            className="transition hover:text-primary-700"
+                          <button
+                            type="button"
+                            onClick={() => setProfileTarget(item)}
+                            className="transition hover:text-primary-700 cursor-pointer text-left truncate block w-full focus:outline-none"
+                            title="Click to view full profile & credentials"
                           >
                             {applicant.name}
-                          </Link>
+                          </button>
                         </h4>
                         <p className="truncate text-sm font-medium text-primary-700">
                           {applicant.qualification || 'Certified Caretaker'}
@@ -277,7 +288,7 @@ export function AcceptedCaregiversPage() {
                     <div className="mt-1.5 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setReviewsTarget(applicant)}
+                        onClick={() => setProfileTarget({ ...item, initialTab: 'reviews' })}
                         className="group/rate inline-flex items-center gap-1.5 transition hover:opacity-80 cursor-pointer"
                         title="Click to view verified reviews"
                       >
@@ -366,10 +377,10 @@ export function AcceptedCaregiversPage() {
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      icon={MessageSquare}
-                      onClick={() => setReviewsTarget(applicant)}
+                      icon={User}
+                      onClick={() => setProfileTarget(item)}
                     >
-                      Reviews
+                      View Profile
                     </Button>
                     <Button
                       variant="primary"
@@ -412,6 +423,23 @@ export function AcceptedCaregiversPage() {
           />
         </Card>
       )}
+
+      {/* In-Page Caretaker Profile & Reviews Modal */}
+      <CaregiverProfileModal
+        open={Boolean(profileTarget)}
+        onClose={() => setProfileTarget(null)}
+        offer={profileTarget}
+        onChoose={(targetOffer) => setConfirmSelectTarget(targetOffer)}
+        isShortlisted={(shortlist ?? []).includes(profileTarget?.applicantId)}
+        onToggleShortlist={(id) => {
+          toggleShortlist(id)
+          toast.success(
+            (shortlist ?? []).includes(id)
+              ? 'Removed from shortlist'
+              : 'Saved to shortlist'
+          )
+        }}
+      />
 
       {/* Reviews Modal */}
       <CaregiverReviewsModal

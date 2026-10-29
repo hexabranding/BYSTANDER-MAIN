@@ -57,6 +57,30 @@ export const resolveServiceIcon = (slugOrName) => {
 }
 
 /**
+ * Resolves an appropriate image URL for a service based on its slug, name, or category.
+ * @param {string} slugOrName
+ * @returns {string} Relative URL to the service image asset
+ */
+export const resolveServiceImage = (slugOrName) => {
+  if (!slugOrName || typeof slugOrName !== 'string') return '/services/svc-monitoring.jpg'
+
+  const term = slugOrName.toLowerCase().trim()
+
+  if (term.includes('monitor') || term.includes('vital')) return '/services/svc-monitoring.jpg'
+  if (term.includes('feed') || term.includes('hygiene') || term.includes('bath')) return '/services/svc-feeding.jpg'
+  if (term.includes('post-surgery') || term.includes('post-op') || term.includes('wound') || term.includes('surgery'))
+    return '/services/svc-post-surgery.jpg'
+  if (term.includes('companion') || term.includes('elderly') || term.includes('elder')) return '/services/svc-companionship.jpg'
+  if (term.includes('medicat') || term.includes('pill') || term.includes('prescription')) return '/services/svc-medication.jpg'
+  if (term.includes('mobili') || term.includes('physio') || term.includes('transfer')) return '/services/svc-mobility.jpg'
+  if (term.includes('dementia') || term.includes('alzheimer') || term.includes('memory')) return '/services/svc-dementia.jpg'
+  if (term.includes('bedridden') || term.includes('bed')) return '/services/svc-bedridden.jpg'
+  if (term.includes('night') || term.includes('overnight') || term.includes('vigil')) return '/services/svc-night.jpg'
+
+  return '/services/svc-monitoring.jpg'
+}
+
+/**
  * Transforms a backend weeklySchedule array into the UI's weekAvailability structure.
  * @param {Array} weeklySchedule
  * @returns {Array} UI weekAvailability array
@@ -144,6 +168,7 @@ export const adaptService = (raw) => {
       typeof raw.icon === 'function' || (typeof raw.icon === 'object' && raw.icon !== null)
         ? raw.icon
         : resolveServiceIcon(slug || name),
+    image: raw.image || resolveServiceImage(slug || name),
     minimumDurationHours: Number(raw.minimumDurationHours) || 1,
     isActive: raw.isActive !== undefined ? Boolean(raw.isActive) : true,
   }
@@ -1580,6 +1605,7 @@ export const adaptBookingToJob = (raw, currentUserId) => {
 export default {
   isMongoObjectId,
   resolveServiceIcon,
+  resolveServiceImage,
   adaptWeeklyScheduleToWeekAvailability,
   adaptWeekAvailabilityToWeeklySchedule,
   adaptService,

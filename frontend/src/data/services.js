@@ -18,6 +18,7 @@ export const SERVICES = [
     description:
       'A trained caretaker tracks blood pressure, pulse, sugar levels, oxygen saturation and medication response, and keeps the family updated with structured daily reports.',
     icon: Activity,
+    image: '/services/svc-monitoring.jpg',
     startingPrice: 449,
     unit: 'hour',
     popular: true,
@@ -30,6 +31,7 @@ export const SERVICES = [
     description:
       'Compassionate assistance with feeding plans, tube feeding coordination, bathing, dressing, diaper changes and infection-safe hygiene routines for patients with limited mobility.',
     icon: UtensilsCrossed,
+    image: '/services/svc-feeding.jpg',
     startingPrice: 399,
     unit: 'hour',
     popular: true,
@@ -42,6 +44,7 @@ export const SERVICES = [
     description:
       'Specialised post-operative support including dressing changes under guidance, drain management, pain monitoring, mobilisation and coordination with the treating hospital.',
     icon: Bandage,
+    image: '/services/svc-post-surgery.jpg',
     startingPrice: 599,
     unit: 'hour',
     popular: true,
@@ -54,6 +57,7 @@ export const SERVICES = [
     description:
       'Warm, patient companionship for seniors living alone — conversation, reading, light exercises, temple or park walks, and regular family updates.',
     icon: HandHeart,
+    image: '/services/svc-companionship.jpg',
     startingPrice: 329,
     unit: 'hour',
     popular: false,
@@ -66,6 +70,7 @@ export const SERVICES = [
     description:
       'Strict timetable-based medicine reminders, refill alerts, prescription logging and escalation to the family if a dose is missed.',
     icon: Pill,
+    image: '/services/svc-medication.jpg',
     startingPrice: 299,
     unit: 'hour',
     popular: false,
@@ -78,6 +83,7 @@ export const SERVICES = [
     description:
       'Trained handling for bed-to-wheelchair transfers, walking support, fall prevention, brace and prosthesis care, and assisted physiotherapy routines.',
     icon: Accessibility,
+    image: '/services/svc-mobility.jpg',
     startingPrice: 479,
     unit: 'hour',
     popular: false,
@@ -90,6 +96,7 @@ export const SERVICES = [
     description:
       'Calm, structured support for memory-care patients — orientation cues, wandering prevention, safe nutrition, behavioural de-escalation and caretaker respite.',
     icon: Brain,
+    image: '/services/svc-dementia.jpg',
     startingPrice: 649,
     unit: 'hour',
     popular: false,
@@ -102,6 +109,7 @@ export const SERVICES = [
     description:
       'Full-time bedridden care including two-hourly repositioning, bedsore prevention, catheter and stoma awareness, nutrition management and hygiene.',
     icon: BedDouble,
+    image: '/services/svc-bedridden.jpg',
     startingPrice: 699,
     unit: 'hour',
     popular: true,
@@ -114,6 +122,7 @@ export const SERVICES = [
     description:
       'Overnight supervision for patients at risk of falls, nocturnal agitation, breathing difficulty or those recovering from surgery, with handover notes in the morning.',
     icon: MoonStar,
+    image: '/services/svc-night.jpg',
     startingPrice: 749,
     unit: 'shift',
     popular: false,

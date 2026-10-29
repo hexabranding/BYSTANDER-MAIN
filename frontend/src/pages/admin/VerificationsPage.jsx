@@ -47,6 +47,22 @@ const APP_REJECT_PRESETS = [
   'Applicant requested withdrawal',
 ]
 
+export function calculateVerificationScore(recordOrDocs, status) {
+  const docs = Array.isArray(recordOrDocs)
+    ? recordOrDocs
+    : Array.isArray(recordOrDocs?.documents)
+      ? recordOrDocs.documents
+      : []
+  if (!docs.length) {
+    const s = typeof recordOrDocs === 'object' ? recordOrDocs?.status : status
+    return s === 'Verified' ? 100 : (typeof recordOrDocs?.overallScore === 'number' ? recordOrDocs.overallScore : 0)
+  }
+  const verified = docs.filter(
+    (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
+  ).length
+  return Math.round((verified / docs.length) * 100)
+}
+
 function DocumentVisualFallback({ record, doc }) {
   const fileName = doc.file || doc.fileName || `${doc.type || 'Document'}.pdf`
   return (
@@ -186,7 +202,8 @@ function DetailPanel({
   onApproveDoc,
   onRejectDoc,
 }) {
-  const scoreTone = record.overallScore >= 80 ? 'success' : record.overallScore >= 60 ? 'warning' : 'danger'
+  const score = calculateVerificationScore(record)
+  const scoreTone = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'
 
   return (
     <div className="space-y-5">
@@ -208,9 +225,9 @@ function DetailPanel({
               </p>
             </div>
             <div className="shrink-0 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-center sm:w-40">
-              <p className="font-display text-2xl font-extrabold tabular-nums text-ink">{record.overallScore}%</p>
+              <p className="font-display text-2xl font-extrabold tabular-nums text-ink">{score}%</p>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">Overall score</p>
-              <ProgressBar value={record.overallScore} tone={scoreTone} className="mt-2" />
+              <ProgressBar value={score} tone={scoreTone} className="mt-2" />
             </div>
           </div>
 
@@ -439,21 +456,23 @@ export function VerificationsPage() {
           if (!prev) return prev
           return prev.map((v) => {
             if (v.id !== record.id) return v
+            const nextDocs = (v.documents || []).map((d) =>
+              d.id === targetDoc.id
+                ? {
+                    ...d,
+                    status: 'Rejected',
+                    verificationStatus: 'rejected',
+                    feedback: finalReason,
+                    reviewerNotes: finalReason,
+                    reviewedAt: new Date().toISOString(),
+                    reviewedBy: 'Admin',
+                  }
+                : d,
+            )
             return {
               ...v,
-              documents: (v.documents || []).map((d) =>
-                d.id === targetDoc.id
-                  ? {
-                      ...d,
-                      status: 'Rejected',
-                      verificationStatus: 'rejected',
-                      feedback: finalReason,
-                      reviewerNotes: finalReason,
-                      reviewedAt: new Date().toISOString(),
-                      reviewedBy: 'Admin',
-                    }
-                  : d,
-              ),
+              documents: nextDocs,
+              overallScore: calculateVerificationScore(nextDocs, v.status),
               history: [
                 {
                   at: new Date().toISOString(),
@@ -554,11 +573,17 @@ export function VerificationsPage() {
         if (!prev) return prev
         return prev.map((v) => {
           if (v.id !== record.id) return v
+          const verifiedDocs = (v.documents || []).map((d) => ({
+            ...d,
+            status: 'Verified',
+            verificationStatus: 'verified',
+          }))
           return {
             ...v,
             status: 'Verified',
             verificationStatus: 'verified',
-            overallScore: 90,
+            documents: verifiedDocs,
+            overallScore: 100,
             history: [
               {
                 at: new Date().toISOString(),
@@ -592,21 +617,23 @@ export function VerificationsPage() {
         if (!prev) return prev
         return prev.map((v) => {
           if (v.id !== record.id) return v
+          const nextDocs = (v.documents || []).map((d) =>
+            d.id === doc.id
+              ? {
+                  ...d,
+                  status: 'Verified',
+                  verificationStatus: 'verified',
+                  feedback: 'Approved by admin',
+                  reviewerNotes: 'Approved by admin',
+                  reviewedAt: new Date().toISOString(),
+                  reviewedBy: 'Admin',
+                }
+              : d,
+          )
           return {
             ...v,
-            documents: (v.documents || []).map((d) =>
-              d.id === doc.id
-                ? {
-                    ...d,
-                    status: 'Verified',
-                    verificationStatus: 'verified',
-                    feedback: 'Approved by admin',
-                    reviewerNotes: 'Approved by admin',
-                    reviewedAt: new Date().toISOString(),
-                    reviewedBy: 'Admin',
-                  }
-                : d,
-            ),
+            documents: nextDocs,
+            overallScore: calculateVerificationScore(nextDocs, v.status),
             history: [
               {
                 at: new Date().toISOString(),
@@ -755,7 +782,8 @@ export function VerificationsPage() {
             ) : filtered.length ? (
               filtered.map((v) => {
                 const active = v.id === selectedId
-                const tone = v.overallScore >= 80 ? 'success' : v.overallScore >= 60 ? 'warning' : 'danger'
+                const score = calculateVerificationScore(v)
+                const tone = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'
                 return (
                   <button
                     key={v.id}
@@ -780,8 +808,8 @@ export function VerificationsPage() {
                       <StatusBadge status={v.status} size="sm" />
                     </div>
                     <div className="mt-2.5 flex items-center gap-2">
-                      <ProgressBar value={v.overallScore} tone={tone} className="flex-1" />
-                      <span className="text-[11px] font-bold tabular-nums text-muted">{v.overallScore}%</span>
+                      <ProgressBar value={score} tone={tone} className="flex-1" />
+                      <span className="text-[11px] font-bold tabular-nums text-muted">{score}%</span>
                     </div>
                   </button>
                 )

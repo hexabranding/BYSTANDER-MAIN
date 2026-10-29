@@ -938,16 +938,22 @@ export const adaptVerificationRecord = (raw) => {
   const regNo = raw.nursingRegNo || raw.regNo || 'N/A'
   const city = raw.city || 'Mumbai, MH'
   const submittedOn = raw.createdAt || raw.submittedOn || new Date().toISOString()
-  const overallScore =
-    typeof raw.trustScore === 'number'
-      ? raw.trustScore
-      : typeof raw.overallScore === 'number'
-        ? raw.overallScore
-        : 75
   const status = normalizeVerificationStatus(raw.verificationStatus || raw.status)
 
   const rawDocs = Array.isArray(raw.documents) ? raw.documents : []
   const documents = rawDocs.map(adaptVerificationDocument)
+
+  // Document verification completion score: starts at 0% initially and increases with each approved document
+  const verifiedDocsCount = documents.filter(
+    (d) => d.status === 'Verified' || d.verificationStatus === 'verified'
+  ).length
+  const totalDocs = documents.length
+  const overallScore =
+    totalDocs > 0
+      ? Math.round((verifiedDocsCount / totalDocs) * 100)
+      : status === 'Verified'
+        ? 100
+        : 0
 
   // Construct auditable action history
   let history = []

@@ -158,14 +158,22 @@ export function BookingDetailsPage() {
   const caregiver = useMemo(() => {
     if (!booking) return null
     if (booking.caregiver && typeof booking.caregiver === 'object') {
+      const rawRating = booking.caregiver.rating
+      const ratingAverage = typeof rawRating === 'object' && rawRating !== null
+        ? Number(rawRating.average ?? 5.0)
+        : Number(rawRating || 4.8)
+      const reviewCount = typeof rawRating === 'object' && rawRating !== null
+        ? Number(rawRating.count ?? 0)
+        : Number(booking.caregiver.reviewCount || 0)
+
       return {
         id: booking.caregiverId || booking.caregiver._id || booking.caregiver.id,
         caregiverId: booking.caregiverId || booking.caregiver._id || booking.caregiver.id,
         name: booking.caregiverName || booking.caregiver.name,
         qualification: booking.caregiver.qualification || 'Caregiver',
         photo: booking.caregiver.avatar || booking.caregiver.photo || '',
-        rating: booking.caregiver.rating || 4.8,
-        reviewCount: booking.caregiver.reviewCount || 12,
+        rating: isNaN(ratingAverage) ? 5.0 : ratingAverage,
+        reviewCount: isNaN(reviewCount) ? 0 : reviewCount,
         experienceYears: booking.caregiver.experienceYears ?? 4,
         trustScore: booking.caregiver.trustScore ?? 98,
         responseRate: booking.caregiver.responseRate ?? 95,
@@ -173,9 +181,19 @@ export function BookingDetailsPage() {
     }
     const found = caregivers.find((c) => c.id === booking.caregiverId)
     if (found) {
+      const rawRating = found.rating
+      const ratingAverage = typeof rawRating === 'object' && rawRating !== null
+        ? Number(rawRating.average ?? 5.0)
+        : Number(rawRating || 4.8)
+      const reviewCount = typeof rawRating === 'object' && rawRating !== null
+        ? Number(rawRating.count ?? 0)
+        : Number(found.reviewCount || 0)
+
       return {
         ...found,
         caregiverId: found.id,
+        rating: isNaN(ratingAverage) ? 5.0 : ratingAverage,
+        reviewCount: isNaN(reviewCount) ? 0 : reviewCount,
         experienceYears: found.experienceYears ?? 4,
         trustScore: found.trustScore ?? 98,
         responseRate: found.responseRate ?? 95,
@@ -195,6 +213,8 @@ export function BookingDetailsPage() {
   const [paying, setPaying] = useState(false)
   const [rateOpen, setRateOpen] = useState(false)
   const [isMandatoryReview, setIsMandatoryReview] = useState(false)
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [hasPromptedReview, setHasPromptedReview] = useState(false)
   const [rateForm, setRateForm] = useState({ rating: 5, comment: '' })
   const [settleOpen, setSettleOpen] = useState(false)
 
@@ -206,12 +226,14 @@ export function BookingDetailsPage() {
       booking.status === 'Completed' &&
       isPaid &&
       !booking.customerRating &&
-      !booking.customerReview
+      !booking.customerReview &&
+      !hasPromptedReview
     ) {
-      setIsMandatoryReview(true)
+      setHasPromptedReview(true)
+      setIsMandatoryReview(false)
       setRateOpen(true)
     }
-  }, [booking?.id, booking?.status, booking?.paymentStatus, booking?.customerRating, booking?.customerReview, isPaid])
+  }, [booking?.id, booking?.status, booking?.paymentStatus, booking?.customerRating, booking?.customerReview, isPaid, hasPromptedReview])
 
   const handleSelectApplicant = async () => {
     if (!selectedApplicant || !booking?.id) return
@@ -568,6 +590,8 @@ export function BookingDetailsPage() {
     const selectedRating = Math.max(1, Math.min(5, Number(rateForm.rating || 5)))
     const targetBookingId = booking?.dbId || booking?._id || booking?.id
 
+    setSubmittingReview(true)
+
     if (isMongoObjectId(targetBookingId)) {
       try {
         await reviewService.submitReview({
@@ -583,9 +607,21 @@ export function BookingDetailsPage() {
         })
       } catch (err) {
         console.error('[Review Submission Error]', err)
+        // If the review has already been recorded in backend, close the modal gracefully and sync
+        if (err.message && err.message.toLowerCase().includes('already been submitted')) {
+          setRateOpen(false)
+          setIsMandatoryReview(false)
+          setSubmittingReview(false)
+          toast.info('Review already recorded', {
+            description: 'Your rating and feedback have already been saved for this booking.',
+          })
+          await loadBooking()
+          return
+        }
         toast.error('Unable to submit review', {
           description: err.message || 'Please check that the booking is completed and try again.',
         })
+        setSubmittingReview(false)
         return
       }
     }
@@ -600,30 +636,40 @@ export function BookingDetailsPage() {
       comment: rateForm.comment.trim(),
       at: new Date().toISOString(),
     }
-    addReview({
-      bookingId: booking.id,
-      caregiverId: booking.caregiverId,
-      customerId: booking.customerId,
-      customerName: customer?.name || user?.name || 'Customer',
-      rating: selectedRating,
-      criteria: {
-        serviceQuality: selectedRating,
-        behaviour: selectedRating,
-        punctuality: selectedRating,
-        overall: selectedRating,
-      },
-      comment: rateForm.comment.trim(),
-    })
-    updateBooking(booking.id, {
-      customerRating: ratingObj,
-    })
-    setBooking((prev) => (prev ? { ...prev, customerRating: ratingObj } : prev))
+    try {
+      if (addReview) {
+        addReview({
+          bookingId: booking.id,
+          caregiverId: booking.caregiverId,
+          customerId: booking.customerId,
+          customerName: customer?.name || user?.name || 'Customer',
+          rating: selectedRating,
+          criteria: {
+            serviceQuality: selectedRating,
+            behaviour: selectedRating,
+            punctuality: selectedRating,
+            overall: selectedRating,
+          },
+          comment: rateForm.comment.trim(),
+        })
+      }
+      if (updateBooking) {
+        updateBooking(booking.id, {
+          customerRating: ratingObj,
+        })
+      }
+    } catch (e) {
+      console.warn('[Local context sync error]', e)
+    }
+
+    setRealBooking((prev) => (prev ? { ...prev, customerRating: ratingObj, customerReview: ratingObj } : prev))
     setIsMandatoryReview(false)
     setRateOpen(false)
+    setSubmittingReview(false)
     toast.success('Thank you for your review!', {
       description: `${caregiver?.name || 'Your caretaker'} received your ${selectedRating}-star rating.`,
     })
-    loadBooking()
+    await loadBooking()
   }
 
   const handleSendMessage = () => {
@@ -753,6 +799,35 @@ export function BookingDetailsPage() {
                 </Button>
               ) : null}
             </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* If customer already rated, show completed review card */}
+      {booking.customerRating && (
+        <Card className="border-primary-200 bg-mint-50/50">
+          <CardBody className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary-100 text-primary-700">
+                  <Star className="h-4 w-4 fill-primary-600 text-primary-600" />
+                </span>
+                <div>
+                  <h4 className="text-sm font-bold text-ink">Your Review for {caregiver?.name || 'Caretaker'}</h4>
+                  <p className="text-xs text-muted">
+                    {booking.customerRating.at
+                      ? `Submitted on ${formatDate(booking.customerRating.at, { long: true })}`
+                      : 'Review submitted'}
+                  </p>
+                </div>
+              </div>
+              <RatingStars value={booking.customerRating.average || booking.customerRating.rating} showValue size={15} />
+            </div>
+            {booking.customerRating.comment && (
+              <p className="rounded-xl border border-line/60 bg-white p-3 text-xs italic text-ink-soft">
+                "{booking.customerRating.comment}"
+              </p>
+            )}
           </CardBody>
         </Card>
       )}
@@ -1370,22 +1445,17 @@ export function BookingDetailsPage() {
       <Modal
         open={rateOpen}
         onClose={() => {
-          if (!isMandatoryReview) {
-            setRateOpen(false)
-          }
+          setRateOpen(false)
         }}
-        hideClose={isMandatoryReview}
         title="Rate your caretaker"
         subtitle={`${caregiver?.name || 'Your caretaker'} · ${booking.service}`}
         size="md"
         footer={
           <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            {!isMandatoryReview ? (
-              <Button variant="ghost" onClick={() => setRateOpen(false)}>
-                Skip for now
-              </Button>
-            ) : null}
-            <Button type="submit" form="bd-rate-form" icon={Star}>
+            <Button variant="ghost" onClick={() => setRateOpen(false)} disabled={submittingReview}>
+              Skip for now
+            </Button>
+            <Button type="submit" form="bd-rate-form" icon={Star} loading={submittingReview}>
               Submit review
             </Button>
           </div>

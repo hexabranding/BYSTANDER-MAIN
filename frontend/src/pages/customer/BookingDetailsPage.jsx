@@ -183,6 +183,21 @@ export function BookingDetailsPage() {
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [reschedule, setReschedule] = useState(() => ({ date: '', startTime: '', hours: 0 }))
 
+  const isPaid = ['paid', 'released', 'settled'].includes(String(booking?.paymentStatus || '').toLowerCase())
+
+  useEffect(() => {
+    if (
+      booking &&
+      booking.status === 'Completed' &&
+      isPaid &&
+      !booking.customerRating &&
+      !booking.customerReview
+    ) {
+      setIsMandatoryReview(true)
+      setRateOpen(true)
+    }
+  }, [booking?.id, booking?.status, booking?.paymentStatus, booking?.customerRating, booking?.customerReview, isPaid])
+
   const handleSelectApplicant = async () => {
     if (!selectedApplicant || !booking?.id) return
     setSelectingApplicant(true)
@@ -308,7 +323,6 @@ export function BookingDetailsPage() {
       ? { name: user.name, email: user.email, phone: user.phone, address: user.address, city: user.city }
       : null)
 
-  const isPaid = ['paid', 'released', 'settled'].includes(String(booking.paymentStatus || '').toLowerCase())
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed'
   const canPay =
     ['Pending', 'Unpaid'].includes(booking.paymentStatus) ||
@@ -319,19 +333,6 @@ export function BookingDetailsPage() {
   const hasCheckedIn = Boolean(booking.checkIn?.at) || ['In Progress', 'Completed'].includes(booking.status)
   const hasCheckedOut = Boolean(booking.checkOut?.at) || booking.status === 'Completed'
   const canReschedule = canCancel && !hasCheckedIn
-
-  useEffect(() => {
-    if (
-      booking &&
-      booking.status === 'Completed' &&
-      isPaid &&
-      !booking.customerRating &&
-      !booking.customerReview
-    ) {
-      setIsMandatoryReview(true)
-      setRateOpen(true)
-    }
-  }, [booking?.id, booking?.status, booking?.paymentStatus, booking?.customerRating, booking?.customerReview, isPaid])
 
 
   const handleDownloadInvoice = () => {

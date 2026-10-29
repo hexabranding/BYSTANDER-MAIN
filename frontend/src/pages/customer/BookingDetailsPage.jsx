@@ -418,12 +418,21 @@ export function BookingDetailsPage() {
               } catch (vErr) {
                 console.warn('[Razorpay Verification Notice]', vErr.message)
               }
-              updateBooking(booking.id, { paymentStatus: 'Escrow Held' })
+              const isCompleted = booking.status === 'Completed'
+              updateBooking(booking.id, { paymentStatus: isCompleted ? 'Paid' : 'Escrow Held' })
               setPayOpen(false)
               setPaying(false)
-              toast.success('Payment secured in Razorpay Escrow (Test Mode)', {
-                description: `Tx: ${response.razorpay_payment_id}. Funds will be held until shift completion.`,
-              })
+              loadBooking()
+              toast.success(
+                isCompleted
+                  ? 'Payment settled via Razorpay!'
+                  : 'Payment secured in Razorpay Escrow (Test Mode)',
+                {
+                  description: isCompleted
+                    ? `Payment Tx: ${response.razorpay_payment_id}. Caretaker payment settled.`
+                    : `Tx: ${response.razorpay_payment_id}. Funds will be held until shift completion.`,
+                }
+              )
             },
             modal: {
               ondismiss: function () {

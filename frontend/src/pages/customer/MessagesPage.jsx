@@ -67,7 +67,15 @@ export function MessagesPage() {
       }
       setUnreadMap(unreadMapping)
 
-      const realThreads = (bookingsRes.bookings || []).map((b) => {
+      // Only include bookings where a caregiver is assigned / connected
+      const connectedBookings = (bookingsRes.bookings || []).filter((b) => {
+        const hasCaregiver = Boolean(
+          b.caregiverUser || (b.caregiver && b.caregiver !== 'unassigned')
+        )
+        return hasCaregiver && b.status !== 'Cancelled'
+      })
+
+      const realThreads = connectedBookings.map((b) => {
         const canSend = b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress'
 
         // 1. Resolve authoritative caregiver name
@@ -108,11 +116,9 @@ export function MessagesPage() {
         }
       })
 
-      if (realThreads.length > 0) {
-        setApiThreads(realThreads)
-      }
+      setApiThreads(realThreads)
     } catch {
-      // If unauthenticated or network error, fallback safely
+      setApiThreads([])
     }
   }, [user])
 
@@ -120,11 +126,11 @@ export function MessagesPage() {
     loadCustomerThreads()
   }, [loadCustomerThreads])
 
-  // Determine active conversation list: prefer real backend booking threads if present
+  // Determine active conversation list: authenticated user uses apiThreads directly
   const mine = useMemo(() => {
-    if (apiThreads.length > 0) return apiThreads
+    if (user) return apiThreads
     return (localConversations || []).filter((c) => c.audience?.includes('customer'))
-  }, [apiThreads, localConversations])
+  }, [user, apiThreads, localConversations])
 
   const sorted = useMemo(() => {
     return [...mine].sort((a, b) => {

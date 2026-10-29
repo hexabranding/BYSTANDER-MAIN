@@ -51,7 +51,7 @@ export function MessagesPage() {
     if (!user) return
     try {
       const [bookingsRes, unreadRes] = await Promise.all([
-        bookingService.getBookings({ limit: 50 }),
+        bookingService.getBookings({ assignedOnly: true, limit: 50 }),
         messageService.getUnreadCounts().catch(() => ({ totalUnread: 0, unreadByBooking: [] })),
       ])
 
@@ -63,7 +63,18 @@ export function MessagesPage() {
       }
       setUnreadMap(unreadMapping)
 
-      const realThreads = (bookingsRes.bookings || []).map((b) => {
+      // Only include bookings where customer and caretaker are actively connected
+      const currentUserId = String(user?._id || user?.id || '')
+      const connectedBookings = (bookingsRes.bookings || []).filter((b) => {
+        const cgUserId = String(b.caregiverUser?._id || b.caregiverUser?.id || b.caregiverUser || '')
+        const cgId = String(b.caregiver?._id || b.caregiver?.id || b.caregiver || '')
+        const isAssigned =
+          (cgUserId && cgUserId === currentUserId) ||
+          (cgId && (cgId === currentUserId || cgId === user?.caregiverId))
+        return Boolean(isAssigned) && b.status !== 'Cancelled'
+      })
+
+      const realThreads = connectedBookings.map((b) => {
         const canSend = b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress'
 
         // 1. Resolve authoritative customer name
@@ -103,11 +114,9 @@ export function MessagesPage() {
         }
       })
 
-      if (realThreads.length > 0) {
-        setApiThreads(realThreads)
-      }
+      setApiThreads(realThreads)
     } catch {
-      // Fallback safely for demo mode
+      setApiThreads([])
     }
   }, [user])
 
@@ -115,11 +124,11 @@ export function MessagesPage() {
     loadCaregiverThreads()
   }, [loadCaregiverThreads])
 
-  // Determine conversation list
+  // Determine conversation list: authenticated user always uses apiThreads
   const caregiverConversations = useMemo(() => {
-    if (apiThreads.length > 0) return apiThreads
+    if (user) return apiThreads
     return (localConversations || []).filter((c) => c.audience?.includes('caregiver'))
-  }, [apiThreads, localConversations])
+  }, [user, apiThreads, localConversations])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -337,10 +346,10 @@ export function MessagesPage() {
           <EmptyState
             icon={MessageSquare}
             title="No conversations yet"
-            description="Once you are assigned a booking, the customer thread appears here."
+            description="Chat opens once you and a customer are connected through an accepted booking."
             action={
               <Button variant="primary" to="/caregiver/jobs">
-                Browse jobs
+                Browse available jobs
               </Button>
             }
           />

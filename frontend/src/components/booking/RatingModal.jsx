@@ -6,44 +6,12 @@ import { FormField, Textarea } from '@/components/forms/FormField'
 import { cn } from '@/utils/cn'
 
 export const DEFAULT_CRITERIA = [
-  { key: 'serviceQuality', label: 'Service quality' },
-  { key: 'behaviour', label: 'Behaviour' },
-  { key: 'punctuality', label: 'Punctuality' },
   { key: 'overall', label: 'Overall experience' },
 ]
 
 export const CUSTOMER_CRITERIA = [
-  { key: 'cooperation', label: 'Cooperation & Respect' },
-  { key: 'clarity', label: 'Clarity of instructions' },
-  { key: 'punctuality', label: 'Handover & Schedule punctuality' },
   { key: 'overall', label: 'Overall experience' },
 ]
-
-function StarRow({ value, onChange, label }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-sm font-medium text-ink-soft">{label}</span>
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            aria-label={`${label}: ${n} star${n > 1 ? 's' : ''}`}
-            onClick={() => onChange(n)}
-            className="rounded p-0.5 transition hover:scale-110"
-          >
-            <Star
-              className={cn(
-                'h-5 w-5 transition',
-                n <= value ? 'fill-amber-400 text-amber-400' : 'text-line-strong',
-              )}
-            />
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 export function RatingModal({
   open,
@@ -54,65 +22,63 @@ export function RatingModal({
   criteria = DEFAULT_CRITERIA,
   mandatory = false,
 }) {
-  const initial = () => criteria.reduce((acc, c) => ({ ...acc, [c.key]: 5 }), { comment: '' })
-  const [form, setForm] = useState(initial)
-  const [error, setError] = useState('')
+  const [rating, setRating] = useState(5)
+  const [comment, setComment] = useState('')
 
   useEffect(() => {
     if (open) {
-      setForm(initial())
-      setError('')
+      setRating(5)
+      setComment('')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }))
-
-  const scores = criteria.map((c) => form[c.key] || 0)
-  const allRated = scores.every((s) => s >= 1)
-  const average = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '0.0'
-
   const submit = () => {
-    if (!allRated) {
-      setError('Please tap a star for every criterion (*).')
-      return
-    }
-    if (mandatory && !form.comment.trim()) {
-      setError('Review comment is mandatory (*).')
-      return
-    }
     onSubmit?.({
-      criteria: criteria.reduce((acc, c) => ({ ...acc, [c.key]: form[c.key] }), {}),
-      average: Number(average),
-      comment: form.comment.trim(),
+      rating: Number(rating),
+      average: Number(rating),
+      criteria: { overall: Number(rating) },
+      comment: comment.trim(),
     })
     onClose?.()
+  }
+
+  const getRatingLabel = (val) => {
+    switch (val) {
+      case 5:
+        return '5.0 · Excellent'
+      case 4:
+        return '4.0 · Good'
+      case 3:
+        return '3.0 · Average'
+      case 2:
+        return '2.0 · Poor'
+      case 1:
+        return '1.0 · Very Poor'
+      default:
+        return `${val}.0`
+    }
   }
 
   return (
     <Modal
       open={open}
-      onClose={() => {
-        if (!mandatory) onClose?.()
-      }}
-      hideClose={mandatory}
+      onClose={onClose}
+      hideClose={false}
       title={title}
-      subtitle={subjectName ? `Your feedback helps ${subjectName} and keeps CareMate trustworthy.` : 'Your feedback keeps CareMate trustworthy.'}
+      subtitle={
+        subjectName
+          ? `Your feedback helps ${subjectName} and keeps CareMate trustworthy.`
+          : 'Your feedback keeps CareMate trustworthy.'
+      }
+      size="sm"
       footer={
-        <div className="flex w-full items-center justify-between gap-3">
-          <span className="text-sm text-muted">
-            Average <span className="font-bold text-ink">{average}</span> / 5
-          </span>
-          <div className="flex gap-2">
-            {!mandatory ? (
-              <Button variant="ghost" onClick={onClose}>
-                Later
-              </Button>
-            ) : null}
-            <Button type="submit" form="rating-modal-form" disabled={!allRated || (mandatory && !form.comment.trim())}>
-              Submit review
-            </Button>
-          </div>
+        <div className="flex w-full items-center justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Later
+          </Button>
+          <Button type="submit" form="rating-modal-form" icon={Star}>
+            Submit review
+          </Button>
         </div>
       }
     >
@@ -124,40 +90,43 @@ export function RatingModal({
         }}
         className="space-y-4"
       >
-
-        <div className="space-y-3">
-          {criteria.map((c) => (
-            <StarRow
-              key={c.key}
-              label={
-                <span>
-                  {c.label} {mandatory ? <span className="text-danger-500 font-bold">*</span> : null}
-                </span>
-              }
-              value={form[c.key] || 0}
-              onChange={(v) => set(c.key, v)}
-            />
-          ))}
+        <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-gradient-to-b from-slate-50/80 to-white py-5 px-4 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Tap to rate</p>
+          <div className="flex items-center gap-2">
+            {[1, 2, 3, 4, 5].map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setRating(v)}
+                aria-label={`Rate ${v} star${v > 1 ? 's' : ''}`}
+                className="p-1 transition hover:scale-125 focus:outline-none cursor-pointer"
+              >
+                <Star
+                  className={cn(
+                    'h-9 w-9 transition-colors',
+                    v <= rating
+                      ? 'fill-amber-400 text-amber-400 drop-shadow-sm'
+                      : 'text-slate-200 hover:text-slate-300',
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+          <p className="text-sm font-bold text-ink">{getRatingLabel(rating)}</p>
         </div>
-        <FormField
-          label={
-            <span>
-              {mandatory ? 'Review feedback' : 'Comments'} {mandatory ? <span className="text-danger-500 font-bold">*</span> : '(optional)'}
-            </span>
-          }
-        >
+
+        <FormField label="Comments (optional)">
           <Textarea
             rows={3}
-            required={mandatory}
-            value={form.comment}
-            onChange={(e) => set('comment', e.target.value)}
-            placeholder={mandatory ? 'Share your experience (mandatory *)...' : 'Share what went well, or what we should improve…'}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Share what went well, or what we should improve…"
           />
         </FormField>
-        {error ? <p className="text-xs font-semibold text-danger-600">{error}</p> : null}
       </form>
     </Modal>
   )
 }
 
 export default RatingModal
+

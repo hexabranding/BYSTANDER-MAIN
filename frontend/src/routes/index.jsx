@@ -11,7 +11,6 @@ import { HomePage } from '@/pages/public/HomePage'
 import { ServicesPage } from '@/pages/public/ServicesPage'
 import { BookCaregiverPage as PublicBookCaregiverPage } from '@/pages/public/BookCaregiverPage'
 import { CaregiversPage } from '@/pages/public/CaregiversPage'
-import { CaregiverDetailsPage } from '@/pages/public/CaregiverDetailsPage'
 import { AboutPage } from '@/pages/public/AboutPage'
 import { ContactPage } from '@/pages/public/ContactPage'
 import { LegalPage } from '@/pages/public/LegalPage'
@@ -80,7 +79,7 @@ export function AppRoutes() {
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/book-caregiver" element={<PublicBookCaregiverPage />} />
         <Route path="/caregivers" element={<CaregiversPage />} />
-        <Route path="/caregivers/:id" element={<CaregiverDetailsPage />} />
+        <Route path="/caregivers/:id" element={<Navigate to="/caregivers" replace />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/legal/:doc" element={<LegalPage />} />

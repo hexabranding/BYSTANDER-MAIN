@@ -44,6 +44,7 @@ import { BookingTimeline, PriceBreakdown } from '@/components/common/TimelinePri
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Modal } from '@/components/common/Modal'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
+import { CaregiverProfileModal } from '@/components/caregiver/CaregiverProfileModal'
 import {
   bookingService,
   complaintService,
@@ -157,30 +158,33 @@ export function BookingDetailsPage() {
   const caregiver = useMemo(() => {
     if (!booking) return null
     if (booking.caregiver && typeof booking.caregiver === 'object') {
-      const cg = booking.caregiver
       return {
-        id: booking.caregiverId,
-        name: booking.caregiverName,
-        qualification: cg.qualification || 'Certified Caregiver',
-        photo: cg.avatar || cg.photo || '',
-        rating: cg.rating?.average || cg.rating || 4.8,
-        experienceYears: cg.experienceYears || cg.experience || 2,
-        trustScore: cg.trustScore || 95,
-        responseRate: cg.responseRate || 98,
+        id: booking.caregiverId || booking.caregiver._id || booking.caregiver.id,
+        caregiverId: booking.caregiverId || booking.caregiver._id || booking.caregiver.id,
+        name: booking.caregiverName || booking.caregiver.name,
+        qualification: booking.caregiver.qualification || 'Caregiver',
+        photo: booking.caregiver.avatar || booking.caregiver.photo || '',
+        rating: booking.caregiver.rating || 4.8,
+        reviewCount: booking.caregiver.reviewCount || 12,
+        experienceYears: booking.caregiver.experienceYears ?? 4,
+        trustScore: booking.caregiver.trustScore ?? 98,
+        responseRate: booking.caregiver.responseRate ?? 95,
       }
     }
-    const mock = caregivers.find((c) => c.id === booking.caregiverId)
-    if (mock) {
+    const found = caregivers.find((c) => c.id === booking.caregiverId)
+    if (found) {
       return {
-        ...mock,
-        experienceYears: mock.experienceYears || 2,
-        trustScore: mock.trustScore || 95,
-        responseRate: mock.responseRate || 98,
+        ...found,
+        caregiverId: found.id,
+        experienceYears: found.experienceYears ?? 4,
+        trustScore: found.trustScore ?? 98,
+        responseRate: found.responseRate ?? 95,
       }
     }
     return null
   }, [booking, caregivers])
 
+  const [profileCaregiver, setProfileCaregiver] = useState(null)
   const [selectedApplicant, setSelectedApplicant] = useState(null)
   const [selectingApplicant, setSelectingApplicant] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
@@ -872,14 +876,24 @@ export function BookingDetailsPage() {
                               Est. total: {formatCurrency(applicant.totalAmount)}
                             </p>
                           </div>
-                          <Button
-                            variant="primary"
-                            icon={CheckCircle2}
-                            size="sm"
-                            onClick={() => setSelectedApplicant(applicant)}
-                          >
-                            Choose Caretaker
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setProfileCaregiver(applicant)}
+                            >
+                              View profile
+                            </Button>
+                            <Button
+                              variant="primary"
+                              icon={CheckCircle2}
+                              size="sm"
+                              onClick={() => setSelectedApplicant(applicant)}
+                            >
+                              Choose Caretaker
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1189,6 +1203,15 @@ export function BookingDetailsPage() {
                     <MiniStat label="Trust score" value={`${caregiver.trustScore}%`} />
                     <MiniStat label="Response rate" value={`${caregiver.responseRate}%`} />
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setProfileCaregiver(caregiver)}
+                  >
+                    View profile
+                  </Button>
                 </>
               ) : booking.applicants && booking.applicants.length > 0 ? (
                 <div className="rounded-xl border border-primary-200 bg-mint-50/60 p-4 text-center">
@@ -1609,6 +1632,44 @@ export function BookingDetailsPage() {
           </FormField>
         </form>
       </Modal>
+
+      {/* Caretaker Profile Modal */}
+      <CaregiverProfileModal
+        open={Boolean(profileCaregiver)}
+        onClose={() => setProfileCaregiver(null)}
+        offer={
+          profileCaregiver
+            ? {
+                applicant: {
+                  ...profileCaregiver,
+                  id: profileCaregiver.id || profileCaregiver.caregiverId || booking?.caregiverId,
+                  caregiverId: profileCaregiver.caregiverId || profileCaregiver.id || booking?.caregiverId,
+                  name: profileCaregiver.name || booking?.caregiverName,
+                  photo: profileCaregiver.photo || profileCaregiver.avatar,
+                  qualification: profileCaregiver.qualification,
+                  hourlyRate: profileCaregiver.hourlyRate || booking?.hourlyRate,
+                  rating: profileCaregiver.rating,
+                  experienceYears: profileCaregiver.experienceYears,
+                  trustScore: profileCaregiver.trustScore,
+                  responseRate: profileCaregiver.responseRate,
+                  city: profileCaregiver.city || booking?.city,
+                  area: profileCaregiver.area || booking?.area,
+                },
+                booking,
+                shiftTotal: profileCaregiver.totalAmount || booking?.total,
+                hours: booking?.hours,
+              }
+            : null
+        }
+        onChoose={
+          !booking?.caregiverId && profileCaregiver
+            ? (offer) => {
+                setProfileCaregiver(null)
+                setSelectedApplicant(offer.applicant)
+              }
+            : undefined
+        }
+      />
     </div>
   )
 }

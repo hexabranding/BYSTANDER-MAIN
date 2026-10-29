@@ -641,6 +641,9 @@ export const adaptBooking = (raw) => {
     timeline: Array.isArray(raw.timeline) && raw.timeline.length > 0
       ? raw.timeline
       : buildBookingTimeline(raw, normalizedStatus),
+    declinedByCaregivers: Array.isArray(raw.declinedByCaregivers) ? raw.declinedByCaregivers : [],
+    isDeclinedByMe: Boolean(raw.isDeclinedByMe),
+    rejectedByMe: Boolean(raw.rejectedByMe),
     caregiverRating: raw.caregiverRating || null,
     customerRating: raw.customerRating || null,
   }
@@ -1462,24 +1465,39 @@ export const adaptCommission = (raw) => {
 /**
  * Adapts a backend Booking document (or adapted booking) to the Caregiver Job representation.
  * @param {Object} raw - Booking record
+ * @param {string} [currentUserId] - Logged in caregiver user ID
  * @returns {Object} Job representation
  */
-export const adaptBookingToJob = (raw) => {
+export const adaptBookingToJob = (raw, currentUserId) => {
   if (!raw || typeof raw !== 'object') return raw
 
   const b = adaptBooking(raw)
   const id = String(b.id || b._id || '')
   const displayId = b.ref || (isMongoObjectId(id) ? `JOB-${id.slice(-4).toUpperCase()}` : id)
 
-  // Status mapping: Pending -> Open, Confirmed/InProgress/Completed -> Accepted, Rejected/Cancelled -> Declined
+  // Determine if this job was declined by the current caregiver
+  const rawDeclined = raw.declinedByCaregivers || b.declinedByCaregivers || []
+  const declinedList = Array.isArray(rawDeclined)
+    ? rawDeclined.map((d) => String(d?._id || d || ''))
+    : []
+
+  const isDeclinedByMe = Boolean(
+    raw.isDeclinedByMe ||
+    b.isDeclinedByMe ||
+    raw.rejectedByMe ||
+    b.rejectedByMe ||
+    (currentUserId && declinedList.includes(String(currentUserId)))
+  )
+
+  // Status mapping: Pending -> Open, Confirmed/InProgress/Completed -> Accepted, Rejected/Cancelled/Declined -> Declined
   let status = 'Open'
   const normStatus = (b.status || '').toLowerCase()
-  if (normStatus === 'pending') {
+  if (isDeclinedByMe || ['rejected', 'cancelled', 'canceled'].includes(normStatus)) {
+    status = 'Declined'
+  } else if (normStatus === 'pending') {
     status = 'Open'
   } else if (['confirmed', 'in progress', 'completed', 'in_progress'].includes(normStatus)) {
     status = 'Accepted'
-  } else if (['rejected', 'cancelled', 'canceled'].includes(normStatus)) {
-    status = 'Declined'
   }
 
   // Derive human-friendly shift string
@@ -1550,6 +1568,9 @@ export const adaptBookingToJob = (raw) => {
     applicants: b.applicants || [],
     postedAt: b.postedAt || b.createdAt || new Date().toISOString(),
     status,
+    isDeclined: isDeclinedByMe,
+    isDeclinedByMe,
+    declinedByCaregivers: declinedList,
     rawBooking: b,
   }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Briefcase, CalendarDays, Clock, MapPin, User, RotateCw, Zap } from 'lucide-react'
+import { Briefcase, CalendarDays, Clock, MapPin, User, RotateCw, Zap, X, Trash2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -32,8 +32,29 @@ export function JobsPage() {
   const { caregivers, acceptJob, rejectJob } = useData()
 
   const myId = user?.caregiverId || 'cg-101'
+  const myUserId = String(user?._id || user?.id || '')
   const caregiver = caregivers?.find((c) => c.id === myId) || caregivers?.[0]
   const caregiverGender = user?.gender || caregiver?.gender || 'Female'
+
+  const storageKey = myUserId ? `bystander.dismissed_declined_${myUserId}` : 'bystander.dismissed_declined'
+  const [dismissedJobIds, setDismissedJobIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
+  // Sync dismissed ids if user changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      setDismissedJobIds(saved ? JSON.parse(saved) : [])
+    } catch {
+      setDismissedJobIds([])
+    }
+  }, [storageKey])
 
   const [realBookings, setRealBookings] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -106,7 +127,8 @@ export function JobsPage() {
   const myJobs = useMemo(() => {
     if (!realBookings) return []
     return realBookings
-      .map(adaptBookingToJob)
+      .map((b) => adaptBookingToJob(b, myUserId))
+      .filter((job) => !dismissedJobIds.includes(String(job.id)))
       .filter((job) => {
         // Confirmed / Declined / History jobs should remain visible in their tabs
         if (job.status !== 'Open') return true
@@ -115,7 +137,52 @@ export function JobsPage() {
         if (!caregiverGender) return true
         return caregiverGender.toLowerCase() === pref.toLowerCase()
       })
-  }, [realBookings, caregiverGender])
+  }, [realBookings, myUserId, dismissedJobIds, caregiverGender])
+
+  const handleDismissJob = useCallback((jobId) => {
+    if (!jobId) return
+    const idStr = String(jobId)
+    setDismissedJobIds((prev) => {
+      const next = Array.from(new Set([...prev, idStr]))
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next))
+      } catch (e) {
+        console.error('Failed to save dismissed job:', e)
+      }
+      return next
+    })
+    toast.success('Job removed from declined list', {
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          setDismissedJobIds((prev) => {
+            const next = prev.filter((id) => id !== idStr)
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(next))
+            } catch (e) {}
+            return next
+          })
+          toast.info('Job restored to declined list')
+        },
+      },
+    })
+  }, [storageKey])
+
+  const handleClearAllDeclined = useCallback(() => {
+    const declinedIds = (myJobs || [])
+      .filter((j) => j.status === 'Declined')
+      .map((j) => String(j.id))
+    if (!declinedIds.length) return
+
+    setDismissedJobIds((prev) => {
+      const next = Array.from(new Set([...prev, ...declinedIds]))
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next))
+      } catch (e) {}
+      return next
+    })
+    toast.success('All declined jobs removed')
+  }, [myJobs, storageKey])
 
   const counts = useMemo(
     () => ({
@@ -208,10 +275,21 @@ export function JobsPage() {
           rejectJob(job.id)
         }
         setRealBookings((prev) =>
-          (prev || []).map((b) => (b.id === job.id ? { ...b, status: 'Rejected', rawStatus: 'rejected' } : b)),
+          (prev || []).map((b) => {
+            const matches = String(b._id || b.id) === String(job.id)
+            if (!matches) return b
+            const prevDeclined = Array.isArray(b.declinedByCaregivers) ? b.declinedByCaregivers : []
+            return {
+              ...b,
+              status: 'Rejected',
+              rawStatus: 'rejected',
+              isDeclinedByMe: true,
+              declinedByCaregivers: [...prevDeclined, myUserId],
+            }
+          }),
         )
         toast.info('Job declined', {
-          description: `${job.service} has been declined.`,
+          description: `${job.service} has been moved to Declined tab.`,
         })
       }
       setDialog(null)
@@ -280,7 +358,21 @@ export function JobsPage() {
         </div>
       </div>
 
-      {activeFilters > 0 ? (
+      {tab === 'declined' && filtered.length > 0 ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+          <p className="text-sm text-slate-700">
+            {filtered.length} declined job{filtered.length > 1 ? 's' : ''}. Click ✕ on any card to remove it from this list.
+          </p>
+          <button
+            type="button"
+            onClick={handleClearAllDeclined}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-600 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Clear all declined
+          </button>
+        </div>
+      ) : activeFilters > 0 ? (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-primary-200 bg-mint-50 px-4 py-2.5">
           <p className="text-sm text-primary-900">
             {activeFilters} filter{activeFilters > 1 ? 's' : ''} applied
@@ -425,7 +517,23 @@ export function JobsPage() {
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="font-display text-lg font-extrabold tabular-nums text-ink">{formatCurrency(job.payment)}</p>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <p className="font-display text-lg font-extrabold tabular-nums text-ink">{formatCurrency(job.payment)}</p>
+                        {job.status === 'Declined' ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDismissJob(job.id)
+                            }}
+                            title="Remove from declined list"
+                            aria-label="Remove from declined list"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 shadow-xs transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                      </div>
                       <p className="text-[11px] uppercase tracking-wide text-faint">
                         {formatDuration(job.hours, { short: true })} · net {formatCurrency(job.payment - Math.round(job.payment * PLATFORM_COMMISSION))}
                       </p>
@@ -506,6 +614,17 @@ export function JobsPage() {
                         View booking
                       </Button>
                     ) : null}
+                    {job.status === 'Declined' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={X}
+                        onClick={() => handleDismissJob(job.id)}
+                        className="text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                      >
+                        Remove from list
+                      </Button>
+                    ) : null}
                   </div>
                 </CardFooter>
               </Card>
@@ -520,7 +639,9 @@ export function JobsPage() {
             description={
               tab === 'open'
                 ? 'New broadcast requests will appear here in real time. When a customer submits a booking, it will show up for instant claim.'
-                : 'Try a different tab or adjust your search and filters.'
+                : tab === 'declined'
+                  ? 'You have no declined jobs. When you decline a booking request, it will appear here.'
+                  : 'Try a different tab or adjust your search and filters.'
             }
             action={
               activeFilters > 0 || query ? (

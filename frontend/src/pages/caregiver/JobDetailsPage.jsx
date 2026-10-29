@@ -66,10 +66,12 @@ export function JobDetailsPage() {
     fetchRealBooking()
   }, [fetchRealBooking])
 
+  const myUserId = String(user?._id || user?.id || '')
+
   const job = useMemo(() => {
-    if (realBooking) return adaptBookingToJob(realBooking)
+    if (realBooking) return adaptBookingToJob(realBooking, myUserId)
     return jobs?.find((j) => j.id === id || j.bookingId === id)
-  }, [realBooking, jobs, id])
+  }, [realBooking, jobs, id, myUserId])
 
   const booking = useMemo(() => {
     if (realBooking) return realBooking

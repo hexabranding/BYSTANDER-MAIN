@@ -483,10 +483,20 @@ export const getBookings = async (user, query = {}) => {
       preferredGender: { $in: genderMatch },
     };
 
+    const declinedBroadcastQuery = {
+      caregiver: null,
+      declinedByCaregivers: user._id,
+    };
+
     if (status === 'pending') {
       filter.$or = [
         { caregiverUser: user._id, status: 'pending' },
         openBroadcastQuery,
+      ];
+    } else if (status === 'rejected' || status === 'declined') {
+      filter.$or = [
+        { caregiverUser: user._id, status: 'rejected' },
+        declinedBroadcastQuery,
       ];
     } else if (status) {
       filter.caregiverUser = user._id;
@@ -495,6 +505,7 @@ export const getBookings = async (user, query = {}) => {
       filter.$or = [
         { caregiverUser: user._id },
         openBroadcastQuery,
+        declinedBroadcastQuery,
       ];
     }
   } else if (user.role === 'admin') {
@@ -600,10 +611,14 @@ export const getBookingById = async (user, bookingId) => {
         return uId && uId.toString() === user._id.toString();
       }),
   );
+  const isDeclinedCaregiver = Boolean(
+    booking.declinedByCaregivers &&
+      booking.declinedByCaregivers.some((d) => (d?._id || d).toString() === user._id.toString()),
+  );
   const isBroadcastOpen = !booking.caregiver && booking.status === 'pending' && user.role === 'caregiver';
   const isAdmin = user.role === 'admin';
 
-  if (!isCustomer && !isAssignedCaregiver && !isApplicant && !isBroadcastOpen && !isAdmin) {
+  if (!isCustomer && !isAssignedCaregiver && !isApplicant && !isBroadcastOpen && !isDeclinedCaregiver && !isAdmin) {
     const err = new Error('You are not authorized to view this booking record');
     err.statusCode = 403;
     err.name = 'ForbiddenError';

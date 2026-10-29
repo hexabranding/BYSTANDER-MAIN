@@ -411,7 +411,7 @@ export function HomePage() {
               transition={{ duration: 0.45, delay: (i % 3) * 0.07 }}
               className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950 p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/60 hover:shadow-raised"
             >
-              {/* Background Image Layer: black shade overlay with crisp white text */}
+              {/* Background Image Layer: lighter black shade overlay so photos shine through clearly */}
               {svc.image ? (
                 <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
                   <img
@@ -419,7 +419,7 @@ export function HomePage() {
                     alt={svc.name}
                     className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/75 to-black/40" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-black/10" />
                 </div>
               ) : null}
 
@@ -430,25 +430,25 @@ export function HomePage() {
 
               <div className="relative z-10 flex flex-1 flex-col">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="grid h-12 w-12 place-items-center rounded-xl bg-white/15 text-white shadow-md ring-1 ring-white/20 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-emerald-500/80">
+                  <span className="grid h-12 w-12 place-items-center rounded-xl bg-black/30 text-white shadow-md ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-emerald-500/90">
                     <svc.icon className="h-6 w-6" />
                   </span>
                   {svc.popular ? (
-                    <span className="rounded-full bg-emerald-500/90 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm ring-1 ring-emerald-300/40 backdrop-blur-md">
+                    <span className="rounded-full bg-emerald-500/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-md ring-1 ring-emerald-300/40 backdrop-blur-md">
                       Most booked
                     </span>
                   ) : null}
                 </div>
 
-                <h3 className="mt-4 font-display text-lg font-bold text-white transition-colors group-hover:text-emerald-300">
+                <h3 className="mt-4 font-display text-lg font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-colors group-hover:text-emerald-300">
                   {svc.name}
                 </h3>
-                <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-200 font-medium">{svc.short}</p>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-100 font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{svc.short}</p>
 
                 <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/20 pt-4">
                   <div>
-                    <p className="font-display text-lg font-extrabold text-white">{formatCurrency(svc.startingPrice)}</p>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-300 font-medium">per {svc.unit}</p>
+                    <p className="font-display text-lg font-extrabold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">{formatCurrency(svc.startingPrice)}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-200 font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">per {svc.unit}</p>
                   </div>
                   <Button
                     to={`/book-caregiver?service=${svc.id}`}

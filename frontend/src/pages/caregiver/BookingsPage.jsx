@@ -55,7 +55,7 @@ export function BookingsPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await bookingService.getBookings()
+      const res = await bookingService.getBookings({ assignedOnly: true, limit: 100 })
       setRealBookings(res.bookings || [])
     } catch (err) {
       setError(err.message || 'Unable to load caregiver bookings')
@@ -70,8 +70,25 @@ export function BookingsPage() {
   }, [fetchBookings])
 
   const myBookings = useMemo(() => {
-    return realBookings || []
-  }, [realBookings])
+    if (!realBookings) return []
+    const myUserId = String(user?._id || user?.id || '')
+    const myCaregiverId = String(user?.caregiverId || '')
+
+    return realBookings.filter((b) => {
+      // Must have an assigned caregiver and match the logged-in caretaker
+      const cgUserId = String(
+        b.caregiverUser?._id || b.caregiverUser?.id || b.caregiverUser || b.rawBooking?.caregiverUser || ''
+      )
+      const cgId = String(
+        b.caregiver?._id || b.caregiver?.id || b.caregiver || b.caregiverId || b.rawBooking?.caregiver || ''
+      )
+      const hasCaregiver = Boolean(cgUserId || cgId)
+      if (!hasCaregiver) return false
+
+      const isAssigned = Boolean((myUserId && cgUserId === myUserId) || (myCaregiverId && cgId === myCaregiverId))
+      return isAssigned
+    })
+  }, [realBookings, user])
 
   const counts = useMemo(() => {
     const c = { all: myBookings.length }
@@ -211,7 +228,17 @@ export function BookingsPage() {
         </button>
       ),
     },
-    { key: 'customer', header: 'Customer', sortKey: 'customerId', render: (row) => getCustomerById(row.customerId)?.name || '—' },
+    {
+      key: 'customer',
+      header: 'Customer',
+      sortKey: 'customerId',
+      render: (row) =>
+        row.customerName ||
+        row.customer?.fullName ||
+        row.customer?.name ||
+        getCustomerById(row.customerId)?.name ||
+        'Customer',
+    },
     { key: 'patient', header: 'Patient', sortable: false, render: (row) => row.patient?.name || '—' },
     { key: 'service', header: 'Service' },
     {

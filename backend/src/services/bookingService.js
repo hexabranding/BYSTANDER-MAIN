@@ -466,47 +466,60 @@ export const getBookings = async (user, query = {}) => {
   if (user.role === 'customer') {
     filter.customer = user._id;
   } else if (user.role === 'caregiver') {
-    // Caregivers see bookings assigned to them OR open broadcast requests available for claiming (excluding ones they declined)
-    const caregiverProfile = await CaregiverProfile.findOne({ user: user._id }).select('gender');
-    const caregiverGender = caregiverProfile?.gender || user.gender;
+    const isAssignedOnly =
+      query.assignedOnly === true ||
+      query.assignedOnly === 'true' ||
+      query.scope === 'assigned' ||
+      query.scope === 'bookings';
 
-    let genderMatch = ['Any', null];
-    if (caregiverGender) {
-      const formatted = caregiverGender.charAt(0).toUpperCase() + caregiverGender.slice(1).toLowerCase();
-      genderMatch = ['Any', formatted, caregiverGender.toLowerCase(), null];
-    }
-
-    const openBroadcastQuery = {
-      caregiver: null,
-      status: 'pending',
-      declinedByCaregivers: { $ne: user._id },
-      preferredGender: { $in: genderMatch },
-    };
-
-    const declinedBroadcastQuery = {
-      caregiver: null,
-      declinedByCaregivers: user._id,
-    };
-
-    if (status === 'pending') {
-      filter.$or = [
-        { caregiverUser: user._id, status: 'pending' },
-        openBroadcastQuery,
-      ];
-    } else if (status === 'rejected' || status === 'declined') {
-      filter.$or = [
-        { caregiverUser: user._id, status: 'rejected' },
-        declinedBroadcastQuery,
-      ];
-    } else if (status) {
+    if (isAssignedOnly) {
       filter.caregiverUser = user._id;
-      filter.status = status;
+      if (status && status !== 'all') {
+        filter.status = status;
+      }
     } else {
-      filter.$or = [
-        { caregiverUser: user._id },
-        openBroadcastQuery,
-        declinedBroadcastQuery,
-      ];
+      // Caregivers see bookings assigned to them OR open broadcast requests available for claiming (excluding ones they declined)
+      const caregiverProfile = await CaregiverProfile.findOne({ user: user._id }).select('gender');
+      const caregiverGender = caregiverProfile?.gender || user.gender;
+
+      let genderMatch = ['Any', null];
+      if (caregiverGender) {
+        const formatted = caregiverGender.charAt(0).toUpperCase() + caregiverGender.slice(1).toLowerCase();
+        genderMatch = ['Any', formatted, caregiverGender.toLowerCase(), null];
+      }
+
+      const openBroadcastQuery = {
+        caregiver: null,
+        status: 'pending',
+        declinedByCaregivers: { $ne: user._id },
+        preferredGender: { $in: genderMatch },
+      };
+
+      const declinedBroadcastQuery = {
+        caregiver: null,
+        declinedByCaregivers: user._id,
+      };
+
+      if (status === 'pending') {
+        filter.$or = [
+          { caregiverUser: user._id, status: 'pending' },
+          openBroadcastQuery,
+        ];
+      } else if (status === 'rejected' || status === 'declined') {
+        filter.$or = [
+          { caregiverUser: user._id, status: 'rejected' },
+          declinedBroadcastQuery,
+        ];
+      } else if (status) {
+        filter.caregiverUser = user._id;
+        filter.status = status;
+      } else {
+        filter.$or = [
+          { caregiverUser: user._id },
+          openBroadcastQuery,
+          declinedBroadcastQuery,
+        ];
+      }
     }
   } else if (user.role === 'admin') {
     if (query.customerId && mongoose.Types.ObjectId.isValid(query.customerId)) {

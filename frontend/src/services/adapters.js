@@ -566,6 +566,7 @@ export const adaptBooking = (raw) => {
     hours,
     hourlyRate: rate,
     subtotal,
+    commission: Number(raw.commission ?? Math.round(subtotal * 0.12)),
     platformFee,
     tax,
     total,

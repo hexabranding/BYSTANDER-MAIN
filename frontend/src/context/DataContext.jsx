@@ -13,11 +13,11 @@ import { bookingRef, uid } from '@/utils/format'
 const DataContext = createContext(null)
 
 const seed = () => ({
-  bookings: BOOKINGS,
+  bookings: [],
   caregivers: CAREGIVERS,
   customers: CUSTOMERS,
   verifications: VERIFICATIONS,
-  jobs: AVAILABLE_JOBS,
+  jobs: [],
   complaints: COMPLAINTS,
   sos: SOS_ALERTS,
   notifications: NOTIFICATIONS,

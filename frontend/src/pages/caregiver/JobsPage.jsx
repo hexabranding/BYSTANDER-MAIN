@@ -73,7 +73,9 @@ export function JobsPage() {
     setError(null)
     try {
       const res = await bookingService.getBookings({ limit: 50 })
-      setRealBookings(res.bookings || [])
+      const bookings = res.bookings || []
+      setRealBookings(bookings)
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
     } catch (err) {
       setError(err.message || 'Unable to load jobs')
       setRealBookings([])
@@ -149,6 +151,7 @@ export function JobsPage() {
       } catch (e) {
         console.error('Failed to save dismissed job:', e)
       }
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
       return next
     })
     toast.success('Job removed from declined list', {
@@ -160,6 +163,7 @@ export function JobsPage() {
             try {
               localStorage.setItem(storageKey, JSON.stringify(next))
             } catch (e) {}
+            window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
             return next
           })
           toast.info('Job restored to declined list')
@@ -179,6 +183,7 @@ export function JobsPage() {
       try {
         localStorage.setItem(storageKey, JSON.stringify(next))
       } catch (e) {}
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
       return next
     })
     toast.success('All declined jobs removed')
@@ -293,6 +298,7 @@ export function JobsPage() {
         })
       }
       setDialog(null)
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
       fetchJobs(false)
     } catch (err) {
       toast.error(type === 'accept' ? 'Failed to accept job' : 'Failed to decline job', {

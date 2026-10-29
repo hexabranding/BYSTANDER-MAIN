@@ -220,6 +220,7 @@ export function DashboardPage() {
       toast.success('Job accepted — added to your schedule')
       setAcceptTarget(null)
       loadDashboard()
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
     } catch (err) {
       toast.error('Failed to accept job', { description: err?.message || 'Please try again.' })
     }
@@ -239,6 +240,7 @@ export function DashboardPage() {
       }
       setRequestTarget(null)
       loadDashboard()
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
     } catch (err) {
       toast.error('Action failed', { description: err?.message || 'Could not update booking' })
     }

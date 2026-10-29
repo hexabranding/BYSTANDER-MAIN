@@ -169,6 +169,7 @@ export function JobDetailsPage() {
           description: `${job.service} has been declined.`,
         })
       }
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
     } catch (err) {
       toast.error(dialog === 'accept' ? 'Failed to accept job' : 'Failed to decline job', {
         description: err.message || 'Server rejected the request.',

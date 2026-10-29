@@ -177,6 +177,7 @@ export function BookingDetailsPage() {
   const [payMethod, setPayMethod] = useState('upi')
   const [paying, setPaying] = useState(false)
   const [rateOpen, setRateOpen] = useState(false)
+  const [isMandatoryReview, setIsMandatoryReview] = useState(false)
   const [rateForm, setRateForm] = useState({ serviceQuality: 5, behaviour: 5, punctuality: 5, overall: 5, comment: '' })
   const [settleOpen, setSettleOpen] = useState(false)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
@@ -307,16 +308,30 @@ export function BookingDetailsPage() {
       ? { name: user.name, email: user.email, phone: user.phone, address: user.address, city: user.city }
       : null)
 
+  const isPaid = ['paid', 'released', 'settled'].includes(String(booking.paymentStatus || '').toLowerCase())
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed'
   const canPay =
     ['Pending', 'Unpaid'].includes(booking.paymentStatus) ||
     booking.isPaymentDue ||
-    (booking.status === 'Completed' && !['Paid', 'Refunded'].includes(booking.paymentStatus))
+    (booking.status === 'Completed' && !isPaid && booking.paymentStatus !== 'Refunded')
   const canSettle = booking.status === 'Completed' && booking.paymentStatus === 'Escrow Held'
-  const canRate = booking.status === 'Completed' && !booking.customerRating
+  const canRate = booking.status === 'Completed' && isPaid && !booking.customerRating
   const hasCheckedIn = Boolean(booking.checkIn?.at) || ['In Progress', 'Completed'].includes(booking.status)
   const hasCheckedOut = Boolean(booking.checkOut?.at) || booking.status === 'Completed'
   const canReschedule = canCancel && !hasCheckedIn
+
+  useEffect(() => {
+    if (
+      booking &&
+      booking.status === 'Completed' &&
+      isPaid &&
+      !booking.customerRating &&
+      !booking.customerReview
+    ) {
+      setIsMandatoryReview(true)
+      setRateOpen(true)
+    }
+  }, [booking?.id, booking?.status, booking?.paymentStatus, booking?.customerRating, booking?.customerReview, isPaid])
 
 
   const handleDownloadInvoice = () => {
@@ -422,7 +437,7 @@ export function BookingDetailsPage() {
               updateBooking(booking.id, { paymentStatus: isCompleted ? 'Paid' : 'Escrow Held' })
               setPayOpen(false)
               setPaying(false)
-              loadBooking()
+              await loadBooking()
               toast.success(
                 isCompleted
                   ? 'Payment settled via Razorpay!'
@@ -433,6 +448,10 @@ export function BookingDetailsPage() {
                     : `Tx: ${response.razorpay_payment_id}. Funds will be held until shift completion.`,
                 }
               )
+              if (isCompleted && !booking.customerRating) {
+                setIsMandatoryReview(true)
+                setRateOpen(true)
+              }
             },
             modal: {
               ondismiss: function () {
@@ -453,7 +472,8 @@ export function BookingDetailsPage() {
       }
     }
 
-    updateBooking(booking.id, { paymentStatus: 'Escrow Held' })
+    const isCompleted = booking.status === 'Completed'
+    updateBooking(booking.id, { paymentStatus: isCompleted ? 'Paid' : 'Escrow Held' })
     addTransaction({
       bookingId: booking.id,
       customerId: booking.customerId,
@@ -464,14 +484,20 @@ export function BookingDetailsPage() {
       commission: booking.commission || Math.round(booking.subtotal * 0.12),
       payout: booking.subtotal,
       method: methodLabel,
-      status: 'Escrow Held',
+      status: isCompleted ? 'Paid' : 'Escrow Held',
       type: 'Booking payment',
     })
     setPaying(false)
     setPayOpen(false)
-    toast.success('Payment secured in simulated escrow', {
-      description: `Simulated via ${methodLabel}. Funds release after shift completion. (Test mode only).`,
+    toast.success(isCompleted ? 'Payment settled!' : 'Payment secured in simulated escrow', {
+      description: isCompleted
+        ? 'Shift payment settled.'
+        : `Simulated via ${methodLabel}. Funds release after shift completion. (Test mode only).`,
     })
+    if (isCompleted && !booking.customerRating) {
+      setIsMandatoryReview(true)
+      setRateOpen(true)
+    }
   }
 
   const handleSettle = async () => {
@@ -518,6 +544,13 @@ export function BookingDetailsPage() {
   }
 
   const handleRate = async () => {
+    if (!rateForm.comment || !rateForm.comment.trim()) {
+      toast.error('Review feedback is mandatory (*)', {
+        description: 'Please write your review comments before submitting.',
+      })
+      return
+    }
+
     const avg = Number((
       (rateForm.serviceQuality + rateForm.behaviour + rateForm.punctuality + rateForm.overall) / 4
     ).toFixed(1))
@@ -534,7 +567,7 @@ export function BookingDetailsPage() {
             punctuality: rateForm.punctuality,
             overall: rateForm.overall,
           },
-          comment: rateForm.comment.trim() || undefined,
+          comment: rateForm.comment.trim(),
         })
       } catch (err) {
         console.error('[Review Submission Error]', err)
@@ -545,6 +578,7 @@ export function BookingDetailsPage() {
       }
     }
 
+    const ratingObj = { ...rateForm, average: avg, at: new Date().toISOString() }
     addReview({
       bookingId: booking.id,
       caregiverId: booking.caregiverId,
@@ -552,15 +586,18 @@ export function BookingDetailsPage() {
       customerName: customer?.name || user?.name || 'Customer',
       rating: avg,
       criteria: { ...rateForm, comment: undefined },
-      comment: rateForm.comment.trim() || 'Great service, thank you!',
+      comment: rateForm.comment.trim(),
     })
     updateBooking(booking.id, {
-      customerRating: { ...rateForm, average: avg, at: new Date().toISOString() },
+      customerRating: ratingObj,
     })
+    setBooking((prev) => (prev ? { ...prev, customerRating: ratingObj } : prev))
+    setIsMandatoryReview(false)
     setRateOpen(false)
     toast.success('Thank you for your review!', {
       description: `${caregiver?.name || 'Your caretaker'} received your ${avg}-star rating.`,
     })
+    loadBooking()
   }
 
   const handleSendMessage = () => {
@@ -1414,17 +1451,24 @@ export function BookingDetailsPage() {
 
       <Modal
         open={rateOpen}
-        onClose={() => setRateOpen(false)}
-        title="Rate your caretaker"
+        onClose={() => {
+          if (!isMandatoryReview) {
+            setRateOpen(false)
+          }
+        }}
+        hideClose={isMandatoryReview}
+        title={isMandatoryReview ? 'Rate your caretaker (Mandatory *)' : 'Rate your caretaker'}
         subtitle={`${caregiver?.name || 'Your caretaker'} · ${booking.service}`}
         size="md"
         footer={
           <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setRateOpen(false)}>
-              Skip for now
-            </Button>
+            {!isMandatoryReview ? (
+              <Button variant="ghost" onClick={() => setRateOpen(false)}>
+                Skip for now
+              </Button>
+            ) : null}
             <Button type="submit" form="bd-rate-form" icon={Star}>
-              Submit rating
+              Submit review *
             </Button>
           </div>
         }
@@ -1437,9 +1481,23 @@ export function BookingDetailsPage() {
           }}
           className="space-y-4"
         >
+          {isMandatoryReview ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 flex items-start gap-3 shadow-xs">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-200 font-bold text-amber-900 text-xs">*</span>
+              <div>
+                <p className="font-bold text-amber-950">Review is Mandatory *</p>
+                <p className="mt-0.5 text-amber-800">
+                  Payment has been completed. Please rate and review {caregiver?.name || 'your caretaker'} before continuing. All ratings and feedback fields marked with * are required.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {RATING_CRITERIA.map((c) => (
             <div key={c.key} className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-ink">{c.label}</span>
+              <span className="text-sm font-semibold text-ink">
+                {c.label} <span className="text-danger-500 font-bold">*</span>
+              </span>
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map((v) => (
                   <button
@@ -1460,13 +1518,21 @@ export function BookingDetailsPage() {
               </div>
             </div>
           ))}
-          <FormField label="Comment (optional)" htmlFor="rate-comment">
+          <FormField
+            label={
+              <span>
+                Review feedback <span className="text-danger-500 font-bold">*</span>
+              </span>
+            }
+            htmlFor="rate-comment"
+          >
             <Textarea
               id="rate-comment"
               rows={3}
+              required
               value={rateForm.comment}
               onChange={(e) => setRateForm((f) => ({ ...f, comment: e.target.value }))}
-              placeholder="Share what went well, or what we can improve…"
+              placeholder="Share your experience with the caretaker (mandatory *)..."
             />
           </FormField>
         </form>

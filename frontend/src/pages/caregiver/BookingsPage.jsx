@@ -26,11 +26,22 @@ import { CheckInOutModal } from '@/components/booking/CheckInOutModal'
 import { RatingModal, CUSTOMER_CRITERIA } from '@/components/booking/RatingModal'
 import { bookingService, reviewService } from '@/services'
 
+export const isPaidBooking = (b) =>
+  ['paid', 'released', 'settled'].includes(String(b?.paymentStatus || '').toLowerCase())
+
+export const getCaretakerStatus = (b) => {
+  if ((b?.status === 'Completed' || b?.status === 'completed') && !isPaidBooking(b)) {
+    return 'Payment Pending'
+  }
+  return b?.status
+}
+
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'Pending', label: 'Pending' },
   { id: 'Confirmed', label: 'Confirmed' },
   { id: 'In Progress', label: 'In Progress' },
+  { id: 'Payment Pending', label: 'Payment Pending' },
   { id: 'Completed', label: 'Completed' },
   { id: 'Cancelled', label: 'Cancelled' },
 ]
@@ -92,12 +103,15 @@ export function BookingsPage() {
 
   const counts = useMemo(() => {
     const c = { all: myBookings.length }
-    for (const b of myBookings) c[b.status] = (c[b.status] || 0) + 1
+    for (const b of myBookings) {
+      const st = getCaretakerStatus(b)
+      c[st] = (c[st] || 0) + 1
+    }
     return c
   }, [myBookings])
 
   const filtered = useMemo(() => {
-    const list = tab === 'all' ? myBookings : myBookings.filter((b) => b.status === tab)
+    const list = tab === 'all' ? myBookings : myBookings.filter((b) => getCaretakerStatus(b) === tab)
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((b) =>
@@ -177,7 +191,8 @@ export function BookingsPage() {
     setCheckFlow(null)
   }
 
-  const canRate = (b) => b && (b.status === 'Completed' || b.status === 'completed') && !b.caregiverRating
+  const canRate = (b) =>
+    b && (b.status === 'Completed' || b.status === 'completed') && isPaidBooking(b) && !b.caregiverRating
 
   const handleRateCustomerSubmit = async ({ criteria, average, comment }) => {
     if (!rateTarget) return
@@ -261,7 +276,12 @@ export function BookingsPage() {
         <span className="font-semibold tabular-nums text-ink">{formatCurrency(row.subtotal - row.commission)}</span>
       ),
     },
-    { key: 'status', header: 'Status', sortable: false, render: (row) => <StatusBadge status={row.status} size="sm" /> },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: false,
+      render: (row) => <StatusBadge status={getCaretakerStatus(row)} size="sm" />,
+    },
     {
       key: 'action',
       header: 'Action',
@@ -302,14 +322,19 @@ export function BookingsPage() {
       <PageHeader
         title="My bookings"
         subtitle="Every shift assigned to you — track status, check in for confirmed visits and review your net earning after commission."
-        meta={<span className="text-sm text-muted">{counts.all} total · {counts.Confirmed || 0} confirmed · {counts['In Progress'] || 0} in progress</span>}
+        meta={
+          <span className="text-sm text-muted">
+            {counts.all} total · {counts.Confirmed || 0} confirmed · {counts['In Progress'] || 0} in progress · {counts['Payment Pending'] || 0} payment pending
+          </span>
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Total bookings" value={counts.all} icon={ClipboardList} tone="primary" hint="All time on CareMate" delay={0} />
         <StatCard label="Confirmed" value={counts.Confirmed || 0} icon={CalendarCheck} tone="accent" hint="Ready to check in" delay={0.05} />
         <StatCard label="In progress" value={counts['In Progress'] || 0} icon={Clock} tone="info" hint="Active right now" delay={0.1} />
-        <StatCard label="Completed" value={counts.Completed || 0} icon={Wallet} tone="success" hint="Paid & settled" delay={0.15} />
+        <StatCard label="Payment pending" value={counts['Payment Pending'] || 0} icon={RotateCw} tone="warning" hint="Awaiting customer payment" delay={0.15} />
+        <StatCard label="Completed" value={counts.Completed || 0} icon={Wallet} tone="success" hint="Paid & settled" delay={0.2} />
       </div>
 
       <Tabs
@@ -340,7 +365,7 @@ export function BookingsPage() {
             {pageItems.map((booking) => (
               <BookingCard
                 key={booking.id}
-                booking={booking}
+                booking={{ ...booking, status: getCaretakerStatus(booking) }}
                 customerName={getCustomerById(booking.customerId)?.name}
                 to={`/caregiver/bookings/${booking.id}`}
                 actions={
@@ -442,7 +467,7 @@ export function BookingsPage() {
         {selected ? (
           <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={selected.status} />
+              <StatusBadge status={getCaretakerStatus(selected)} />
               <StatusBadge status={selected.paymentStatus} />
               <span className="text-xs text-muted">Invoice {selected.invoiceNo}</span>
             </div>

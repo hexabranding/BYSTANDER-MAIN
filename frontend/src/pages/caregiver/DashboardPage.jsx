@@ -539,7 +539,15 @@ export function DashboardPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-bold text-ink">{b.service}</p>
-                        <StatusBadge status={b.status} size="sm" />
+                        <StatusBadge
+                          status={
+                            (b.status === 'Completed' || b.status === 'completed') &&
+                            !['paid', 'released', 'settled'].includes(String(b.paymentStatus || '').toLowerCase())
+                              ? 'Payment Pending'
+                              : b.status
+                          }
+                          size="sm"
+                        />
                       </div>
                       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                         <span>

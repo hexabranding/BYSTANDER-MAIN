@@ -1,5 +1,7 @@
 export const STATUS_STYLES = {
   pending: 'bg-warning-50 text-warning-700 ring-warning-400/50',
+  'payment-pending': 'bg-warning-50 text-warning-700 ring-warning-400/50',
+  unpaid: 'bg-warning-50 text-warning-700 ring-warning-400/50',
   'pending-verification': 'bg-warning-50 text-warning-700 ring-warning-400/50',
   'under-review': 'bg-warning-50 text-warning-700 ring-warning-400/50',
   reviewing: 'bg-warning-50 text-warning-700 ring-warning-400/50',
@@ -53,6 +55,8 @@ export const STATUS_STYLES = {
 
 export const STATUS_DOT = {
   pending: 'bg-warning-400',
+  'payment-pending': 'bg-warning-400',
+  unpaid: 'bg-warning-400',
   'under-review': 'bg-warning-400',
   reviewing: 'bg-warning-400',
   verified: 'bg-success-500',

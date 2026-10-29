@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Booking, CaregiverProfile, User, Service, Transaction } from '../models/index.js';
+import { Booking, CaregiverProfile, User, Service, Transaction, Review } from '../models/index.js';
 import {
   getLocalTimeInTimezone,
   calculateTotalHours,
@@ -640,7 +640,21 @@ export const getBookingById = async (user, bookingId) => {
     throw err;
   }
 
-  return booking;
+  const bookingObj = booking.toObject ? booking.toObject() : booking;
+  if (!bookingObj.customerRating) {
+    const customerReview = await Review.findOne({ booking: booking._id, reviewerRole: 'customer' }).lean();
+    if (customerReview) {
+      bookingObj.customerRating = {
+        average: customerReview.rating,
+        ...customerReview.criteria,
+        comment: customerReview.comment,
+        at: customerReview.createdAt,
+      };
+      bookingObj.customerReview = customerReview;
+    }
+  }
+
+  return bookingObj;
 };
 
 /**

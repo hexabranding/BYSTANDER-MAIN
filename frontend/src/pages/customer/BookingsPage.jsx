@@ -53,6 +53,7 @@ export function BookingsPage() {
   const [phase, setPhase] = useState('All')
   const [status, setStatus] = useState('All')
   const [rateTarget, setRateTarget] = useState(null)
+  const [isMandatoryRating, setIsMandatoryRating] = useState(false)
   const debouncedSearch = useDebouncedValue(search)
 
   const fetchBookings = useCallback(async () => {
@@ -120,7 +121,11 @@ export function BookingsPage() {
     b.status !== 'Cancelled' &&
     b.paymentStatus !== 'Paid' &&
     b.paymentStatus !== 'Refunded'
-  const canRate = (b) => b.status === 'Completed' && !b.customerRating && Boolean(b.caregiverId)
+  const canRate = (b) =>
+    b.status === 'Completed' &&
+    ['Paid', 'Released', 'Settled'].includes(b.paymentStatus) &&
+    !b.customerRating &&
+    Boolean(b.caregiverId)
 
   const handlePay = async (b) => {
     const targetBookingId = b.dbId || b.id
@@ -154,6 +159,10 @@ export function BookingsPage() {
                   ? `Tx: ${response.razorpay_payment_id}. Caretaker payout credited.`
                   : `Tx: ${response.razorpay_payment_id}. Funds locked until shift completion.`,
               })
+              if (isSettled && !b.customerRating) {
+                setRateTarget(b)
+                setIsMandatoryRating(true)
+              }
             },
           })
           rzp.open()
@@ -423,9 +432,18 @@ export function BookingsPage() {
 
       <RatingModal
         open={Boolean(rateTarget)}
-        onClose={() => setRateTarget(null)}
+        mandatory={isMandatoryRating}
+        onClose={() => {
+          if (!isMandatoryRating) setRateTarget(null)
+        }}
         subjectName={rateTarget ? caregiverName(rateTarget.caregiverId) : ''}
-        onSubmit={(rating) => rateTarget && handleSubmitRating(rateTarget, rating)}
+        onSubmit={(rating) => {
+          if (rateTarget) {
+            handleSubmitRating(rateTarget, rating)
+            setIsMandatoryRating(false)
+            setRateTarget(null)
+          }
+        }}
       />
     </div>
   )

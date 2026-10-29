@@ -647,6 +647,7 @@ export const adaptBooking = (raw) => {
     rejectedByMe: Boolean(raw.rejectedByMe),
     caregiverRating: raw.caregiverRating || null,
     customerRating: raw.customerRating || null,
+    customerReview: raw.customerReview || null,
   }
 }
 

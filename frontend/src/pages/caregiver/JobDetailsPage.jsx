@@ -489,7 +489,14 @@ export function JobDetailsPage() {
                 Urgent Dispatch
               </span>
             )}
-            <StatusBadge status={booking.status} />
+            <StatusBadge
+              status={
+                (booking.status === 'Completed' || booking.status === 'completed') &&
+                !['paid', 'released', 'settled'].includes(String(booking.paymentStatus || '').toLowerCase())
+                  ? 'Payment Pending'
+                  : booking.status
+              }
+            />
             <StatusBadge status={booking.paymentStatus} />
             <span className="text-sm text-muted">Ref {booking.ref}</span>
           </>

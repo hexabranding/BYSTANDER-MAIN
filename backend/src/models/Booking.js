@@ -399,6 +399,14 @@ const bookingSchema = new mongoose.Schema(
         default: null,
       },
     },
+    customerRating: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    caregiverRating: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   {
     timestamps: true,

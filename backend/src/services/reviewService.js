@@ -323,8 +323,36 @@ export const createReview = async (user, data) => {
 
     if (reviewerRole === 'customer') {
       await recalculateCaregiverRating(booking.caregiver, { session });
+      await Booking.updateOne(
+        { _id: booking._id },
+        {
+          $set: {
+            customerRating: {
+              average: rating,
+              criteria: criteria || defaultCriteria,
+              comment: comment || '',
+              at: new Date(),
+            },
+          },
+        },
+        { session },
+      );
     } else {
       await recalculateCustomerRating(booking.customer, { session });
+      await Booking.updateOne(
+        { _id: booking._id },
+        {
+          $set: {
+            caregiverRating: {
+              average: rating,
+              criteria: criteria || defaultCriteria,
+              comment: comment || '',
+              at: new Date(),
+            },
+          },
+        },
+        { session },
+      );
     }
 
     return createdReview;

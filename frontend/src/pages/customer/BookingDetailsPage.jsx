@@ -308,7 +308,10 @@ export function BookingDetailsPage() {
       : null)
 
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed'
-  const canPay = booking.paymentStatus === 'Pending'
+  const canPay =
+    ['Pending', 'Unpaid'].includes(booking.paymentStatus) ||
+    booking.isPaymentDue ||
+    (booking.status === 'Completed' && !['Paid', 'Refunded'].includes(booking.paymentStatus))
   const canSettle = booking.status === 'Completed' && booking.paymentStatus === 'Escrow Held'
   const canRate = booking.status === 'Completed' && !booking.customerRating
   const hasCheckedIn = Boolean(booking.checkIn?.at) || ['In Progress', 'Completed'].includes(booking.status)
@@ -650,6 +653,36 @@ export function BookingDetailsPage() {
         }
       />
 
+      {booking.status === 'Completed' && canPay && (
+        <Card className="border-2 border-amber-300 bg-amber-50 shadow-sm">
+          <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500 text-white font-bold text-lg">
+                💳
+              </span>
+              <div>
+                <p className="text-sm font-bold text-amber-950">
+                  Service Completed — Payment Due
+                </p>
+                <p className="mt-0.5 text-xs text-amber-800">
+                  Your caretaker has finished the shift. Please pay {formatCurrency(booking.total)} via Razorpay to settle the shift.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={ShieldCheck}
+              className="bg-primary-700 hover:bg-primary-800 shrink-0 font-bold"
+              onClick={handlePayNow}
+              disabled={paying}
+            >
+              {paying ? 'Opening Razorpay…' : `Pay ${formatCurrency(booking.total)} Now`}
+            </Button>
+          </CardBody>
+        </Card>
+      )}
+
       {(hasCheckedIn || canRate || canSettle) && (
         <Card className={cn(canSettle ? 'border-success-200 bg-success-50' : 'border-primary-200 bg-mint-50')}>
           <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -816,7 +849,7 @@ export function BookingDetailsPage() {
           <Card>
             <CardHeader title="Booking timeline" subtitle="Live progress of this care visit" />
             <CardBody>
-              <BookingTimeline steps={booking.timeline || []} />
+              <BookingTimeline steps={booking.timeline || []} onPay={handlePayNow} payLoading={paying} />
             </CardBody>
           </Card>
 

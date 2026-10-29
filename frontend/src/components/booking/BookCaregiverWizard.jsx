@@ -765,61 +765,8 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
       setCreated(booking)
       toast.success('Booking broadcasted successfully', {
-        description: `Reference ${booking.ref} — all active caretakers in ${form.city} have been notified.`,
+        description: `Reference ${booking.ref} — all active caretakers in ${form.city} have been notified. You can pay once your shift is completed.`,
       })
-
-      // Initiate Razorpay Test Mode Escrow Checkout
-      const targetBookingId = booking.id || booking._id || booking.dbId
-      if (isMongoObjectId(targetBookingId)) {
-        try {
-          await financeService.loadRazorpayScript()
-          const orderRes = await financeService.createPaymentOrder(targetBookingId)
-
-          if (typeof window !== 'undefined' && window.Razorpay && orderRes?.order?.id) {
-            const rzp = new window.Razorpay({
-              key: orderRes.order?.keyId || orderRes.keyId || 'rzp_test_bystander_sandbox',
-              amount: orderRes.order?.amount,
-              currency: orderRes.order?.currency || 'INR',
-              name: 'Bystander Healthcare',
-              description: `${booking.serviceName || 'Bedside Care'} Shift Escrow (Test Mode)`,
-              order_id: orderRes.order?.id,
-              prefill: {
-                name: user?.name || user?.fullName || form.patientName,
-                email: user?.email || '',
-                contact: user?.phone || '',
-              },
-              theme: {
-                color: '#06263B',
-              },
-              handler: async function (response) {
-                try {
-                  await financeService.verifyPaymentSignature({
-                    bookingId: targetBookingId,
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_signature: response.razorpay_signature,
-                  })
-                  toast.success('Payment secured in Razorpay Escrow (Test Mode)', {
-                    description: `Tx Ref: ${response.razorpay_payment_id}. Funds will be released upon shift completion.`,
-                  })
-                } catch (vErr) {
-                  console.warn('[Razorpay Verification Notice]', vErr.message)
-                }
-              },
-              modal: {
-                ondismiss: function () {
-                  toast.info('Payment pending in test escrow', {
-                    description: 'You can complete escrow payment anytime from your booking dashboard.',
-                  })
-                },
-              },
-            })
-            rzp.open()
-          }
-        } catch (payErr) {
-          console.warn('[Razorpay Order Notice]', payErr.message)
-        }
-      }
     } catch (err) {
       toast.error('Booking creation failed', {
         description: err.message || 'Unable to submit booking request to the server.',

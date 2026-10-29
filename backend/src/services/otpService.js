@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Booking } from '../models/index.js';
 import { generateNumericOtp, hashOtp, verifyOtpHash } from '../utils/otpUtils.js';
 import { recordBookingTransaction } from './adminFinanceService.js';
+import { safeDispatchNotification } from './notificationService.js';
 
 const OTP_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 const OTP_COOLDOWN_MS = 60 * 1000;    // 60 seconds
@@ -489,10 +490,28 @@ export const verifyCheckOut = async (user, bookingId, checkOutData = {}) => {
     throw err;
   }
 
-  // Release escrow transaction in financial ledger upon verified shift completion
-  await recordBookingTransaction(updatedBooking, 'released').catch((txErr) => {
-    console.warn('[Ledger Warning] Could not record release transaction on checkout:', txErr.message);
-  });
+  // Handle payment settlement:
+  // If payment was already escrowed upfront (or legacy/test without explicit 'unpaid'), release it now.
+  // If paymentStatus is explicitly 'unpaid', leave paymentStatus as 'unpaid' and notify the customer to pay via Razorpay.
+  if (updatedBooking.paymentStatus === 'unpaid') {
+    // Post-service payment flow: shift is completed, customer must pay via Razorpay
+    safeDispatchNotification({
+      recipient: updatedBooking.customer,
+      type: 'payment_required',
+      title: '🔔 Shift Completed — Payment Due',
+      message: `Your shift #${String(updatedBooking._id).slice(-6)} is completed. Please pay ₹${updatedBooking.totalAmount} via Razorpay to settle.`,
+      metadata: { bookingId: updatedBooking._id },
+      idempotencyKey: `pay:due:${updatedBooking._id}`,
+    });
+  } else {
+    updatedBooking.paymentStatus = 'released';
+    if (typeof updatedBooking.save === 'function') {
+      await updatedBooking.save();
+    }
+    await recordBookingTransaction(updatedBooking, 'released').catch((txErr) => {
+      console.warn('[Ledger Warning] Could not record release transaction on checkout:', txErr.message);
+    });
+  }
 
   return updatedBooking.populate([
     { path: 'customer', select: 'fullName email phone' },

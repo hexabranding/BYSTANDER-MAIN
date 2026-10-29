@@ -361,9 +361,20 @@ export const buildBookingTimeline = (raw, normalizedStatus) => {
       at: checkOutAt,
     },
     {
-      label: 'Payment settled',
-      status: isCompleted ? 'completed' : 'upcoming',
-      at: isCompleted ? checkOutAt || new Date().toISOString() : null,
+      label: ['released', 'settled', 'paid'].includes(String(raw.paymentStatus || '').toLowerCase())
+        ? 'Payment settled'
+        : isCompleted
+          ? 'Payment due (Pay now to settle)'
+          : 'Payment settlement',
+      status: ['released', 'settled', 'paid'].includes(String(raw.paymentStatus || '').toLowerCase())
+        ? 'completed'
+        : isCompleted
+          ? 'active'
+          : 'upcoming',
+      at: ['released', 'settled', 'paid'].includes(String(raw.paymentStatus || '').toLowerCase())
+        ? raw.paidAt || checkOutAt || new Date().toISOString()
+        : null,
+      needsPayment: isCompleted && !['released', 'settled', 'paid'].includes(String(raw.paymentStatus || '').toLowerCase()),
     },
   ]
 
@@ -563,12 +574,18 @@ export const adaptBooking = (raw) => {
     status: normalizedStatus,
     rawStatus: raw.status || normalizedStatus.toLowerCase(),
     paymentStatus:
-      raw.paymentStatus ||
-      (normalizedStatus === 'Completed'
-        ? 'Paid'
-        : normalizedStatus === 'Cancelled'
-          ? 'Refunded'
-          : 'Escrow Held'),
+      raw.paymentStatus
+        ? (['released', 'settled', 'paid'].includes(String(raw.paymentStatus).toLowerCase())
+            ? 'Paid'
+            : String(raw.paymentStatus).toLowerCase() === 'escrow_held'
+              ? 'Escrow Held'
+              : String(raw.paymentStatus).toLowerCase() === 'refunded'
+                ? 'Refunded'
+                : 'Pending')
+        : (normalizedStatus === 'Completed' ? 'Pending' : 'Pending'),
+    isPaymentDue:
+      normalizedStatus === 'Completed' &&
+      !['released', 'settled', 'paid', 'escrow_held'].includes(String(raw.paymentStatus || '').toLowerCase()),
     isUrgent: Boolean(
       raw.isUrgent ||
       String(raw.patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT') ||

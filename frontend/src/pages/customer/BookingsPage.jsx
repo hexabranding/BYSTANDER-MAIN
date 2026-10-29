@@ -115,7 +115,11 @@ export function BookingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, phase, status])
 
-  const canPay = (b) => b.paymentStatus === 'Pending' && b.status !== 'Cancelled'
+  const canPay = (b) =>
+    (b.paymentStatus === 'Pending' || b.paymentStatus === 'Unpaid' || b.isPaymentDue) &&
+    b.status !== 'Cancelled' &&
+    b.paymentStatus !== 'Paid' &&
+    b.paymentStatus !== 'Refunded'
   const canRate = (b) => b.status === 'Completed' && !b.customerRating && Boolean(b.caregiverId)
 
   const handlePay = async (b) => {
@@ -131,7 +135,7 @@ export function BookingsPage() {
             amount: orderRes.order?.amount,
             currency: orderRes.order?.currency || 'INR',
             name: 'Bystander Healthcare',
-            description: `Shift Escrow for #${b.id || b.ref} (Test Mode)`,
+            description: `Shift Payment for #${b.id || b.ref} (Test Mode)`,
             order_id: orderRes.order?.id,
             theme: { color: '#06263B' },
             handler: async function (response) {
@@ -143,9 +147,12 @@ export function BookingsPage() {
                   razorpay_signature: response.razorpay_signature,
                 })
               } catch (_) {}
-              updateBooking(b.id, { paymentStatus: 'Escrow Held' })
-              toast.success('Payment secured in Razorpay Escrow (Test Mode)', {
-                description: `Tx: ${response.razorpay_payment_id}. Funds locked until shift completion.`,
+              const isSettled = b.status === 'Completed'
+              updateBooking(b.id, { paymentStatus: isSettled ? 'Paid' : 'Escrow Held' })
+              toast.success(isSettled ? 'Payment Settled via Razorpay' : 'Payment secured in Razorpay (Test Mode)', {
+                description: isSettled
+                  ? `Tx: ${response.razorpay_payment_id}. Caretaker payout credited.`
+                  : `Tx: ${response.razorpay_payment_id}. Funds locked until shift completion.`,
               })
             },
           })

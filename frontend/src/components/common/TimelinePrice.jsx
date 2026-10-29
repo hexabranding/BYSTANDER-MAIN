@@ -2,7 +2,7 @@ import { Check, CircleDashed } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { formatCurrency, formatDate, formatTime } from '@/utils/format'
 
-export function BookingTimeline({ steps = [], className }) {
+export function BookingTimeline({ steps = [], className, onPay, payLoading = false }) {
   return (
     <ol className={cn('relative space-y-0', className)}>
       {steps.map((step, i) => {
@@ -23,19 +23,45 @@ export function BookingTimeline({ steps = [], className }) {
             <span
               className={cn(
                 'relative z-10 grid h-[27px] w-[27px] shrink-0 place-items-center rounded-full border-2 bg-white',
-                done ? 'border-primary-600 bg-primary-600 text-white' : active ? 'border-accent-400 text-accent-500' : 'border-line-strong text-faint',
+                done
+                  ? 'border-primary-600 bg-primary-600 text-white'
+                  : active
+                    ? 'border-amber-500 bg-amber-50 text-amber-600'
+                    : 'border-line-strong text-faint',
               )}
             >
-              {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <CircleDashed className="h-3.5 w-3.5" />}
+              {done ? (
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+              ) : active ? (
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              ) : (
+                <CircleDashed className="h-3.5 w-3.5" />
+              )}
             </span>
-            <div className="min-w-0 pt-0.5">
-              <p className={cn('text-sm font-semibold', done ? 'text-ink' : 'text-muted')}>{step.label}</p>
+            <div className="min-w-0 pt-0.5 flex-1">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <p className={cn('text-sm font-semibold', done ? 'text-ink' : active ? 'text-amber-800 font-bold' : 'text-muted')}>
+                  {step.label}
+                </p>
+                {step.needsPayment && onPay ? (
+                  <button
+                    type="button"
+                    onClick={onPay}
+                    disabled={payLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary-700 px-3 py-1 text-xs font-bold text-white shadow-xs transition hover:bg-primary-800 disabled:opacity-50 cursor-pointer"
+                  >
+                    💳 {payLoading ? 'Opening Razorpay…' : 'Pay Now via Razorpay'}
+                  </button>
+                ) : null}
+              </div>
               {step.at ? (
                 <p className="mt-0.5 text-xs text-faint">
                   {formatDate(step.at)} · {formatTime(step.at)}
                 </p>
               ) : (
-                <p className="mt-0.5 text-xs text-faint">Pending</p>
+                <p className={cn('mt-0.5 text-xs', active ? 'text-amber-600 font-medium' : 'text-faint')}>
+                  {step.needsPayment ? 'Shift completed — customer payment settlement required' : 'Pending'}
+                </p>
               )}
               {step.note ? <p className="mt-1 text-xs leading-relaxed text-muted">{step.note}</p> : null}
             </div>

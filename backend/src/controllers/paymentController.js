@@ -60,11 +60,11 @@ export const createOrder = async (req, res, next) => {
       throw err;
     }
 
-    if (booking.paymentStatus === 'escrow_held' || booking.paymentStatus === 'released') {
+    if (booking.paymentStatus === 'released' || booking.paymentStatus === 'settled') {
       return res.status(200).json({
         success: true,
         alreadyPaid: true,
-        message: 'Payment for this booking is already secured in escrow',
+        message: 'Payment for this booking is already settled',
         booking,
       });
     }
@@ -150,37 +150,54 @@ export const verifyPayment = async (req, res, next) => {
     }
 
     // Update booking payment tracking
-    booking.paymentStatus = 'escrow_held';
+    const isServiceCompleted = booking.status === 'completed';
+    const targetStatus = isServiceCompleted ? 'released' : 'escrow_held';
+    booking.paymentStatus = targetStatus;
     booking.gatewayOrderId = razorpay_order_id;
     booking.gatewayPaymentId = razorpay_payment_id;
     booking.paidAt = new Date();
     await booking.save();
 
     // Record or update financial ledger transaction with Razorpay metadata
-    const tx = await recordBookingTransaction(booking, 'escrow_held');
+    const tx = await recordBookingTransaction(booking, targetStatus);
     if (tx) {
       tx.gateway = 'razorpay';
       tx.gatewayOrderId = razorpay_order_id;
       tx.gatewayPaymentId = razorpay_payment_id;
       tx.gatewaySignature = razorpay_signature;
-      tx.paymentMethod = 'Razorpay Test (UPI / Card)';
+      tx.paymentMethod = 'Razorpay (UPI / Card)';
       tx.isSimulated = false;
       await tx.save();
     }
 
-    // Dispatch safe in-app notifications
+    // Dispatch safe in-app notification to customer
     safeDispatchNotification({
       recipient: booking.customer,
       type: 'payment_received',
-      title: '💳 Payment Secured in Escrow',
-      message: `Your payment of ₹${booking.totalAmount} is securely held in escrow for booking #${String(booking._id).slice(-6)}.`,
+      title: isServiceCompleted ? '💳 Payment Settled Successfully' : '💳 Payment Secured in Escrow',
+      message: isServiceCompleted
+        ? `Your payment of ₹${booking.totalAmount} for completed shift #${String(booking._id).slice(-6)} has been settled.`
+        : `Your payment of ₹${booking.totalAmount} is securely held in escrow for booking #${String(booking._id).slice(-6)}.`,
       metadata: { bookingId: booking._id, paymentId: razorpay_payment_id },
-      idempotencyKey: `pay:escrow:${booking._id}:${razorpay_payment_id}`,
+      idempotencyKey: `pay:settle:${booking._id}:${razorpay_payment_id}`,
     });
+
+    // Notify caretaker if service is completed that their payout balance is credited
+    if (isServiceCompleted && (booking.caregiverUser || booking.caregiver)) {
+      const caregiverUserId = booking.caregiverUser?._id || booking.caregiverUser || booking.caregiver;
+      safeDispatchNotification({
+        recipient: caregiverUserId,
+        type: 'payment_received',
+        title: '💰 Shift Payment Settled',
+        message: `Customer settled payment for shift #${String(booking._id).slice(-6)}. ₹${tx?.breakdown?.caregiverPayout || (booking.totalAmount - 49)} is credited to your payout balance.`,
+        metadata: { bookingId: booking._id, paymentId: razorpay_payment_id },
+        idempotencyKey: `pay:cg:settled:${booking._id}:${razorpay_payment_id}`,
+      });
+    }
 
     return res.status(200).json({
       success: true,
-      message: 'Payment verified and secured in escrow',
+      message: isServiceCompleted ? 'Payment settled and caretaker credited' : 'Payment verified and secured in escrow',
       booking,
       transaction: tx,
     });

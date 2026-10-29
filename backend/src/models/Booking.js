@@ -238,8 +238,8 @@ const bookingSchema = new mongoose.Schema(
     // Payment Gateway Tracking (Razorpay Escrow)
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'pending', 'escrow_held', 'released', 'refunded'],
-      default: 'escrow_held',
+      enum: ['unpaid', 'pending', 'escrow_held', 'released', 'settled', 'refunded'],
+      default: 'unpaid',
       index: true,
     },
     gatewayOrderId: {

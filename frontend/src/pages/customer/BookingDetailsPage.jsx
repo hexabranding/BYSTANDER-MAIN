@@ -157,15 +157,28 @@ export function BookingDetailsPage() {
   const caregiver = useMemo(() => {
     if (!booking) return null
     if (booking.caregiver && typeof booking.caregiver === 'object') {
+      const cg = booking.caregiver
       return {
         id: booking.caregiverId,
         name: booking.caregiverName,
-        qualification: booking.caregiver.qualification || 'Caregiver',
-        photo: booking.caregiver.avatar || booking.caregiver.photo || '',
-        rating: 4.8,
+        qualification: cg.qualification || 'Certified Caregiver',
+        photo: cg.avatar || cg.photo || '',
+        rating: cg.rating?.average || cg.rating || 4.8,
+        experienceYears: cg.experienceYears || cg.experience || 2,
+        trustScore: cg.trustScore || 95,
+        responseRate: cg.responseRate || 98,
       }
     }
-    return caregivers.find((c) => c.id === booking.caregiverId) || null
+    const mock = caregivers.find((c) => c.id === booking.caregiverId)
+    if (mock) {
+      return {
+        ...mock,
+        experienceYears: mock.experienceYears || 2,
+        trustScore: mock.trustScore || 95,
+        responseRate: mock.responseRate || 98,
+      }
+    }
+    return null
   }, [booking, caregivers])
 
   const [selectedApplicant, setSelectedApplicant] = useState(null)
@@ -1176,9 +1189,6 @@ export function BookingDetailsPage() {
                     <MiniStat label="Trust score" value={`${caregiver.trustScore}%`} />
                     <MiniStat label="Response rate" value={`${caregiver.responseRate}%`} />
                   </div>
-                  <Button to={`/caregivers/${caregiver.id}`} variant="outline" size="sm" className="w-full">
-                    View profile
-                  </Button>
                 </>
               ) : booking.applicants && booking.applicants.length > 0 ? (
                 <div className="rounded-xl border border-primary-200 bg-mint-50/60 p-4 text-center">

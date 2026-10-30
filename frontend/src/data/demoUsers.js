@@ -1,4 +1,4 @@
-export const DEMO_PASSWORD = 'caremate123'
+export const DEMO_PASSWORD = 'bystander123'
 
 export const DEMO_USERS = [
   {
@@ -52,7 +52,7 @@ export const DEMO_USERS = [
     id: 'ad-001',
     role: 'admin',
     name: 'Kavya Raman',
-    email: 'admin@caremate.in',
+    email: 'admin@bystander.in',
     phone: '+91 98111 00022',
     password: DEMO_PASSWORD,
     avatar: 'https://randomuser.me/api/portraits/women/65.jpg',

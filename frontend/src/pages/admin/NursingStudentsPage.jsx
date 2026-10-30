@@ -173,7 +173,7 @@ export function NursingStudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Nursing students"
-        subtitle="Students placed on CareMate under a supervising faculty member — tracked separately from licensed caretakers."
+        subtitle="Students placed on Bystander under a supervising faculty member — tracked separately from licensed caretakers."
         action={
           <Button to="/admin/caregivers" variant="outline" icon={GraduationCap}>
             Caretaker directory
@@ -194,7 +194,7 @@ export function NursingStudentsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Total students" value={stats.total} icon={GraduationCap} tone="primary" hint="Enrolled on CareMate" delay={0} />
+        <StatCard label="Total students" value={stats.total} icon={GraduationCap} tone="primary" hint="Enrolled on Bystander" delay={0} />
         <StatCard label="Verified" value={stats.verified} icon={ShieldCheck} tone="success" hint="Cleared for supervised shifts" delay={0.05} />
         <StatCard label="Pending" value={stats.pending} icon={ShieldAlert} tone="warning" hint="Awaiting document review" delay={0.1} />
         <StatCard label="Average rating" value={stats.avg} icon={Star} tone="accent" hint="From completed shifts" delay={0.15} />

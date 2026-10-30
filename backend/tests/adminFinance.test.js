@@ -1125,6 +1125,9 @@ test('Step 14 - 25: replica set integration: concurrent payouts serialize, alloc
     return;
   }
 
+  if (mongoose.connection?.readyState !== 0) {
+    await mongoose.disconnect();
+  }
   await mongoose.connect(replSet.uri);
 
   try {
@@ -1601,6 +1604,9 @@ test('Step 14 - 32: replica set integration: payout state machine transitions, n
     return;
   }
 
+  if (mongoose.connection?.readyState !== 0) {
+    await mongoose.disconnect();
+  }
   await mongoose.connect(replSet.uri);
 
   try {

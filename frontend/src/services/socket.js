@@ -8,9 +8,17 @@ let socket = null;
  */
 const getSocketUrl = () => {
   const envUrl = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    // Strip trailing /api if present to get server origin
+  if (envUrl && typeof envUrl === 'string' && envUrl.startsWith('http')) {
+    // Absolute URL: Strip trailing /api to reach server origin
     return envUrl.trim().replace(/\/api\/?$/, '');
+  }
+  // In development on Vite default port (5173), direct connection to Express (5001) is fast and reliable
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '5173') {
+    return 'http://localhost:5001';
+  }
+  // When hosted or using proxy in same-origin
+  if (typeof window !== 'undefined' && window.location.origin) {
+    return window.location.origin;
   }
   return 'http://localhost:5001';
 };
@@ -47,8 +55,16 @@ export const initSocketConnection = (tokenOverride) => {
     timeout: 20000,
   });
 
-  socket.on('connect_error', () => {
-    // Silently handle fallback to polling or reconnection
+  socket.on('connect', () => {
+    if (import.meta.env?.DEV) {
+      console.log('[Socket.IO] Connected successfully to backend! Socket ID:', socket.id);
+    }
+  });
+
+  socket.on('connect_error', (err) => {
+    if (import.meta.env?.DEV) {
+      console.warn('[Socket.IO] Connection error:', err.message);
+    }
   });
 
   return socket;
@@ -154,9 +170,16 @@ export const onBookingBroadcast = (callback) => {
   const s = socket || initSocketConnection();
   if (!s || typeof callback !== 'function') return () => {};
 
-  s.on('booking:broadcast', callback);
+  const handler = (newBooking) => {
+    if (import.meta.env?.DEV) {
+      console.log('[Socket.IO] Received incoming booking:broadcast event:', newBooking);
+    }
+    callback(newBooking);
+  };
+
+  s.on('booking:broadcast', handler);
   return () => {
-    s.off('booking:broadcast', callback);
+    s.off('booking:broadcast', handler);
   };
 };
 

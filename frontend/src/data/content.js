@@ -125,7 +125,7 @@ export const reviewsForCaregiver = (caregiverId) =>
 
 export const FAQS = [
   {
-    q: 'How are caretakers verified on CareMate?',
+    q: 'How are caretakers verified on Bystander?',
     a: 'Every caretaker submits a government identity document, nursing registration certificate or nursing student college ID, and an address proof. Our operations team reviews each document manually, checks the registration number against the state nursing council, and only then flips the profile to Verified. A police clearance certificate is optional but earns a higher trust badge.',
   },
   {
@@ -134,11 +134,11 @@ export const FAQS = [
   },
   {
     q: 'What happens if my caretaker cancels at the last minute?',
-    a: 'You are notified immediately and CareMate automatically offers the shift to two verified backups with matching skills. If nobody accepts, the escrow amount is refunded to your original payment method within 3–5 working days.',
+    a: 'You are notified immediately and Bystander automatically offers the shift to two verified backups with matching skills. If nobody accepts, the escrow amount is refunded to your original payment method within 3–5 working days.',
   },
   {
     q: 'How does payment work?',
-    a: 'The estimated amount is held in escrow when you confirm a booking. It is released to the caretaker only after the service is completed and you mark the shift as done. CareMate deducts a 12% platform commission from the caretaker side — families never pay a hidden fee.',
+    a: 'No advance payment is needed. Once the care visit is complete, you verify the shift with OTP and settle payment via UPI, Card, or Net Banking. Bystander deducts a 12% platform commission from the caretaker side — families never pay a hidden fee.',
   },
   {
     q: 'Do you provide emergency (SOS) support?',
@@ -158,7 +158,7 @@ export const TESTIMONIALS = [
     avatar: 'https://randomuser.me/api/portraits/women/45.jpg',
     rating: 5,
     quote:
-      'We booked Ananya for my mother’s hip-replacement recovery. The daily written handover meant I could fly back to work knowing exactly how each hour went. CareMate felt like an extension of our family.',
+      'We booked Ananya for my mother’s hip-replacement recovery. The daily written handover meant I could fly back to work knowing exactly how each hour went. Bystander felt like an extension of our family.',
   },
   {
     id: 'tm-2',

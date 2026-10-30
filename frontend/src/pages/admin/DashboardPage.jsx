@@ -181,7 +181,7 @@ export function DashboardPage() {
             </span>
             <h1 className="mt-3 font-display text-2xl font-extrabold text-white sm:text-3xl">Admin dashboard</h1>
             <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-white/60">
-              CareMate at a glance — demand, supply, verification queue, revenue and live incidents.
+              Bystander at a glance — demand, supply, verification queue, revenue and live incidents.
             </p>
           </div>
 

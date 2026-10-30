@@ -208,3 +208,21 @@ export const selectCaregiver = async (req, res, next) => {
   }
 };
 
+/**
+ * PATCH /api/bookings/:id/rebroadcast
+ * Customer re-broadcasts a pending or expired request for 1 more hour.
+ */
+export const rebroadcastBooking = async (req, res, next) => {
+  try {
+    const booking = await bookingService.rebroadcastBooking(req.user, req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Booking re-broadcasted successfully to nearby caretakers',
+      data: booking,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

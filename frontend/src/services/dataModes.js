@@ -22,7 +22,7 @@ export const DATA_MODES = {
   API_ONLY: 'api-only',
 };
 
-// Strict Allowlist: ONLY public, read-only showcase catalogs may fall back to static data
+// Approved read-only showcase resources (only permitted when mode is explicitly api-first; ignored in api-only)
 export const FALLBACK_ALLOWLIST = new Set([
   'services:list',
   'services:detail',
@@ -40,6 +40,7 @@ export const FORBIDDEN_FALLBACK_RESOURCES = new Set([
   'caregiver:profile_update',
   'caregiver:availability_update',
   'bookings:create',
+  'bookings:rebroadcast',
   'bookings:accept',
   'bookings:reject',
   'bookings:cancel',
@@ -72,7 +73,7 @@ export const getGlobalDataMode = () => {
   if (envMode && Object.values(DATA_MODES).includes(envMode)) {
     return envMode;
   }
-  return DATA_MODES.API_FIRST;
+  return DATA_MODES.API_ONLY;
 };
 
 /**

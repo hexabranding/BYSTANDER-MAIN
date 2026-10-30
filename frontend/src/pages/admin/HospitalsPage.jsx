@@ -171,7 +171,7 @@ export function HospitalsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Partner hospitals"
-        subtitle="Institutional tie-ups that route discharged patients and bed-partner referrals to CareMate."
+        subtitle="Institutional tie-ups that route discharged patients and bed-partner referrals to Bystander."
         action={
           <Button icon={Plus} onClick={() => setAddOpen(true)}>
             Add hospital
@@ -183,7 +183,7 @@ export function HospitalsPage() {
         <StatCard label="Partner hospitals" value={stats.total} icon={Building2} tone="primary" hint="Across all cities" delay={0} />
         <StatCard label="Active contracts" value={stats.active} icon={CheckCircle2} tone="success" trend={5} hint="Sending referrals" delay={0.05} />
         <StatCard label="On hold" value={stats.onHold} icon={Clock} tone="warning" hint="Temporarily paused" delay={0.1} />
-        <StatCard label="Beds covered" value={stats.beds} icon={BedDouble} tone="accent" hint="Partner beds under CareMate care" delay={0.15} />
+        <StatCard label="Beds covered" value={stats.beds} icon={BedDouble} tone="accent" hint="Partner beds under Bystander care" delay={0.15} />
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -304,7 +304,7 @@ export function HospitalsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <span className="text-muted">Referral flow</span>
                   <span className="max-w-[60%] text-right font-semibold text-ink">
-                    Discharged patients receive a CareMate referral within 24 hours of discharge.
+                    Discharged patients receive a Bystander referral within 24 hours of discharge.
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4">

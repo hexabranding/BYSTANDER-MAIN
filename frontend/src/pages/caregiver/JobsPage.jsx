@@ -8,6 +8,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { PLATFORM_COMMISSION } from '@/utils/constants'
 import { formatCurrency, formatDate, relativeTime } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
+import { playBroadcastSound } from '@/utils/sound'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardFooter } from '@/components/common/Card'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -19,6 +20,7 @@ import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Select } from '@/components/forms/FormField'
 import {
   bookingService,
+  profileService,
   adaptBookingToJob,
   isMongoObjectId,
   onBookingBroadcast,
@@ -34,7 +36,24 @@ export function JobsPage() {
   const myId = user?.caregiverId || 'cg-101'
   const myUserId = String(user?._id || user?.id || '')
   const caregiver = caregivers?.find((c) => c.id === myId) || caregivers?.[0]
-  const caregiverGender = user?.gender || caregiver?.gender || 'Female'
+  const [profileGender, setProfileGender] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    profileService
+      .getCaregiverProfile()
+      .then((data) => {
+        if (active && data?.gender) {
+          setProfileGender(data.gender)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const caregiverGender = profileGender || user?.gender || caregiver?.gender || ''
 
   const storageKey = myUserId ? `bystander.dismissed_declined_${myUserId}` : 'bystander.dismissed_declined'
   const [dismissedJobIds, setDismissedJobIds] = useState(() => {
@@ -60,6 +79,13 @@ export function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [currentTime, setCurrentTime] = useState(Date.now())
+
+  // Keep countdown timer accurate every 20 seconds
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 20000)
+    return () => clearInterval(timer)
+  }, [])
 
   const [tab, setTab] = useState('open')
   const [query, setQuery] = useState('')
@@ -96,12 +122,18 @@ export function JobsPage() {
       if (pref !== 'Any' && caregiverGender && caregiverGender.toLowerCase() !== pref.toLowerCase()) {
         return // Ignore broadcast when customer specifically requested the other gender
       }
+
+      // Automatically play notification alert chime
+      playBroadcastSound()
+
       setRealBookings((prev) => {
         const id = newBooking._id || newBooking.id
         if (!prev) return [newBooking]
         if (prev.some((b) => (b._id || b.id) === id)) return prev
         return [newBooking, ...prev]
       })
+      window.dispatchEvent(new CustomEvent('bystander:bookings_updated'))
+
       toast.info('New Caretaker Job Available!', {
         description: `${newBooking.serviceName || 'Patient Care'} in ${newBooking.location?.city || 'your area'}.`,
       })
@@ -134,12 +166,16 @@ export function JobsPage() {
       .filter((job) => {
         // Confirmed / Declined / History jobs should remain visible in their tabs
         if (job.status !== 'Open') return true
+        // 1-Hour Broadcast Expiry Check: If broadcast expired, hide from Open jobs!
+        if (job.broadcastExpiresAt && new Date(job.broadcastExpiresAt).getTime() <= currentTime) {
+          return false
+        }
         const pref = job.preferredGender || 'Any'
         if (!pref || pref === 'Any') return true
         if (!caregiverGender) return true
         return caregiverGender.toLowerCase() === pref.toLowerCase()
       })
-  }, [realBookings, myUserId, dismissedJobIds, caregiverGender])
+  }, [realBookings, myUserId, dismissedJobIds, caregiverGender, currentTime])
 
   const handleDismissJob = useCallback((jobId) => {
     if (!jobId) return
@@ -514,6 +550,17 @@ export function JobsPage() {
                         {job.applicants && job.applicants.length > 0 ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                             {job.applicants.length} interested
+                          </span>
+                        ) : null}
+                        {job.status === 'Open' && job.broadcastExpiresAt ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200">
+                            <Clock className="h-3 w-3" />
+                            {(() => {
+                              const ms = new Date(job.broadcastExpiresAt).getTime() - currentTime
+                              if (ms <= 0) return 'Expired'
+                              const mins = Math.ceil(ms / 60000)
+                              return `${mins}m left`
+                            })()}
                           </span>
                         ) : null}
                       </div>

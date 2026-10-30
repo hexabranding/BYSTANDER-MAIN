@@ -46,7 +46,7 @@ const assurances = [
 const contact = [
   { icon: MapPin, text: '4th Floor, One BKC, Bandra Kurla Complex, Mumbai 400051' },
   { icon: Phone, text: '+91 22 4890 1100' },
-  { icon: Mail, text: 'support@caremate.in' },
+  { icon: Mail, text: 'support@bystander.in' },
 ]
 
 const columns = [
@@ -70,7 +70,7 @@ const columns = [
   {
     title: 'Company',
     links: [
-      { label: 'About CareMate', to: '/about' },
+      { label: 'About Bystander', to: '/about' },
       { label: 'Contact & support', to: '/contact' },
       { label: 'FAQs', to: '/#faq' },
     ],
@@ -117,7 +117,7 @@ export function PublicFooter() {
           <div className="max-w-sm">
             <Logo size="xl" />
             <p className="mt-4 text-sm leading-relaxed text-muted">
-              CareMate connects families and patients with verified caretakers, professional nurses and nursing students
+              Bystander connects families and patients with verified caretakers, professional nurses and nursing students
               for home care and hospital care — with escrow payments, documented verification and 24×7 SOS support.
             </p>
 
@@ -206,8 +206,8 @@ export function PublicFooter() {
             <Info className="h-3.5 w-3.5" />
           </span>
           <p className="text-[11px] leading-relaxed text-faint">
-            Demo notice: CareMate is presented here as a frontend demonstration. OTP delivery, identity verification,
-            payments, SOS dispatch, camera and QR checks are simulated with sample data and do not touch real services.
+            Bystander Healthcare Technologies. Verified identity checks, secure escrow payments,
+            and 24×7 rapid SOS safety desk.
           </p>
         </div>
       </Container>
@@ -216,7 +216,7 @@ export function PublicFooter() {
       <div className="relative border-t border-primary-900/60 bg-primary-950">
         <Container className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-white/55">
-            © {new Date().getFullYear()} CareMate Healthcare Technologies Pvt. Ltd. All rights reserved.
+            © {new Date().getFullYear()} Bystander Healthcare Technologies Pvt. Ltd. All rights reserved.
           </p>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
             {legal.map((l) => (

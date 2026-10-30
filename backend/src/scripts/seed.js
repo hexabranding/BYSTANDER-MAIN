@@ -9,7 +9,7 @@ import { hashPassword } from '../utils/auth.js';
 import { slugify } from '../utils/slugify.js';
 
 /**
- * Standard baseline services catalog aligned with CareMate CARE_TYPES and frontend catalog.
+ * Standard baseline services catalog aligned with Bystander CARE_TYPES and frontend catalog.
  * Seeded idempotently using unique service slug identifiers.
  */
 export const DEFAULT_SERVICES = Object.freeze([
@@ -198,7 +198,7 @@ export async function seedServices(options = {}) {
  * @returns {Promise<{ created: boolean, user: Object }>}
  */
 export async function seedAdminUser(options = {}) {
-  const adminEmail = (options.email || 'admin@caremate.in').trim().toLowerCase();
+  const adminEmail = (options.email || 'admin@bystander.in').trim().toLowerCase();
   const existing = await User.findOne({ email: adminEmail });
 
   if (existing) {
@@ -384,7 +384,7 @@ export async function seedDatabase(options = {}) {
         total: serviceResult.services.length,
       },
       admin: {
-        email: options.adminEmail || 'admin@caremate.in',
+        email: options.adminEmail || 'admin@bystander.in',
         created: adminResult.created,
         preserved: !adminResult.created,
       },

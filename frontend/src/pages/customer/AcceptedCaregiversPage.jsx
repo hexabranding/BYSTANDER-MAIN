@@ -70,11 +70,11 @@ export function AcceptedCaregiversPage() {
     loadBookings(true)
   }, [loadBookings])
 
-  // Filter bookings that are pending and have at least one applicant
+  // Filter bookings that are pending (or closed broadcast) and have at least one applicant
   const pendingWithApplicants = useMemo(() => {
     return (bookings || []).filter(
       (b) =>
-        b.status?.toLowerCase() === 'pending' &&
+        ['pending', 'expired'].includes(b.status?.toLowerCase()) &&
         !b.caregiverId &&
         Array.isArray(b.applicants) &&
         b.applicants.length > 0

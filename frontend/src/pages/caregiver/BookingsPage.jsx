@@ -330,7 +330,7 @@ export function BookingsPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Total bookings" value={counts.all} icon={ClipboardList} tone="primary" hint="All time on CareMate" delay={0} />
+        <StatCard label="Total bookings" value={counts.all} icon={ClipboardList} tone="primary" hint="All time on Bystander" delay={0} />
         <StatCard label="Confirmed" value={counts.Confirmed || 0} icon={CalendarCheck} tone="accent" hint="Ready to check in" delay={0.05} />
         <StatCard label="In progress" value={counts['In Progress'] || 0} icon={Clock} tone="info" hint="Active right now" delay={0.1} />
         <StatCard label="Payment pending" value={counts['Payment Pending'] || 0} icon={RotateCw} tone="warning" hint="Awaiting customer payment" delay={0.15} />
@@ -366,7 +366,7 @@ export function BookingsPage() {
               <BookingCard
                 key={booking.id}
                 booking={{ ...booking, status: getCaretakerStatus(booking) }}
-                customerName={getCustomerById(booking.customerId)?.name}
+                customerName={booking.customerName || booking.customer?.fullName || getCustomerById(booking.customerId)?.name || 'Customer'}
                 to={`/caregiver/bookings/${booking.id}`}
                 actions={
                   <div className="flex w-full gap-2">

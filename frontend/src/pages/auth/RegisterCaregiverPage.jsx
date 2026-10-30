@@ -405,7 +405,7 @@ export function RegisterCaregiverPage() {
     <div className="space-y-6">
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700">Caretaker application</p>
-        <h1 className="mt-1 font-display text-2xl font-extrabold text-ink">Join CareMate as a caretaker</h1>
+        <h1 className="mt-1 font-display text-2xl font-extrabold text-ink">Join Bystander as a caretaker</h1>
         <p className="mt-1.5 text-sm text-muted">
           Four short steps — your profile goes live after our team verifies your documents.
         </p>
@@ -965,7 +965,7 @@ export function RegisterCaregiverPage() {
                     })}
                   />
                   <span className="text-xs leading-relaxed text-ink-soft">
-                    I declare that the documents and details shared are genuine. I understand that CareMate verifies
+                    I declare that the documents and details shared are genuine. I understand that Bystander verifies
                     every submission and that false information leads to permanent removal from the platform.
                   </span>
                 </label>

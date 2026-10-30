@@ -34,6 +34,13 @@ router.patch(
   bookingController.selectCaregiver,
 );
 
+// 4c. Customer re-broadcasts pending/expired broadcast booking
+router.patch(
+  '/:id/rebroadcast',
+  authorizeRoles('customer', 'admin'),
+  bookingController.rebroadcastBooking,
+);
+
 // 5. Caregiver rejection of pending request
 router.patch(
   '/:id/reject',

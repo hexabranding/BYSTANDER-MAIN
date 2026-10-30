@@ -9,11 +9,9 @@ import {
   Eye,
   EyeOff,
   HeartHandshake,
-  KeyRound,
   ShieldAlert,
   ShieldCheck,
   Siren,
-  Sparkles,
   Stethoscope,
   Zap,
 } from 'lucide-react'
@@ -24,8 +22,6 @@ import { useAuth } from '@/context/AuthContext'
 import { FormField, Input } from '@/components/forms/FormField'
 import { Button } from '@/components/common/Button'
 import { requestGuestOtp } from '@/services/authService'
-import { DEMO_USERS, DEMO_PASSWORD } from '@/data/demoUsers'
-import { initials } from '@/utils/format'
 
 const PUBLIC_ROLE_OPTIONS = [
   {
@@ -34,7 +30,6 @@ const PUBLIC_ROLE_OPTIONS = [
     icon: HeartHandshake,
     heading: 'Welcome back',
     subtitle: 'Sign in with your email and a one-time verification code.',
-    demoEmail: 'priya.sharma@example.com',
   },
   {
     id: 'caregiver',
@@ -42,7 +37,6 @@ const PUBLIC_ROLE_OPTIONS = [
     icon: Stethoscope,
     heading: 'Caretaker sign-in',
     subtitle: 'Track your shifts, earnings and verification progress.',
-    demoEmail: 'ananya.deshmukh@example.com',
   },
   {
     id: 'ambulance',
@@ -50,7 +44,6 @@ const PUBLIC_ROLE_OPTIONS = [
     icon: Siren,
     heading: 'Ambulance Driver sign-in',
     subtitle: 'Manage your emergency on-call status and vehicle details.',
-    demoEmail: '8075608884',
   },
 ]
 
@@ -60,7 +53,6 @@ const ADMIN_ROLE_OPTION = {
   icon: ShieldCheck,
   heading: 'Operations sign-in',
   subtitle: 'Review verifications, payouts, complaints and SOS alerts.',
-  demoEmail: 'admin@caremate.in',
 }
 
 const homeFor = (role) =>
@@ -77,7 +69,7 @@ export function LoginPage({ adminOnly = false }) {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { login, guestLogin } = useAuth()
-  const [rememberedEmail, setRememberedEmail] = useLocalStorage('caremate.rememberedEmail', '')
+  const [rememberedEmail, setRememberedEmail] = useLocalStorage('bystander.rememberedEmail', '')
   const redirectTo = location.state?.from || null
 
   const isAdminPortal = adminOnly || location.pathname === '/admin/login'
@@ -98,7 +90,6 @@ export function LoginPage({ adminOnly = false }) {
   const [role, setRole] = useState(initialRole)
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(Boolean(rememberedEmail))
-  const [showDemo, setShowDemo] = useState(false)
   const [statusNotice, setStatusNotice] = useState(null)
 
   // Unified Customer OTP Login State
@@ -211,26 +202,6 @@ export function LoginPage({ adminOnly = false }) {
     const canUseRedirect =
       redirectTo && typeof redirectTo === 'string' && redirectTo.startsWith(roleHome.replace('/dashboard', ''))
     navigate(canUseRedirect ? redirectTo : roleHome, { replace: true })
-  }
-
-  const applyDemoAccount = (user) => {
-    setStatusNotice(null)
-    if (user.role === 'customer') {
-      setRole('customer')
-      setCustomerEmail(user.email)
-      setCustomerStep('email')
-      setCustomerUsePassword(false)
-      setValue('email', user.email, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-      setValue('password', DEMO_PASSWORD, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-    } else {
-      if (!isAdminPortal) {
-        setRole(user.role)
-      }
-      setValue('email', user.email, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-      setValue('password', DEMO_PASSWORD, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
-    }
-    setShowDemo(false)
-    toast.info(`Filled in ${user.name}'s demo credentials`)
   }
 
   const isCustomerOtpForm = role === 'customer' && !isAdminPortal && !customerUsePassword
@@ -539,7 +510,6 @@ export function LoginPage({ adminOnly = false }) {
               htmlFor="login-password"
               required
               error={errors.password?.message}
-              hint={`Demo password for all seeded accounts: ${DEMO_PASSWORD}`}
             >
               <div className="relative">
                 <Input
@@ -603,73 +573,6 @@ export function LoginPage({ adminOnly = false }) {
         )}
       </div>
 
-      {/* ---------------- demo accounts ---------------- */}
-      {(() => {
-        const availableDemoUsers = DEMO_USERS.filter((u) =>
-          isAdminPortal ? u.role === 'admin' : u.role !== 'admin',
-        )
-        if (availableDemoUsers.length === 0) return null
-
-        return (
-          <div className="overflow-hidden rounded-card border border-line bg-white shadow-card">
-            <button
-              type="button"
-              onClick={() => setShowDemo((v) => !v)}
-              aria-expanded={showDemo}
-              aria-controls="demo-account-list"
-              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50"
-            >
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-mint-100 text-primary-700">
-                <KeyRound className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-ink">Demo accounts</span>
-                <span className="block text-xs text-muted">
-                  {availableDemoUsers.length} profile{availableDemoUsers.length > 1 ? 's' : ''} · quick sign-in
-                </span>
-              </span>
-              <span className="rounded-full bg-warning-50 px-2 py-0.5 text-[11px] font-bold text-warning-700 ring-1 ring-inset ring-warning-400/50">
-                Demo only
-              </span>
-              <ChevronDown
-                className={cn(
-                  'h-4 w-4 shrink-0 text-faint transition-transform duration-200',
-                  showDemo && 'rotate-180',
-                )}
-              />
-            </button>
-
-            {showDemo ? (
-              <ul id="demo-account-list" className="space-y-2 border-t border-line px-4 py-4">
-                {availableDemoUsers.map((user) => (
-                  <li
-                    key={user.id}
-                    className="flex items-center gap-3 rounded-xl border border-line bg-slate-50/70 p-2.5"
-                  >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-mint-100 text-xs font-bold text-primary-800">
-                      {initials(user.name)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
-                      <p className="truncate text-xs capitalize text-muted">
-                        {user.role} · {user.email}
-                      </p>
-                    </div>
-                    <Button variant="secondary" size="xs" onClick={() => applyDemoAccount(user)}>
-                      Use this
-                    </Button>
-                  </li>
-                ))}
-                <li className="flex items-start gap-2 pt-1 text-[11px] leading-relaxed text-faint">
-                  <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Customers use Email OTP (dev code: 123456). Caretakers &amp; Ambulance use password: {DEMO_PASSWORD}
-                </li>
-              </ul>
-            ) : null}
-          </div>
-        )
-      })()}
-
       {/* ---------------- footer links ---------------- */}
       <div className="rounded-card border border-dashed border-line-strong bg-slate-50/60 px-4 py-4 text-center text-sm">
         {isAdminPortal ? (
@@ -682,7 +585,7 @@ export function LoginPage({ adminOnly = false }) {
         ) : (
           <>
             <p className="text-muted">
-              New to CareMate?{' '}
+              New to Bystander?{' '}
               <Link to="/register" className="font-semibold text-primary-700 hover:text-primary-800">
                 Create an account
               </Link>

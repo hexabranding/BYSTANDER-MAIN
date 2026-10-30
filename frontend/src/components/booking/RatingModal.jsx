@@ -67,8 +67,8 @@ export function RatingModal({
       title={title}
       subtitle={
         subjectName
-          ? `Your feedback helps ${subjectName} and keeps CareMate trustworthy.`
-          : 'Your feedback keeps CareMate trustworthy.'
+          ? `Your feedback helps ${subjectName} and keeps Bystander trustworthy.`
+          : 'Your feedback keeps Bystander trustworthy.'
       }
       size="sm"
       footer={

@@ -79,10 +79,13 @@ export function MessagesPage() {
 
         // 1. Resolve authoritative customer name
         const rawCustName =
+          (b.customerName && b.customerName !== 'Customer' ? b.customerName : null) ||
+          (b.customer?.fullName && b.customer.fullName !== 'Customer' ? b.customer.fullName : null) ||
+          (b.customer?.name && b.customer.name !== 'Customer' ? b.customer.name : null) ||
+          (typeof b.customer === 'object' && b.customer?.fullName && b.customer.fullName !== 'Customer' ? b.customer.fullName : null) ||
+          b.patientDetails?.name ||
+          b.patientName ||
           b.customerName ||
-          b.customer?.fullName ||
-          b.customer?.name ||
-          (typeof b.customer === 'object' && b.customer?.fullName) ||
           'Customer'
         const custName = rawCustName
           .split(' ')
@@ -333,7 +336,7 @@ export function MessagesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Messages"
-        subtitle="Chat with customers and CareMate operations about your shifts."
+        subtitle="Chat with customers and Bystander operations about your shifts."
         meta={
           <span className="text-sm text-muted">
             {caregiverConversations.length} conversation{caregiverConversations.length === 1 ? '' : 's'}

@@ -41,7 +41,7 @@ const CONTACT_CARDS = [
   {
     icon: Mail,
     label: 'Email',
-    value: 'support@caremate.in',
+    value: 'support@bystander.in',
     hint: 'Replies within one working day',
   },
   {
@@ -112,7 +112,7 @@ export function ContactPage() {
         eyebrow="Real humans, not ticket bots"
         icon={MessageSquare}
         title="Talk to the"
-        highlight="CareMate team"
+        highlight="Bystander team"
         description="Booking help, hospital requirements, caretaker onboarding or a billing question — write to us here or call the care helpline. Urgent issues on an active booking are handled through the in-app SOS button."
         items={[{ label: 'Contact' }]}
       />

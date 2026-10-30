@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import { useData } from '@/context/DataContext'
 import { useAuth } from '@/context/AuthContext'
 import {
@@ -9,6 +10,7 @@ import {
   onBookingBroadcast,
   onBookingClaimed,
 } from '@/services'
+import { playBroadcastSound } from '@/utils/sound'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { SosButton } from '@/components/common/SosButton'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
@@ -79,7 +81,21 @@ function useBadgeValues() {
 
     fetchOpenJobs()
 
-    const unsubBroadcast = onBookingBroadcast(() => fetchOpenJobs())
+    const unsubBroadcast = onBookingBroadcast((newBooking) => {
+      fetchOpenJobs()
+      playBroadcastSound()
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/caregiver/jobs')) {
+        toast.info('New Caretaker Job Available!', {
+          description: `${newBooking?.serviceName || 'Patient Care'} nearby. Tap to view open shifts.`,
+          action: {
+            label: 'View Jobs',
+            onClick: () => {
+              window.location.href = '/caregiver/jobs'
+            },
+          },
+        })
+      }
+    })
     const unsubClaimed = onBookingClaimed(() => fetchOpenJobs())
 
     const handleUpdate = () => fetchOpenJobs()
@@ -119,7 +135,7 @@ function useBadgeValues() {
 }
 
 export function DashboardLayout({ nav, variant = 'customer', sidebarFooter, topbarSearch, topbarActions }) {
-  const [collapsed, setCollapsed] = useLocalStorage(`caremate.sidebar.${variant}`, false)
+  const [collapsed, setCollapsed] = useLocalStorage(`bystander.sidebar.${variant}`, false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const values = useBadgeValues()
   const { pathname } = useLocation()

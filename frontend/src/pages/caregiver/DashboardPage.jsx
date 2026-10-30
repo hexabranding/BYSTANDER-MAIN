@@ -414,7 +414,7 @@ export function DashboardPage() {
         />
         <StatCard label="Accepted jobs" value={acceptedJobs.length} icon={Briefcase} tone="accent" hint="On your schedule" delay={0.05} />
         <StatCard label="Upcoming shifts" value={upcoming.length} icon={CalendarCheck} tone="info" hint="Confirmed & in progress" delay={0.1} />
-        <StatCard label="Completed jobs" value={completedJobs.length || caregiver?.completedJobs} icon={CheckCircle2} tone="success" hint="Lifetime on CareMate" delay={0.15} />
+        <StatCard label="Completed jobs" value={completedJobs.length || caregiver?.completedJobs} icon={CheckCircle2} tone="success" hint="Lifetime on Bystander" delay={0.15} />
       </div>
 
       <SectionLabel>Performance</SectionLabel>
@@ -423,7 +423,7 @@ export function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader
             title="Earnings summary"
-            subtitle="This week on CareMate"
+            subtitle="This week on Bystander"
             icon={Wallet}
             action={
               <Button

@@ -10,8 +10,8 @@ dotenv.config();
  * No demo caregivers, customers, bookings, or reviews are created.
  */
 export async function seedAdminOnly(options = {}) {
-  const adminEmail = (options.email || process.env.ADMIN_EMAIL || 'admin@caremate.in').trim().toLowerCase();
-  const password = options.password || process.env.ADMIN_PASSWORD || 'caremate123';
+  const adminEmail = (options.email || process.env.ADMIN_EMAIL || 'admin@bystander.in').trim().toLowerCase();
+  const password = options.password || process.env.ADMIN_PASSWORD || 'bystander123';
   const fullName = options.fullName || 'Operations Administrator';
   const phone = options.phone || '+919811100022';
 

@@ -288,11 +288,11 @@ export const createReview = async (user, data) => {
     }
 
     let createdReview;
-    try {
-      const defaultCriteria = reviewerRole === 'customer'
-        ? { serviceQuality: 5, behaviour: 5, punctuality: 5, overall: 5 }
-        : { cooperation: 5, clarity: 5, punctuality: 5, overall: 5 };
+    const defaultCriteria = reviewerRole === 'customer'
+      ? { serviceQuality: 5, behaviour: 5, punctuality: 5, overall: 5 }
+      : { cooperation: 5, clarity: 5, punctuality: 5, overall: 5 };
 
+    try {
       const rawCreated = await Review.create(
         [
           {
@@ -323,36 +323,40 @@ export const createReview = async (user, data) => {
 
     if (reviewerRole === 'customer') {
       await recalculateCaregiverRating(booking.caregiver, { session });
-      await Booking.updateOne(
-        { _id: booking._id },
-        {
-          $set: {
-            customerRating: {
-              average: rating,
-              criteria: criteria || defaultCriteria,
-              comment: comment || '',
-              at: new Date(),
+      if (mongoose.connection.readyState !== 0) {
+        await Booking.updateOne(
+          { _id: booking._id },
+          {
+            $set: {
+              customerRating: {
+                average: rating,
+                criteria: criteria || defaultCriteria,
+                comment: comment || '',
+                at: new Date(),
+              },
             },
           },
-        },
-        { session },
-      );
+          { session },
+        );
+      }
     } else {
       await recalculateCustomerRating(booking.customer, { session });
-      await Booking.updateOne(
-        { _id: booking._id },
-        {
-          $set: {
-            caregiverRating: {
-              average: rating,
-              criteria: criteria || defaultCriteria,
-              comment: comment || '',
-              at: new Date(),
+      if (mongoose.connection.readyState !== 0) {
+        await Booking.updateOne(
+          { _id: booking._id },
+          {
+            $set: {
+              caregiverRating: {
+                average: rating,
+                criteria: criteria || defaultCriteria,
+                comment: comment || '',
+                at: new Date(),
+              },
             },
           },
-        },
-        { session },
-      );
+          { session },
+        );
+      }
     }
 
     return createdReview;

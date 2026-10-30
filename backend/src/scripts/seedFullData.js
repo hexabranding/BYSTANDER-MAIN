@@ -452,8 +452,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
     const res = await seedFullTestData({
       allowSeed: 'true',
-      adminPassword: process.env.ADMIN_PASSWORD || 'caremate123',
-      demoUserPassword: process.env.DEMO_USER_PASSWORD || 'caremate123',
+      adminPassword: process.env.ADMIN_PASSWORD || 'bystander123',
+      demoUserPassword: process.env.DEMO_USER_PASSWORD || 'bystander123',
     });
     console.log('[Full Seed Done]', res);
   } catch (err) {

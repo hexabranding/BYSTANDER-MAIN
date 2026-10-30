@@ -170,11 +170,13 @@ export const startServer = async () => {
     // 2. Connect to MongoDB Atlas
     await connectDB();
 
-    // 3. Ensure sample ambulance drivers exist
-    try {
-      const { seedAmbulances } = await import('./scripts/seedAmbulances.js');
-      seedAmbulances().catch((e) => console.log('[Ambulance Seed]', e.message));
-    } catch (_) {}
+    // 3. Sample dev seeds (strictly disabled in production)
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const { seedAmbulances } = await import('./scripts/seedAmbulances.js');
+        seedAmbulances().catch((e) => console.log('[Ambulance Seed]', e.message));
+      } catch (_) {}
+    }
 
     const httpServer = http.createServer(app);
     initSocket(httpServer, CLIENT_URL);

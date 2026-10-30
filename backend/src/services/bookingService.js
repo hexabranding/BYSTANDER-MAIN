@@ -376,6 +376,7 @@ export const createBooking = async (customerId, bookingData) => {
   // Derive transparent canonical hourly rate from Service Catalog
   const hourlyRate = service.baseHourlyRate || 499;
   const totalAmount = Math.round(hourlyRate * durationHours);
+  const broadcastExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1-hour broadcast TTL
 
   const createdBooking = await executeWithTransactionRetry(async (session) => {
     const [created] = await Booking.create(
@@ -400,6 +401,7 @@ export const createBooking = async (customerId, bookingData) => {
             String(patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT DISPATCH') ||
             String(patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT ON-DEMAND')
           ),
+          broadcastExpiresAt,
           location,
           patientDetails,
           status: 'pending',
@@ -417,7 +419,11 @@ export const createBooking = async (customerId, bookingData) => {
   try {
     const io = getIO();
     if (io) {
-      io.emit('booking:broadcast', createdBooking);
+      const populated = await Booking.findById(createdBooking._id)
+        .populate('customer', 'fullName email phone avatar')
+        .populate('service', 'name slug category baseHourlyRate')
+        .lean();
+      io.emit('booking:broadcast', populated || createdBooking);
     }
 
     const verifiedFilter = { verificationStatus: 'verified' };
@@ -467,6 +473,19 @@ export const getBookings = async (user, query = {}) => {
   // Object-Level Authorization Filter
   if (user.role === 'customer') {
     filter.customer = user._id;
+    // Auto-expire broadcast requests that reached 1 hour without any applicants
+    if (mongoose.connection?.readyState !== 0 && typeof Booking.updateMany === 'function') {
+      await Booking.updateMany(
+        {
+          customer: user._id,
+          caregiver: null,
+          status: 'pending',
+          broadcastExpiresAt: { $lt: new Date() },
+          $or: [{ applicants: { $exists: false } }, { applicants: { $size: 0 } }],
+        },
+        { $set: { status: 'expired' } },
+      ).catch(() => {});
+    }
   } else if (user.role === 'caregiver') {
     const isAssignedOnly =
       query.assignedOnly === true ||
@@ -495,6 +514,10 @@ export const getBookings = async (user, query = {}) => {
         status: 'pending',
         declinedByCaregivers: { $ne: user._id },
         preferredGender: { $in: genderMatch },
+        $or: [
+          { broadcastExpiresAt: null },
+          { broadcastExpiresAt: { $gt: new Date() } },
+        ],
       };
 
       const declinedBroadcastQuery = {
@@ -550,6 +573,7 @@ export const getBookings = async (user, query = {}) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parsedLimit)
+      .populate('customer', 'fullName email phone avatar')
       .populate({
         path: 'caregiver',
         select: 'qualification city hourlyRate avatar gender rating experienceYears bio',
@@ -588,7 +612,7 @@ export const getBookingById = async (user, bookingId) => {
   }
 
   const booking = await Booking.findById(bookingId)
-    .populate('customer', 'fullName email phone')
+    .populate('customer', 'fullName email phone avatar')
     .populate([
       {
         path: 'caregiver',
@@ -641,7 +665,25 @@ export const getBookingById = async (user, bookingId) => {
   }
 
   const bookingObj = booking.toObject ? booking.toObject() : booking;
-  if (!bookingObj.customerRating) {
+
+  // 1-Hour Broadcast Expiry Check
+  const isBroadcast = !booking.caregiver;
+  const isPastExpiry = booking.broadcastExpiresAt && new Date() > new Date(booking.broadcastExpiresAt);
+  const hasApplicants = Array.isArray(booking.applicants) && booking.applicants.length > 0;
+
+  if (isBroadcast && isPastExpiry) {
+    if (!hasApplicants && (booking.status === 'pending' || bookingObj.status === 'pending')) {
+      bookingObj.status = 'expired';
+      bookingObj.isBroadcastExpired = true;
+      if (mongoose.connection?.readyState !== 0 && typeof Booking.updateOne === 'function') {
+        Booking.updateOne({ _id: booking._id }, { $set: { status: 'expired' } }).catch(() => {});
+      }
+    } else if (hasApplicants) {
+      bookingObj.isBroadcastClosed = true;
+    }
+  }
+
+  if (!bookingObj.customerRating && mongoose.connection.readyState !== 0) {
     const customerReview = await Review.findOne({ booking: booking._id, reviewerRole: 'customer' }).lean();
     if (customerReview) {
       bookingObj.customerRating = {
@@ -827,6 +869,14 @@ export const acceptBooking = async (user, bookingId) => {
     }
 
     // Case B: On-Demand Broadcast Booking -> Multi-Caregiver Acceptance / Bidding Model
+    // 0. Broadcast Expiration Check (1-Hour Acceptance Window)
+    if (booking.broadcastExpiresAt && new Date() > new Date(booking.broadcastExpiresAt)) {
+      const err = new Error('This broadcast request has expired (1-hour window elapsed).');
+      err.statusCode = 400;
+      err.name = 'ValidationError';
+      throw err;
+    }
+
     // 1. Gender Requirement Check
     if (
       booking.preferredGender &&
@@ -1350,6 +1400,99 @@ export const rejectBooking = async (user, bookingId, rejectionReason = '') => {
 
   return updated.populate([
     { path: 'customer', select: 'fullName email phone' },
+    { path: 'service', select: 'name slug category baseHourlyRate' },
+  ]);
+};
+
+/**
+ * Customer re-broadcasts an expired or pending on-demand booking request.
+ * Resets the 1-hour broadcast window, clears declines, and alerts nearby caretakers.
+ */
+export const rebroadcastBooking = async (user, bookingId) => {
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    const err = new Error('Booking not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const booking = await Booking.findById(bookingId);
+  if (!booking) {
+    const err = new Error('Booking not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const isCustomer = booking.customer.toString() === user._id.toString();
+  const isAdmin = user.role === 'admin';
+  if (!isCustomer && !isAdmin) {
+    const err = new Error('Only the customer who created this request can re-broadcast it');
+    err.statusCode = 403;
+    err.name = 'ForbiddenError';
+    throw err;
+  }
+
+  if (booking.caregiver) {
+    const err = new Error('Cannot re-broadcast a booking that is already assigned to a caretaker');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  // Reset 1-hour TTL and set status to pending
+  const now = new Date();
+  booking.broadcastExpiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+  booking.status = 'pending';
+  booking.declinedByCaregivers = [];
+  await booking.save();
+
+  // Real-time broadcast: Emit Socket.IO event and dispatch alerts to active verified caregivers
+  try {
+    const io = getIO();
+    if (io) {
+      const populated = await Booking.findById(booking._id)
+        .populate('customer', 'fullName email phone avatar')
+        .populate('service', 'name slug category baseHourlyRate')
+        .lean();
+      io.emit('booking:broadcast', populated || booking);
+      io.to(`booking:${booking._id}`).emit('booking:rebroadcast', {
+        bookingId: booking._id.toString(),
+        broadcastExpiresAt: booking.broadcastExpiresAt,
+      });
+    }
+
+    const verifiedFilter = { verificationStatus: 'verified' };
+    if (booking.preferredGender && booking.preferredGender !== 'Any') {
+      verifiedFilter.gender = booking.preferredGender;
+    }
+
+    const verifiedCaregivers = await CaregiverProfile.find(verifiedFilter)
+      .select('user')
+      .lean();
+
+    for (const cg of verifiedCaregivers) {
+      if (cg.user) {
+        safeDispatchNotification({
+          recipient: cg.user,
+          type: 'booking_created',
+          title: 'Booking Request Re-Broadcasted',
+          message: `Booking request for ${booking.serviceName} in ${booking.location?.city || 'your area'} is actively seeking a caretaker.`,
+          metadata: {
+            bookingId: booking._id,
+            serviceName: booking.serviceName,
+            city: booking.location?.city,
+          },
+          idempotencyKey: `rebroadcast:${booking._id}:${now.getTime().toString().slice(0, 8)}:${cg.user}`,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Rebroadcast notification error:', err.message);
+  }
+
+  return booking.populate([
+    { path: 'customer', select: 'fullName email phone avatar' },
     { path: 'service', select: 'name slug category baseHourlyRate' },
   ]);
 };

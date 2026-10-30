@@ -304,6 +304,7 @@ export const normalizeBookingStatus = (status) => {
   if (s === 'completed') return 'Completed'
   if (s === 'cancelled' || s === 'canceled') return 'Cancelled'
   if (s === 'rejected') return 'Rejected'
+  if (s === 'expired') return 'Expired'
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
@@ -443,11 +444,13 @@ export const adaptBooking = (raw) => {
   let customerName = 'Customer'
   if (raw.customer && typeof raw.customer === 'object') {
     customerId = String(raw.customer._id || raw.customer.id || '')
-    customerName = raw.customer.fullName || raw.customer.name || customerName
+    customerName = raw.customer.fullName || raw.customer.name || raw.customerName || customerName
   } else if (raw.customer) {
     customerId = String(raw.customer)
+    customerName = raw.customerName || raw.patientDetails?.name || raw.patientName || customerName
   } else if (raw.customerId) {
     customerId = String(raw.customerId)
+    customerName = raw.customerName || raw.patientDetails?.name || raw.patientName || customerName
   }
 
   // Caregiver resolution
@@ -551,6 +554,7 @@ export const adaptBooking = (raw) => {
           fullName: customerName,
           email: raw.customer.email || '',
           phone: raw.customer.phone || '',
+          avatar: raw.customer.avatar || '',
           address: raw.customer.address || addressLine || fullAddress,
         }
       : {
@@ -559,6 +563,7 @@ export const adaptBooking = (raw) => {
           fullName: customerName,
           email: '',
           phone: '',
+          avatar: '',
           address: addressLine || fullAddress,
         },
     caregiverId,
@@ -658,6 +663,15 @@ export const adaptBooking = (raw) => {
         })
       : [],
     createdAt: raw.createdAt || new Date().toISOString(),
+    broadcastExpiresAt: raw.broadcastExpiresAt || null,
+    isBroadcastExpired: Boolean(
+      raw.isBroadcastExpired ||
+      (raw.broadcastExpiresAt && new Date(raw.broadcastExpiresAt).getTime() <= Date.now() && (!raw.applicants || raw.applicants.length === 0))
+    ),
+    isBroadcastClosed: Boolean(
+      raw.isBroadcastClosed ||
+      (raw.broadcastExpiresAt && new Date(raw.broadcastExpiresAt).getTime() <= Date.now() && raw.applicants && raw.applicants.length > 0)
+    ),
     startDateTime: raw.startDateTime || null,
     endDateTime: raw.endDateTime || null,
     checkIn,
@@ -949,11 +963,15 @@ export const adaptVerificationRecord = (raw) => {
   ).length
   const totalDocs = documents.length
   const overallScore =
-    totalDocs > 0
-      ? Math.round((verifiedDocsCount / totalDocs) * 100)
-      : status === 'Verified'
-        ? 100
-        : 0
+    typeof raw.trustScore === 'number'
+      ? raw.trustScore
+      : typeof raw.overallScore === 'number'
+        ? raw.overallScore
+        : totalDocs > 0
+          ? Math.round((verifiedDocsCount / totalDocs) * 100)
+          : status === 'Verified'
+            ? 100
+            : 0
 
   // Construct auditable action history
   let history = []
@@ -1275,7 +1293,7 @@ export const adaptComplaint = (raw) => {
     respondentObj?.fullName ||
     (typeof raw.respondent === 'string' && !isMongoObjectId(raw.respondent)
       ? raw.respondent
-      : raw.respondentName || raw.against || 'CareMate Platform')
+      : raw.respondentName || raw.against || 'Bystander Platform')
   const respondentRole =
     respondentObj?.role || raw.respondentRole || (raw.againstType ? raw.againstType.toLowerCase() : 'platform')
   const againstType = respondentRole === 'caregiver' ? 'Caregiver' : respondentRole === 'customer' ? 'Customer' : 'Platform'
@@ -1522,11 +1540,17 @@ export const adaptBookingToJob = (raw, currentUserId) => {
     (currentUserId && declinedList.includes(String(currentUserId)))
   )
 
-  // Status mapping: Pending -> Open, Confirmed/InProgress/Completed -> Accepted, Rejected/Cancelled/Declined -> Declined
+  // Status mapping: Pending -> Open, Confirmed/InProgress/Completed -> Accepted, Rejected/Cancelled/Declined -> Declined, Expired -> Expired
   let status = 'Open'
   const normStatus = (b.status || '').toLowerCase()
+  const isPastBroadcastExpiry = Boolean(
+    b.broadcastExpiresAt && new Date(b.broadcastExpiresAt).getTime() <= Date.now()
+  )
+
   if (isDeclinedByMe || ['rejected', 'cancelled', 'canceled'].includes(normStatus)) {
     status = 'Declined'
+  } else if (normStatus === 'expired' || (normStatus === 'pending' && isPastBroadcastExpiry && (!b.applicants || b.applicants.length === 0))) {
+    status = 'Expired'
   } else if (normStatus === 'pending') {
     status = 'Open'
   } else if (['confirmed', 'in progress', 'completed', 'in_progress'].includes(normStatus)) {
@@ -1600,6 +1624,8 @@ export const adaptBookingToJob = (raw, currentUserId) => {
     preferredGender: b.preferredGender || 'Any',
     applicants: b.applicants || [],
     postedAt: b.postedAt || b.createdAt || new Date().toISOString(),
+    broadcastExpiresAt: b.broadcastExpiresAt || raw.broadcastExpiresAt || null,
+    isBroadcastExpired: Boolean(b.isBroadcastExpired || isPastBroadcastExpiry),
     status,
     isDeclined: isDeclinedByMe,
     isDeclinedByMe,

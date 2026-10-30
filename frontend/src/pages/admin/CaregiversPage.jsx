@@ -204,7 +204,7 @@ export function CaregiversPage() {
       verificationStatus: c.verificationStatus,
       status: c.isSuspended ? 'Suspended' : 'Active',
     }))
-    downloadText(`caremate-caregivers-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
+    downloadText(`bystander-caregivers-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
     toast.success(`Exported ${rows.length} caretaker${rows.length === 1 ? '' : 's'} to CSV`)
   }
 

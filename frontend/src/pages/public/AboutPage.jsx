@@ -56,13 +56,13 @@ const TEAM = [
     name: 'Neha Kulkarni',
     role: 'Co-founder & CEO',
     photo: 'https://randomuser.me/api/portraits/women/65.jpg',
-    bio: 'Former hospital network operations lead. Built CareMate after managing her grandmother’s home care across four agencies.',
+    bio: 'Former hospital network operations lead. Built Bystander after managing her grandmother’s home care across four agencies.',
   },
   {
     name: 'Dr. Vikram Raghavan',
     role: 'Chief Medical Officer',
     photo: 'https://randomuser.me/api/portraits/men/41.jpg',
-    bio: 'MD, Internal Medicine. Designs CareMate’s care protocols, escalation matrix and caretaker training curriculum.',
+    bio: 'MD, Internal Medicine. Designs Bystander’s care protocols, escalation matrix and caretaker training curriculum.',
   },
   {
     name: 'Aarti Menon',
@@ -195,11 +195,11 @@ export function AboutPage() {
     <div className="bg-canvas">
       {/* header */}
       <PageHero
-        eyebrow="CareMate Healthcare Technologies Pvt. Ltd."
+        eyebrow="Bystander Healthcare Technologies Pvt. Ltd."
         icon={Stethoscope}
         title="We are rebuilding how families"
         highlight="find care at home"
-        description="CareMate exists because finding a trustworthy caretaker in India is still a matter of references, luck and phone calls. We built a platform where qualification, verification, pricing and accountability are visible before anyone enters a hospital room or a home."
+        description="Bystander exists because finding a trustworthy caretaker in India is still a matter of references, luck and phone calls. We built a platform where qualification, verification, pricing and accountability are visible before anyone enters a hospital room or a home."
         items={[{ label: 'About' }]}
         actions={
           <>
@@ -275,12 +275,12 @@ export function AboutPage() {
                 quote. The clinical care was fine — the coordination was the problem.
               </p>
               <p>
-                CareMate began as a spreadsheet matching verified nurses to discharge summaries. Nurses registered
+                Bystander began as a spreadsheet matching verified nurses to discharge summaries. Nurses registered
                 their state council numbers, families paid into a common pool, and every shift ended with a written
                 handover note. That note is still the heart of the product.
               </p>
               <p>
-                Today CareMate operates in 18 cities with 4,200+ verified caretakers — registered nurses, GNM and ANM
+                Today Bystander operates in 18 cities with 4,200+ verified caretakers — registered nurses, GNM and ANM
                 professionals, physiotherapy assistants, certified elder-care caretakers, MBBS doctors on call and
                 nursing students working under supervision. The spreadsheet became an escrow engine, an identity
                 verification pipeline and an on-call desk that has never once been unattended.
@@ -591,7 +591,7 @@ export function AboutPage() {
         <Container className="flex flex-col items-start gap-6 py-12 sm:py-16 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-accent-300">
-              <Users className="h-3.5 w-3.5" /> Join CareMate
+              <Users className="h-3.5 w-3.5" /> Join Bystander
             </p>
             <h2 className="mt-2.5 font-display text-2xl font-extrabold text-white sm:text-3xl">
               Whether you need care or give it

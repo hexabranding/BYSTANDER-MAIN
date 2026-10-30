@@ -26,7 +26,7 @@ import { formatCurrency } from '@/utils/format'
 import { CARE_TYPES, CITIES } from '@/utils/constants'
 import { reveal, clamp01 } from '@/utils/motion'
 import { SERVICES } from '@/data/services'
-import { featuredCaregivers } from '@/data/caregivers'
+import { fetchPublicCaregivers } from '@/services/caregiversService'
 import { FAQS, TESTIMONIALS } from '@/data/content'
 import { Button } from '@/components/common/Button'
 import { Container } from '@/components/common/Container'
@@ -113,6 +113,16 @@ export function HomePage() {
   const [date, setDate] = useState('')
   const [duration, setDuration] = useState(DURATIONS[0])
   const [openFaq, setOpenFaq] = useState(0)
+  const [topCaregivers, setTopCaregivers] = useState([])
+
+  useEffect(() => {
+    fetchPublicCaregivers({ limit: 4 })
+      .then((res) => {
+        const list = res?.data?.caregivers || []
+        if (list.length > 0) setTopCaregivers(list)
+      })
+      .catch(() => {})
+  }, [])
 
   // ---- hero parallax -------------------------------------------------
   // One scroll position drives four layers: the photo drifts and settles,
@@ -234,11 +244,13 @@ export function HomePage() {
               </div>
 
               <div className="hero-social-proof mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
-                <div className="flex -space-x-2.5">
-                  {featuredCaregivers.slice(0, 4).map((cg) => (
-                    <Avatar key={cg.id} src={cg.photo} name={cg.name} size="sm" verified />
-                  ))}
-                </div>
+                {topCaregivers.length > 0 ? (
+                  <div className="flex -space-x-2.5">
+                    {topCaregivers.slice(0, 4).map((cg) => (
+                      <Avatar key={cg.id || cg._id} src={cg.photo || cg.avatar} name={cg.name} size="sm" verified />
+                    ))}
+                  </div>
+                ) : null}
                 <div className="flex items-center gap-2">
                   <RatingStars value={4.9} />
                   <span className="text-xs text-muted">12,400+ family reviews</span>

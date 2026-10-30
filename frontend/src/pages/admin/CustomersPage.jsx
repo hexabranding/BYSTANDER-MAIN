@@ -515,7 +515,7 @@ export function CustomersPage() {
             <Card>
               <CardHeader
                 title="Booking history"
-                subtitle={`${selectedBookings.length} booking${selectedBookings.length === 1 ? '' : 's'} on CareMate`}
+                subtitle={`${selectedBookings.length} booking${selectedBookings.length === 1 ? '' : 's'} on Bystander`}
               />
               <CardBody className="divide-y divide-line p-0">
                 {isLoadingBookings ? (
@@ -544,7 +544,7 @@ export function CustomersPage() {
                   <EmptyState
                     icon={CalendarDays}
                     title="No bookings yet"
-                    description="This customer has not booked a caretaker on CareMate."
+                    description="This customer has not booked a caretaker on Bystander."
                     className="py-8"
                   />
                 )}

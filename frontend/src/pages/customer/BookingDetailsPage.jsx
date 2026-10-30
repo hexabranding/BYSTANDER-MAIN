@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
+  AlertCircle,
   ArrowLeft,
   Building2,
   CalendarDays,
@@ -20,6 +21,7 @@ import {
   Star,
   UserRound,
   Users,
+  UserX,
   Wallet,
   XCircle,
 } from 'lucide-react'
@@ -27,7 +29,6 @@ import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
-import { getBookingById, CUSTOMERS } from '@/data/bookings'
 import { downloadText, formatCurrency, formatDate, formatDateTime, toCSV } from '@/utils/format'
 import { GST_RATE, PLATFORM_COMMISSION, PLATFORM_FEE } from '@/utils/constants'
 import { durationBasis, formatDuration } from '@/utils/duration'
@@ -106,16 +107,11 @@ export function BookingDetailsPage() {
       const data = await bookingService.getBookingById(id)
       setRealBooking(data)
     } catch (err) {
-      const mock = bookings.find((b) => b.id === id) || getBookingById(id) || null
-      if (mock) {
-        setRealBooking(mock)
-      } else {
-        setError(err.message || 'Booking not found')
-      }
+      setError(err.message || 'Booking not found')
     } finally {
       setLoading(false)
     }
-  }, [id, bookings])
+  }, [id])
 
   useEffect(() => {
     loadBooking()
@@ -153,7 +149,70 @@ export function BookingDetailsPage() {
     return () => clearInterval(interval)
   }, [cooldownSeconds])
 
+  const [broadcastNow, setBroadcastNow] = useState(Date.now())
+  const [rebroadcasting, setRebroadcasting] = useState(false)
+
+  // Live timer for 1-hour broadcast countdown
+  useEffect(() => {
+    if (!realBooking?.broadcastExpiresAt) return
+    const interval = setInterval(() => {
+      setBroadcastNow(Date.now())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [realBooking?.broadcastExpiresAt])
+
   const booking = realBooking
+
+  const broadcastExpiryMs = booking?.broadcastExpiresAt
+    ? new Date(booking.broadcastExpiresAt).getTime()
+    : null
+  const broadcastRemainingMs = broadcastExpiryMs ? Math.max(0, broadcastExpiryMs - broadcastNow) : 0
+  const isBroadcastExpired = Boolean(
+    booking?.isBroadcastExpired ||
+    (broadcastExpiryMs && broadcastRemainingMs <= 0 && (!booking.applicants || booking.applicants.length === 0)) ||
+    booking?.status?.toLowerCase() === 'expired'
+  )
+  const isBroadcastClosed = Boolean(
+    booking?.isBroadcastClosed ||
+    (broadcastExpiryMs && broadcastRemainingMs <= 0 && booking.applicants && booking.applicants.length > 0)
+  )
+
+  const countdownMinutes = Math.floor(broadcastRemainingMs / 60000)
+  const countdownSecondsRemaining = Math.floor((broadcastRemainingMs % 60000) / 1000)
+  const countdownFormatted = `${String(countdownMinutes).padStart(2, '0')}:${String(countdownSecondsRemaining).padStart(2, '0')}`
+
+  const handleRebroadcast = async () => {
+    if (!booking?.id) return
+    setRebroadcasting(true)
+    try {
+      if (isMongoObjectId(booking.id)) {
+        const updated = await bookingService.rebroadcastBooking(booking.id)
+        setRealBooking(updated)
+      } else {
+        const now = new Date()
+        const newExpiry = new Date(now.getTime() + 60 * 60 * 1000).toISOString()
+        updateBooking(booking.id, {
+          status: 'Pending',
+          broadcastExpiresAt: newExpiry,
+        })
+        setRealBooking((prev) => ({
+          ...prev,
+          status: 'Pending',
+          broadcastExpiresAt: newExpiry,
+          isBroadcastExpired: false,
+        }))
+      }
+      toast.success('Broadcast Re-launched!', {
+        description: 'Your request has been re-dispatched to verified caretakers in your area for 1 hour.',
+      })
+    } catch (err) {
+      toast.error('Failed to re-broadcast', {
+        description: err.message || 'Unable to re-launch search. Please try again.',
+      })
+    } finally {
+      setRebroadcasting(false)
+    }
+  }
 
   const caregiver = useMemo(() => {
     if (!booking) return null
@@ -355,16 +414,28 @@ export function BookingDetailsPage() {
   }
 
   const customer =
-    CUSTOMERS.find((c) => c.id === booking.customerId) ||
-    (user?.id === booking.customerId
-      ? { name: user.name, email: user.email, phone: user.phone, address: user.address, city: user.city }
-      : null)
+    (typeof booking.customer === 'object' && booking.customer !== null ? booking.customer : null) ||
+    (user
+      ? {
+          name: user.name || user.fullName || booking.customerName || 'Customer',
+          email: user.email || '',
+          phone: user.phone || user.mobile || '',
+          address: user.address || booking.address || '',
+          city: user.city || booking.city || '',
+        }
+      : {
+          name: booking.customerName || 'Customer',
+          email: '',
+          phone: '',
+          address: booking.address || '',
+          city: booking.city || '',
+        })
 
   const canCancel = booking.status === 'Pending' || booking.status === 'Confirmed'
   const canPay =
-    ['Pending', 'Unpaid'].includes(booking.paymentStatus) ||
-    booking.isPaymentDue ||
-    (booking.status === 'Completed' && !isPaid && booking.paymentStatus !== 'Refunded')
+    booking.status === 'Completed' &&
+    !isPaid &&
+    !['Paid', 'Settled', 'Refunded'].includes(booking.paymentStatus)
   const canSettle = booking.status === 'Completed' && booking.paymentStatus === 'Escrow Held'
   const canRate = booking.status === 'Completed' && isPaid && !booking.customerRating
   const hasCheckedIn = Boolean(booking.checkIn?.at) || ['In Progress', 'Completed'].includes(booking.status)
@@ -834,14 +905,18 @@ export function BookingDetailsPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          {/* Caretaker Applicants or Radar Search Section */}
-          {booking.status?.toLowerCase() === 'pending' && !booking.caregiverId && (
+          {/* Caretaker Applicants, Rapido-style Timeout, or Live Radar Search Section */}
+          {!booking.caregiverId && ['pending', 'expired'].includes(booking.status?.toLowerCase()) && (
             booking.applicants && booking.applicants.length > 0 ? (
               <Card className="border-2 border-primary-500/30 bg-gradient-to-br from-mint-50/50 via-white to-white shadow-md">
                 <CardHeader
                   icon={Users}
                   title={`Caretakers Who Accepted Your Request (${booking.applicants.length})`}
-                  subtitle="Compare ratings, qualifications, and hourly rates to choose your preferred caretaker."
+                  subtitle={
+                    isBroadcastClosed
+                      ? '1-Hour broadcast has completed. Choose your preferred caretaker from the offers below.'
+                      : 'Compare ratings, qualifications, and hourly rates to choose your preferred caretaker.'
+                  }
                   action={
                     booking.preferredGender && booking.preferredGender !== 'Any' ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-800">
@@ -851,6 +926,23 @@ export function BookingDetailsPage() {
                   }
                 />
                 <CardBody className="space-y-4">
+                  {/* Broadcast Window Status Notice */}
+                  {isBroadcastClosed ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 text-xs text-slate-700 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span><strong>1-Hour Broadcast Completed:</strong> This request is now closed to new caretakers. Please confirm your preferred caretaker below to lock in the booking.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-primary-200 bg-mint-50/70 p-3.5 text-xs text-primary-900 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-primary-700 shrink-0 animate-spin" style={{ animationDuration: '6s' }} />
+                        <span><strong>Broadcast Live ({countdownFormatted} remaining):</strong> Caretakers are actively reviewing. You may choose a caretaker now or wait for more offers.</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid gap-3">
                     {booking.applicants.map((applicant) => (
                       <div
@@ -928,32 +1020,114 @@ export function BookingDetailsPage() {
                   </div>
                 </CardBody>
               </Card>
-            ) : (
-              <Card className="border border-primary-200 bg-gradient-to-r from-mint-50/60 to-primary-50/30">
-                <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-600 text-white shadow-md">
-                      <Radio className="h-6 w-6 animate-pulse" />
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-400 opacity-75"></span>
-                        <span className="relative inline-flex h-3 w-3 rounded-full bg-primary-500"></span>
+            ) : isBroadcastExpired ? (
+              /* Rapido / Uber Style: Search Timed Out — No Caretaker Available Card */
+              <Card className="border-2 border-amber-300/80 bg-gradient-to-br from-amber-50/50 via-white to-white shadow-md overflow-hidden">
+                <div className="h-1.5 w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500" />
+                <CardBody className="p-6 sm:p-8">
+                  <div className="flex flex-col items-center text-center max-w-xl mx-auto space-y-4">
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 shadow-inner">
+                      <UserX className="h-8 w-8 stroke-[2.2]" />
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                        <span className="relative inline-flex h-4 w-4 rounded-full bg-amber-500 text-[10px] font-black text-white items-center justify-center">!</span>
                       </span>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-display text-base font-bold text-ink">
-                          Broadcasting Request to Caretakers
-                        </h4>
-                        {booking.preferredGender && booking.preferredGender !== 'Any' ? (
-                          <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-bold text-primary-800">
-                            {booking.preferredGender === 'Female' ? '👩 Female Caretakers' : '👨 Male Caretakers'}
-                          </span>
-                        ) : null}
+
+                    <div className="space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100/80 px-3 py-1 text-xs font-bold text-amber-900">
+                        <Clock className="h-3.5 w-3.5 text-amber-700" />
+                        1-Hour Search Window Elapsed
                       </div>
-                      <p className="mt-1 text-sm text-muted">
-                        Your request has been dispatched to verified caregivers in {booking.city || 'your area'}. As caregivers accept, their profiles and individual rates will appear here for you to compare and select.
+                      <h3 className="font-display text-xl sm:text-2xl font-black text-ink">
+                        No Caretakers Available Nearby
+                      </h3>
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        We broadcasted your request to verified caregivers in <strong className="text-ink">{booking.city || 'your area'}</strong> for <strong className="text-ink">{booking.serviceName || booking.service}</strong>, but unfortunately none were available to accept within the 1-hour broadcast window.
                       </p>
                     </div>
+
+                    <div className="w-full rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-3.5 text-xs text-amber-900 flex items-center justify-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span><strong>No charges deducted:</strong> Any escrow authorization for this request remains completely safe.</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2 w-full">
+                      <Button
+                        type="button"
+                        variant="primary"
+                        icon={RotateCw}
+                        loading={rebroadcasting}
+                        onClick={handleRebroadcast}
+                        className="shadow-sm"
+                      >
+                        Re-broadcast Request (1 Hour)
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => navigate('/customer/caregivers')}
+                      >
+                        Browse Directory
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => navigate('/customer/ambulances')}
+                      >
+                        Ambulance Assistance
+                      </Button>
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+            ) : (
+              /* Live Rapido-style Radar Pulse Search with Countdown Clock */
+              <Card className="border border-primary-200 bg-gradient-to-r from-mint-50/60 to-primary-50/30 overflow-hidden shadow-sm">
+                <div className="h-1 w-full bg-gradient-to-r from-primary-400 via-mint-400 to-primary-600 animate-pulse" />
+                <CardBody className="flex flex-col gap-5 p-5 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary-600 text-white shadow-md">
+                        <Radio className="h-7 w-7 animate-pulse" />
+                        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-300 opacity-75" />
+                          <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-primary-500" />
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-display text-base font-bold text-ink">
+                            Searching for Available Caretakers...
+                          </h4>
+                          {booking.preferredGender && booking.preferredGender !== 'Any' ? (
+                            <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-bold text-primary-800">
+                              {booking.preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm text-muted">
+                          Broadcasting live in {booking.city || 'your area'}. As caretakers accept, their profiles will appear right here for you to compare and choose.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-center shrink-0 rounded-2xl border border-primary-200 bg-white/90 px-4 py-2.5 shadow-xs">
+                      <Clock className="h-4 w-4 text-primary-700 animate-spin" style={{ animationDuration: '6s' }} />
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Time Remaining</div>
+                        <div className="font-mono text-base font-extrabold text-primary-900">{countdownFormatted}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Search Progress Bar */}
+                  <div className="w-full bg-primary-100/70 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-primary-600 h-full rounded-full transition-all duration-1000"
+                      style={{
+                        width: `${Math.min(100, Math.max(5, ((3600000 - broadcastRemainingMs) / 3600000) * 100))}%`,
+                      }}
+                    />
                   </div>
                 </CardBody>
               </Card>
@@ -1289,17 +1463,17 @@ export function BookingDetailsPage() {
                 <StatusBadge status={booking.paymentStatus} />
               </div>
               <p className="text-xs leading-relaxed text-muted">
-                {booking.paymentStatus === 'Escrow Held'
-                  ? 'Your payment is safely held in escrow and will be released after the service is completed.'
-                  : booking.paymentStatus === 'Paid'
-                    ? 'This booking has been fully paid and settled.'
-                    : booking.paymentStatus === 'Refunded'
-                      ? 'A refund was processed for this booking to your original payment method.'
-                      : 'Complete the payment to confirm your caretaker in escrow.'}
+                {isPaid || booking.paymentStatus === 'Paid'
+                  ? 'This booking has been fully paid and settled.'
+                  : booking.paymentStatus === 'Refunded'
+                    ? 'A refund was processed for this booking to your original payment method.'
+                    : booking.status === 'Completed'
+                      ? 'Service is completed. Please settle payment to finalize the shift.'
+                      : 'No advance payment needed. Payment is settled after the service is completed via UPI, Card, or Net Banking.'}
               </p>
               {canPay ? (
                 <Button className="w-full" icon={ShieldCheck} onClick={() => setPayOpen(true)}>
-                  Pay {formatCurrency(booking.total)} now
+                  Settle & Pay {formatCurrency(booking.total)}
                 </Button>
               ) : null}
             </CardBody>
@@ -1371,7 +1545,7 @@ export function BookingDetailsPage() {
       <Modal
         open={payOpen}
         onClose={() => setPayOpen(false)}
-        title="Complete payment"
+        title="Settle shift payment"
         subtitle={`${booking.service} · ${formatDate(booking.date, { long: true })}`}
         size="sm"
         footer={
@@ -1398,7 +1572,7 @@ export function BookingDetailsPage() {
               <span className="text-muted">Amount</span>
               <span className="font-display text-lg font-extrabold text-ink">{formatCurrency(booking.total)}</span>
             </div>
-            <p className="mt-1 text-xs text-muted">Held in escrow until the service is completed.</p>
+            <p className="mt-1 text-xs text-muted">Direct shift settlement. Caretaker payout is credited upon settlement.</p>
           </div>
           <div className="space-y-2">
             {PAYMENT_METHODS.map((m) => (

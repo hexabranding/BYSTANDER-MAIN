@@ -46,6 +46,12 @@ const bookingSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    // Broadcast window expiration (1-hour TTL for on-demand searching)
+    broadcastExpiresAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     // Multi-Caregiver Acceptance / Bidding: list of caretakers who accepted this broadcast
     applicants: [
       {
@@ -227,7 +233,7 @@ const bookingSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: {
-        values: ['pending', 'confirmed', 'in_progress', 'cancelled', 'rejected', 'completed'],
+        values: ['pending', 'confirmed', 'in_progress', 'cancelled', 'rejected', 'completed', 'expired'],
         message: 'Invalid booking status: {VALUE}',
       },
       default: 'pending',

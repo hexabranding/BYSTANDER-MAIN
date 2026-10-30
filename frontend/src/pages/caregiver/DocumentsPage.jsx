@@ -302,7 +302,7 @@ export function DocumentsPage() {
     downloadText(
       `${doc.type.toLowerCase().replace(/\s+/g, '-')}-record.txt`,
       [
-        'CareMate Verified Document Record',
+        'Bystander Verified Document Record',
         `Document: ${doc.type}`,
         `File Name: ${doc.file || doc.fileName || 'N/A'}`,
         `Caretaker: ${record.name}`,
@@ -421,7 +421,7 @@ export function DocumentsPage() {
           <div className="flex items-start gap-3 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
             <p className="text-xs leading-relaxed text-muted">
-              Files are encrypted at rest and only accessible to the CareMate verification team. Identifiers are masked
+              Files are encrypted at rest and only accessible to the Bystander verification team. Identifiers are masked
               everywhere in the product — full numbers are never displayed or shared.
             </p>
           </div>
@@ -619,7 +619,7 @@ export function DocumentsPage() {
           <div className="space-y-4">
             <div className="rounded-card border border-line bg-white p-5 shadow-card">
               <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
-                <p className="font-display text-sm font-bold text-ink">CareMate · {viewDoc.type}</p>
+                <p className="font-display text-sm font-bold text-ink">Bystander · {viewDoc.type}</p>
                 <StatusBadge status={viewDoc.status} size="sm" />
               </div>
 

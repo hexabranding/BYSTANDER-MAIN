@@ -28,7 +28,7 @@ const CATEGORIES = [
 const INCLUDED = [
   'Itemised estimate before you confirm — hourly rate, platform charges and 18% GST shown upfront.',
   'Escrow release only after you mark the shift complete; cancellations 6+ hours ahead are free.',
-  'CareMate absorbs the 12% platform commission on the caretaker side, so families never see a hidden fee.',
+  'Bystander absorbs the 12% platform commission on the caretaker side, so families never see a hidden fee.',
   'In-app messaging, shift check-in/out and a downloadable invoice for every booking.',
 ]
 

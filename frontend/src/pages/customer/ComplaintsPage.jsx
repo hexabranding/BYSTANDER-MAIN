@@ -21,6 +21,7 @@ import { Button } from '@/components/common/Button'
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
 import { complaintService } from '@/services/complaintService'
+import { bookingService } from '@/services/bookingService'
 import { isMongoObjectId } from '@/services/adapters'
 
 const CATEGORIES = ['Misbehavior', 'Theft', 'Abuse', 'Harassment', 'Medical negligence', 'Other']
@@ -155,6 +156,7 @@ export function ComplaintsPage() {
   const { bookings } = useData()
 
   const [complaints, setComplaints] = useState([])
+  const [realBookings, setRealBookings] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -166,11 +168,13 @@ export function ComplaintsPage() {
   const [viewing, setViewing] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const customerId = user?.id || user?._id || 'cu-201'
+  const myBookings = realBookings
 
-  const myBookings = useMemo(() => {
-    return (bookings || []).filter((b) => b.customerId === customerId || b.customer === customerId)
-  }, [bookings, customerId])
+  useEffect(() => {
+    bookingService.getBookings().then((res) => {
+      setRealBookings(res.bookings || [])
+    }).catch(() => {})
+  }, [])
 
   const fetchComplaints = async () => {
     setIsLoading(true)

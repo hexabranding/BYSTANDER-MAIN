@@ -14,7 +14,7 @@ export function RegisterCustomerPage() {
   useDocumentTitle('Register as customer · Bystander')
   const navigate = useNavigate()
   const { guestLogin } = useAuth()
-  const [rememberedEmail, setRememberedEmail] = useLocalStorage('caremate.rememberedEmail', '')
+  const [rememberedEmail, setRememberedEmail] = useLocalStorage('bystander.rememberedEmail', '')
 
   const [step, setStep] = useState('email') // 'email' | 'otp' | 'password'
   const [email, setEmail] = useState(rememberedEmail || '')

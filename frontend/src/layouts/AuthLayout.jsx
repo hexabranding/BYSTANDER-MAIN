@@ -60,8 +60,8 @@ export function AuthLayout() {
             .
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-white/60">
-            Every caretaker on CareMate passes a four-step document review before a single shift is booked. Sign in to
-            explore the customer, caretaker and admin workspaces with seeded demo data.
+            Every caretaker on Bystander passes a four-step document review before a single shift is booked. Sign in to
+            access your customer, caretaker or admin account.
           </p>
           <ul className="mt-8 grid gap-3 sm:grid-cols-2">
             {points.map((p) => (

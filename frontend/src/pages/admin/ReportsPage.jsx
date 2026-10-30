@@ -211,7 +211,7 @@ export function ReportsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reports"
-        subtitle="Generate, schedule and download operational reports for the CareMate platform."
+        subtitle="Generate, schedule and download operational reports for the Bystander platform."
         action={
           <Button icon={Plus} onClick={() => setCreateOpen(true)}>
             Generate new report
@@ -387,7 +387,7 @@ export function ReportsPage() {
           </div>
 
           <FormField label="Delivery email (optional)" htmlFor="report-email" hint="Leave blank to keep the report in this dashboard only.">
-            <Input id="report-email" type="email" placeholder="ops@caremate.in" {...register('email')} />
+            <Input id="report-email" type="email" placeholder="ops@bystander.in" {...register('email')} />
           </FormField>
 
           <p className="rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">

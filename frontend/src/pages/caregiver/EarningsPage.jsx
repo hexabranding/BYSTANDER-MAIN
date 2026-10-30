@@ -218,7 +218,7 @@ export function EarningsPage() {
       net: e.net,
       status: e.status,
     }))
-    downloadText(`caremate-earnings-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
+    downloadText(`bystander-earnings-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
     toast.success(`Exported ${rows.length} transaction${rows.length === 1 ? '' : 's'} to CSV`)
   }
 

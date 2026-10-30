@@ -70,8 +70,8 @@ export function JobDetailsPage() {
 
   const job = useMemo(() => {
     if (realBooking) return adaptBookingToJob(realBooking, myUserId)
-    return jobs?.find((j) => j.id === id || j.bookingId === id)
-  }, [realBooking, jobs, id, myUserId])
+    return null
+  }, [realBooking, myUserId])
 
   const booking = useMemo(() => {
     if (realBooking) return realBooking

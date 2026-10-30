@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
-# Backend environment variables
+# Environment variables
+.env
+.env*.local
 backend/.env
 backend/.env*.local
+frontend/.env
+frontend/.env*.local

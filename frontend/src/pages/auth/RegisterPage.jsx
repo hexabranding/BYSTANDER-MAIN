@@ -68,7 +68,7 @@ export function RegisterPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-extrabold text-ink">Create your account</h1>
-        <p className="mt-1.5 text-sm text-muted">Choose how you want to use CareMate — it only takes a minute.</p>
+        <p className="mt-1.5 text-sm text-muted">Choose how you want to use Bystander — it only takes a minute.</p>
       </div>
 
       <div className="space-y-3">

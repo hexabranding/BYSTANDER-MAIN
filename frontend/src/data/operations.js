@@ -186,7 +186,7 @@ export const COMPLAINTS = [
     bookingId: 'BK-4765',
     complainant: 'Nandini Bose',
     complainantType: 'Customer',
-    against: 'CareMate Platform',
+    against: 'Bystander Platform',
     againstType: 'Platform',
     category: 'Billing',
     priority: 'Low',

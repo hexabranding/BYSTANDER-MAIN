@@ -177,12 +177,25 @@ export const verifyCheckOut = async (id, checkOutData) => {
   return adaptBooking(rawBooking)
 }
 
+/**
+ * Customer re-broadcasts a pending or expired request for 1 more hour.
+ * @param {string} id - Booking ObjectId
+ * @returns {Promise<Object>} Updated and adapted booking
+ */
+export const rebroadcastBooking = async (id) => {
+  if (!id) throw new Error('Booking ID is required')
+  const response = await apiClient.patch(`/bookings/${id}/rebroadcast`)
+  const rawBooking = response?.data || response
+  return adaptBooking(rawBooking)
+}
+
 export const bookingService = {
   createBooking,
   getBookings,
   getBookingById,
   acceptBooking,
   selectCaregiver,
+  rebroadcastBooking,
   rejectBooking,
   cancelBooking,
   requestCheckInOtp,

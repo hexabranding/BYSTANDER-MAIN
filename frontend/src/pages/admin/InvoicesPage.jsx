@@ -367,7 +367,7 @@ export function InvoicesPage() {
   if (!isLoading && !invoices.length) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Invoices" subtitle="Every GST invoice generated against a CareMate booking." />
+        <PageHeader title="Invoices" subtitle="Every GST invoice generated against a Bystander booking." />
         <div className="rounded-card border border-line bg-white shadow-card">
           <EmptyState
             icon={Receipt}

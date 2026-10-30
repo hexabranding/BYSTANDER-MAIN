@@ -183,7 +183,7 @@ export function ReviewsPage() {
               review.caregiverUser?.fullName ||
               review.caregiver?.user?.fullName ||
               caregiver?.name ||
-              'CareMate caretaker'
+              'Bystander caretaker'
             const caregiverPhoto =
               review.caregiverUser?.avatar ||
               review.caregiver?.avatar ||

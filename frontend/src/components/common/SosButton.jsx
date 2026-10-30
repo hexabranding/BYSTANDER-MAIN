@@ -363,7 +363,7 @@ export function SosButton({ bookingId: explicitBookingId, className }) {
             <div className="flex items-start gap-2.5 rounded-xl border border-line bg-slate-50 px-3.5 py-3 text-xs leading-relaxed text-muted">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
               <p>
-                This incident is logged in the CareMate operational safety log. External emergency services (e.g., 112)
+                This incident is logged in the Bystander operational safety log. External emergency services (e.g., 112)
                 are not automatically dispatched. In an immediate life-threatening emergency, always contact local authorities directly.
               </p>
             </div>

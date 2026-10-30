@@ -152,8 +152,7 @@ export function ResetPasswordPage() {
 
         <p className="flex items-start gap-2 rounded-xl bg-mint-50 px-3.5 py-3 text-xs leading-relaxed text-primary-900">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-700" />
-          No email is re-verified here, and demo accounts still sign in with the seeded demo password
-          <span className="font-mono"> caremate123</span>. This screen exists to complete the UI flow only.
+          Password resets require verified credentials. Check your registered contact for confirmation.
         </p>
       </form>
 

@@ -76,12 +76,17 @@ export async function setupEphemeralReplicaSet() {
     };
   }
 
-  // 4. Connect directly to initiate replica set rs0
+  // 4. Connect directly to initiate replica set rs0 with explicit 127.0.0.1 binding
   const uriDirect = `mongodb://127.0.0.1:${port}/admin?directConnection=true`;
   const conn = await mongoose.createConnection(uriDirect).asPromise();
 
   try {
-    await conn.db.admin().command({ replSetInitiate: {} });
+    await conn.db.admin().command({
+      replSetInitiate: {
+        _id: 'rs0',
+        members: [{ _id: 0, host: `127.0.0.1:${port}` }],
+      },
+    });
 
     // Poll until node is elected writable primary
     let isPrimary = false;

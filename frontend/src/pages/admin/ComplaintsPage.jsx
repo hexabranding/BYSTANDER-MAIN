@@ -450,7 +450,7 @@ function ComplaintDetail({ id }) {
       const updated = await adminService.addComplaintNote(complaint.dbId || complaint.id, { note: text })
       setComplaint(updated)
       setNote('')
-      toast.success('Internal note added', { description: 'Visible to CareMate operations only.' })
+      toast.success('Internal note added', { description: 'Visible to Bystander operations only.' })
     } catch (err) {
       toast.error(err.message || 'Failed to add internal note')
     }
@@ -493,7 +493,7 @@ function ComplaintDetail({ id }) {
             tone,
           )}
         >
-          {type === 'Platform' ? 'CareMate operations' : `${type} account`}
+          {type === 'Platform' ? 'Bystander operations' : `${type} account`}
         </span>
       </div>
     </div>
@@ -591,7 +591,7 @@ function ComplaintDetail({ id }) {
           <Card>
             <CardHeader
               title="Internal notes"
-              subtitle="Visible to CareMate operations only"
+              subtitle="Visible to Bystander operations only"
               icon={Lock}
               action={
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-info-50 px-2.5 py-1 text-[11px] font-semibold text-info-700 ring-1 ring-inset ring-info-500/30">
@@ -622,7 +622,7 @@ function ComplaintDetail({ id }) {
                 <FormField
                   label="Add internal note"
                   htmlFor="cp-internal-note"
-                  hint="Only CareMate operations can see this."
+                  hint="Only Bystander operations can see this."
                 >
                   <Textarea
                     id="cp-internal-note"

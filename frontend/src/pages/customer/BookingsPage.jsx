@@ -21,7 +21,7 @@ import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/State
 import { RatingModal } from '@/components/booking/RatingModal'
 import { bookingService, reviewService, financeService, isMongoObjectId } from '@/services'
 
-const STATUS_TABS = ['All', 'Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled']
+const STATUS_TABS = ['All', 'Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled', 'Expired']
 const PHASES = ['All', 'Current', 'Upcoming', 'Previous']
 
 const startOfToday = () => {
@@ -33,7 +33,7 @@ const startOfToday = () => {
 /** Time-based grouping: what is happening now, what is still to come, what is done. */
 const phaseOf = (b) => {
   if (b.status === 'In Progress') return 'Current'
-  if (b.status === 'Completed' || b.status === 'Cancelled' || b.status === 'Rejected') return 'Previous'
+  if (b.status === 'Completed' || b.status === 'Cancelled' || b.status === 'Rejected' || b.status === 'Expired') return 'Previous'
   const when = new Date(`${b.date}T00:00:00`)
   if (Number.isNaN(when.getTime())) return 'Upcoming'
   return when >= startOfToday() ? 'Upcoming' : 'Previous'
@@ -83,8 +83,7 @@ export function BookingsPage() {
     if (row?.caregiver?.user?.fullName) return row.caregiver.user.fullName
     if (row?.caregiver?.fullName) return row.caregiver.fullName
     if (row?.caregiver?.name) return row.caregiver.name
-    const found = caregivers.find((c) => c.id === cgId || c._id === cgId)
-    return found?.name || 'Assigning…'
+    return 'Assigning…'
   }
 
   const counts = useMemo(() => {
@@ -117,10 +116,8 @@ export function BookingsPage() {
   }, [debouncedSearch, phase, status])
 
   const canPay = (b) =>
-    (b.paymentStatus === 'Pending' || b.paymentStatus === 'Unpaid' || b.isPaymentDue) &&
-    b.status !== 'Cancelled' &&
-    b.paymentStatus !== 'Paid' &&
-    b.paymentStatus !== 'Refunded'
+    b.status === 'Completed' &&
+    !['Paid', 'Settled', 'Refunded'].includes(b.paymentStatus)
   const canRate = (b) =>
     b.status === 'Completed' &&
     ['Paid', 'Released', 'Settled'].includes(b.paymentStatus) &&

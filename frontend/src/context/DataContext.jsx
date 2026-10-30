@@ -1,12 +1,6 @@
 import { createContext, useCallback, useContext, useMemo } from 'react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
-import { BOOKINGS, CUSTOMERS } from '@/data/bookings'
-import { CAREGIVERS } from '@/data/caregivers'
-import { REVIEWS, FAQS, TESTIMONIALS, HOW_IT_WORKS, WHY_CHOOSE } from '@/data/content'
-import { AVAILABLE_JOBS, COMPLAINTS, SOS_ALERTS, FRAUD_ALERTS, BLACKLIST, NOTIFICATIONS } from '@/data/operations'
-import { VERIFICATIONS } from '@/data/verifications'
-import { TRANSACTIONS, PAYOUTS, COMMISSIONS, EARNINGS_TXNS } from '@/data/finance'
-import { CONVERSATIONS } from '@/data/messages'
+import { FAQS, TESTIMONIALS, HOW_IT_WORKS, WHY_CHOOSE } from '@/data/content'
 import { PLATFORM_FEE, PLATFORM_COMMISSION, GST_RATE } from '@/utils/constants'
 import { bookingRef, uid } from '@/utils/format'
 
@@ -14,26 +8,26 @@ const DataContext = createContext(null)
 
 const seed = () => ({
   bookings: [],
-  caregivers: CAREGIVERS,
-  customers: CUSTOMERS,
-  verifications: VERIFICATIONS,
+  caregivers: [],
+  customers: [],
+  verifications: [],
   jobs: [],
-  complaints: COMPLAINTS,
-  sos: SOS_ALERTS,
-  notifications: NOTIFICATIONS,
-  reviews: REVIEWS,
-  conversations: CONVERSATIONS,
-  transactions: TRANSACTIONS,
-  payouts: PAYOUTS,
-  commissions: COMMISSIONS,
-  earnings: EARNINGS_TXNS,
-  blacklist: BLACKLIST,
-  frauds: FRAUD_ALERTS,
-  shortlist: CAREGIVERS.filter((c) => c.verified).map((c) => c.id),
+  complaints: [],
+  sos: [],
+  notifications: [],
+  reviews: [],
+  conversations: [],
+  transactions: [],
+  payouts: [],
+  commissions: [],
+  earnings: [],
+  blacklist: [],
+  frauds: [],
+  shortlist: [],
 })
 
 export function DataProvider({ children }) {
-  const [store, setStore, clearStore] = useLocalStorage('caremate.store', seed)
+  const [store, setStore, clearStore] = useLocalStorage('bystander.store', seed)
 
   const patch = useCallback((key, updater) => {
     setStore((prev) => ({
@@ -48,12 +42,14 @@ export function DataProvider({ children }) {
     (payload) => {
       const id = `BK-${Math.floor(4830 + Math.random() * 90)}`
       const now = new Date().toISOString()
+      const broadcastExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
       const booking = {
         id,
         ref: bookingRef(),
         status: 'Pending',
         paymentStatus: 'Pending',
         createdAt: now,
+        broadcastExpiresAt,
         invoiceNo: `INV-2026-${Math.floor(1000 + Math.random() * 8000)}`,
         timeline: [
           { label: 'Booking requested', status: 'completed', at: now },

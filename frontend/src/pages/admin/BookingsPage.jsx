@@ -142,7 +142,7 @@ export function BookingsPage() {
       bookingStatus: b.status,
       invoiceNo: b.invoiceNo,
     }))
-    downloadText(`caremate-bookings-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
+    downloadText(`bystander-bookings-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows))
     toast.success(`Exported ${rows.length} booking${rows.length === 1 ? '' : 's'} to CSV`)
   }
 
@@ -276,7 +276,7 @@ export function BookingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Bookings"
-        subtitle="Every care booking on CareMate — schedule, payment state and admin overrides."
+        subtitle="Every care booking on Bystander — schedule, payment state and admin overrides."
         action={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" icon={RefreshCw} onClick={fetchBookings} disabled={loading}>

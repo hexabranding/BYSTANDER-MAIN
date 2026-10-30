@@ -116,7 +116,7 @@ export async function seedAmbulances() {
     await mongoose.connect(MONGODB_URI);
   }
 
-  const defaultPassword = 'caremate123';
+  const defaultPassword = 'bystander123';
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(defaultPassword, salt);
 

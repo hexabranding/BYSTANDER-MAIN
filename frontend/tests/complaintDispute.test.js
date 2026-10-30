@@ -398,7 +398,7 @@ describe('Step 13D — Complaints & Dispute Management Frontend Services', () =>
     assert.equal(adapted.priority, 'Medium');
     assert.equal(adapted.category, 'Other');
     assert.equal(adapted.complainant, 'Customer');
-    assert.equal(adapted.against, 'CareMate Platform');
+    assert.equal(adapted.against, 'Bystander Platform');
     assert.deepEqual(adapted.evidence, []);
     assert.deepEqual(adapted.internalNotes, []);
     assert.deepEqual(adapted.audit, []);

@@ -189,6 +189,16 @@ const bookingSchema = new mongoose.Schema(
         default: '',
         maxlength: [20, 'Pincode cannot exceed 20 characters'],
       },
+      coordinates: {
+        latitude: {
+          type: Number,
+          default: null,
+        },
+        longitude: {
+          type: Number,
+          default: null,
+        },
+      },
       careSetting: {
         type: String,
         enum: ['Home Care', 'Hospital Care', 'Home', 'Hospital'],

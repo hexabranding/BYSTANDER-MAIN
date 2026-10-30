@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { CaregiverProfile, User, Service, Document } from '../models/index.js';
+import { resolveCoordinates } from '../utils/geoUtils.js';
 
 /**
  * Validate that every submitted service ID is a valid ObjectId and references an existing active Service.
@@ -130,6 +131,19 @@ export const updateMyCaregiverProfile = async (userId, sanitizedUpdates) => {
       state: profile.state,
       pincode: profile.pincode,
     };
+  }
+
+  if (sanitizedUpdates.coordinates) {
+    const lat = Number(sanitizedUpdates.coordinates.latitude ?? sanitizedUpdates.coordinates.lat);
+    const lng = Number(sanitizedUpdates.coordinates.longitude ?? sanitizedUpdates.coordinates.lng);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      profile.coordinates = { latitude: lat, longitude: lng };
+    }
+  } else if (!profile.coordinates?.latitude && (profile.city || profile.area)) {
+    const resolved = resolveCoordinates(profile);
+    if (resolved) {
+      profile.coordinates = resolved;
+    }
   }
 
   await profile.save();

@@ -186,11 +186,15 @@ const caregiverProfileSchema = new mongoose.Schema(
       state: { type: String, trim: true, default: 'Kerala' },
       pincode: { type: String, trim: true, default: '' },
     },
+    coordinates: {
+      latitude: { type: Number, default: null },
+      longitude: { type: Number, default: null },
+    },
     maxDistanceKm: {
       type: Number,
       min: 1,
       max: 100,
-      default: 15,
+      default: 30,
     },
     hourlyRate: {
       type: Number,

@@ -123,6 +123,11 @@ export function JobsPage() {
         return // Ignore broadcast when customer specifically requested the other gender
       }
 
+      // 30 km radius threshold check
+      if (newBooking.distanceKm !== undefined && newBooking.distanceKm !== null && Number(newBooking.distanceKm) > 30) {
+        return // Ignore broadcast beyond 30 km radius
+      }
+
       // Automatically play notification alert chime
       playBroadcastSound()
 
@@ -258,6 +263,7 @@ export function JobsPage() {
             ? byService.filter((j) => !j.isUrgent)
             : byService.filter((j) => j.urgency === urgency)
     const sorted = [...byUrgency]
+    if (sort === 'nearest') sorted.sort((a, b) => (Number(a.distanceKm) || 999) - (Number(b.distanceKm) || 999))
     if (sort === 'newest') sorted.sort((a, b) => (b.postedAt || '').localeCompare(a.postedAt || ''))
     if (sort === 'oldest') sorted.sort((a, b) => (a.postedAt || '').localeCompare(b.postedAt || ''))
     if (sort === 'payHigh') sorted.sort((a, b) => b.payment - a.payment)
@@ -392,6 +398,7 @@ export function JobsPage() {
             <option value="Standard">Standard scheduled</option>
           </Select>
           <Select aria-label="Sort jobs" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <option value="nearest">Distance: nearest first</option>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="payHigh">Payment: high</option>

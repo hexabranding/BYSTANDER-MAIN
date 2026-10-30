@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Booking, CaregiverProfile, User, Service, Transaction, Review } from '../models/index.js';
+import { Booking, CaregiverProfile, CustomerProfile, User, Service, Transaction, Review } from '../models/index.js';
 import {
   getLocalTimeInTimezone,
   calculateTotalHours,
@@ -7,6 +7,12 @@ import {
 import { safeDispatchNotification } from './notificationService.js';
 import { recordBookingTransaction } from './adminFinanceService.js';
 import { getIO } from '../socket.js';
+import {
+  DEFAULT_BROADCAST_RADIUS_KM,
+  isWithinRadius,
+  resolveCoordinates,
+  calculateDistanceKm,
+} from '../utils/geoUtils.js';
 
 /**
  * Check if the current MongoDB connection supports multi-document ACID transactions.
@@ -378,6 +384,17 @@ export const createBooking = async (customerId, bookingData) => {
   const totalAmount = Math.round(hourlyRate * durationHours);
   const broadcastExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1-hour broadcast TTL
 
+  // Ensure location has valid coordinates for 30 km radius matching
+  const locationWithCoords = {
+    ...location,
+    coordinates: location?.coordinates?.latitude && location?.coordinates?.longitude
+      ? {
+          latitude: Number(location.coordinates.latitude),
+          longitude: Number(location.coordinates.longitude),
+        }
+      : resolveCoordinates(location),
+  };
+
   const createdBooking = await executeWithTransactionRetry(async (session) => {
     const [created] = await Booking.create(
       [
@@ -402,7 +419,7 @@ export const createBooking = async (customerId, bookingData) => {
             String(patientDetails?.specialInstructions || '').toUpperCase().includes('URGENT ON-DEMAND')
           ),
           broadcastExpiresAt,
-          location,
+          location: locationWithCoords,
           patientDetails,
           status: 'pending',
           paymentStatus: 'unpaid',
@@ -415,7 +432,7 @@ export const createBooking = async (customerId, bookingData) => {
     return created;
   });
 
-  // Real-time broadcast: Emit Socket.IO event and dispatch alerts to active verified caregivers
+  // Real-time broadcast: Emit Socket.IO event and dispatch alerts to active verified caregivers within 30 km radius
   try {
     const io = getIO();
     if (io) {
@@ -432,24 +449,34 @@ export const createBooking = async (customerId, bookingData) => {
     }
 
     const verifiedCaregivers = await CaregiverProfile.find(verifiedFilter)
-      .select('user')
+      .select('user city area district coordinates maxDistanceKm address')
       .lean();
 
     for (const cg of verifiedCaregivers) {
-      if (cg.user) {
-        safeDispatchNotification({
-          recipient: cg.user,
-          type: 'booking_created',
-          title: 'New Booking Broadcast',
-          message: `New booking request for ${service.name} in ${location?.city || 'your area'}${bookingData.preferredGender && bookingData.preferredGender !== 'Any' ? ` (${bookingData.preferredGender} requested)` : ''}.`,
-          metadata: {
-            bookingId: createdBooking._id,
-            serviceName: service.name,
-            city: location?.city || '',
-            preferredGender: bookingData.preferredGender || 'Any',
-          },
-        });
+      if (!cg.user) continue;
+
+      // 30 km radius filter (or caregiver's custom maxDistanceKm)
+      const allowedRadius = Math.min(DEFAULT_BROADCAST_RADIUS_KM, cg.maxDistanceKm || DEFAULT_BROADCAST_RADIUS_KM);
+      const geoCheck = isWithinRadius(locationWithCoords, cg, allowedRadius);
+      if (!geoCheck.isWithin) {
+        continue; // Exclude caregivers outside the 30 km radius
       }
+
+      const distanceText = geoCheck.distanceKm !== null ? ` (${geoCheck.distanceKm} km away)` : '';
+
+      safeDispatchNotification({
+        recipient: cg.user,
+        type: 'booking_created',
+        title: 'New Booking Broadcast',
+        message: `New booking request for ${service.name} in ${location?.city || 'your area'}${distanceText}${bookingData.preferredGender && bookingData.preferredGender !== 'Any' ? ` (${bookingData.preferredGender} requested)` : ''}.`,
+        metadata: {
+          bookingId: createdBooking._id,
+          serviceName: service.name,
+          city: location?.city || '',
+          distanceKm: geoCheck.distanceKm,
+          preferredGender: bookingData.preferredGender || 'Any',
+        },
+      });
     }
   } catch (notifyErr) {
     console.error('Broadcast notification dispatch error:', notifyErr.message);
@@ -588,6 +615,51 @@ export const getBookings = async (user, query = {}) => {
       .populate('applicants.caregiverUser', 'fullName email phone avatar'),
     Booking.countDocuments(filter),
   ]);
+
+  // Caregiver view: attach calculated distanceKm and filter open broadcast shifts to 30 km radius
+  if (user.role === 'caregiver') {
+    const cgProfile = await CaregiverProfile.findOne({ user: user._id })
+      .select('city area district coordinates maxDistanceKm address')
+      .lean();
+
+    const allowedRadius = Math.min(DEFAULT_BROADCAST_RADIUS_KM, cgProfile?.maxDistanceKm || DEFAULT_BROADCAST_RADIUS_KM);
+
+    const mappedBookings = [];
+    for (const b of bookings) {
+      const bObj = b.toObject ? b.toObject() : b;
+      const isAssignedToMe =
+        (bObj.caregiverUser?._id && String(bObj.caregiverUser._id) === String(user._id)) ||
+        (bObj.caregiverUser && String(bObj.caregiverUser) === String(user._id)) ||
+        (bObj.caregiver?._id && String(bObj.caregiver._id) === String(user._id)) ||
+        (bObj.caregiver && String(bObj.caregiver) === String(user._id));
+
+      const geo = isWithinRadius(bObj.location, cgProfile, allowedRadius);
+      bObj.distanceKm = geo.distanceKm !== null ? geo.distanceKm : 5.0;
+
+      // Keep if assigned to this caregiver, OR if it's an open broadcast within 30 km radius
+      if (isAssignedToMe || geo.isWithin) {
+        mappedBookings.push(bObj);
+      }
+    }
+
+    // Sort by proximity (closest shifts first) when viewing open broadcast jobs
+    mappedBookings.sort((a, b) => {
+      const aAssigned = (a.caregiverUser?._id && String(a.caregiverUser._id) === String(user._id)) ? 1 : 0;
+      const bAssigned = (b.caregiverUser?._id && String(b.caregiverUser._id) === String(user._id)) ? 1 : 0;
+      if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+      return (a.distanceKm ?? 999) - (b.distanceKm ?? 999);
+    });
+
+    return {
+      bookings: mappedBookings,
+      pagination: {
+        total: mappedBookings.length,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages: Math.ceil(mappedBookings.length / parsedLimit) || 1,
+      },
+    };
+  }
 
   return {
     bookings,

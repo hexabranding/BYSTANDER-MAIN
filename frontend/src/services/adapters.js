@@ -623,6 +623,11 @@ export const adaptBooking = (raw) => {
       String(raw.specialInstructions || '').toUpperCase().includes('URGENT')
     ),
     preferredGender: raw.preferredGender || 'Any',
+    distanceKm: raw.distanceKm !== undefined && raw.distanceKm !== null
+      ? Number(raw.distanceKm)
+      : raw.location?.distanceKm !== undefined && raw.location?.distanceKm !== null
+        ? Number(raw.location.distanceKm)
+        : null,
     applicants: Array.isArray(raw.applicants)
       ? raw.applicants.map((a) => {
           const cg = a.caregiver && typeof a.caregiver === 'object' ? a.caregiver : null
@@ -1605,7 +1610,7 @@ export const adaptBookingToJob = (raw, currentUserId) => {
     caregiverId: b.caregiverId || '',
     city: b.city || b.location?.city || 'Mumbai',
     area: b.area || b.location?.area || 'Bandra West',
-    distanceKm: Number(b.distanceKm || 3.2),
+    distanceKm: Number(b.distanceKm ?? raw.distanceKm ?? 3.2),
     date: b.date || (b.startDateTime ? new Date(b.startDateTime).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)),
     shift,
     hours,

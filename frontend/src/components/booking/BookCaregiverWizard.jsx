@@ -731,6 +731,12 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           state: (form.state || 'Kerala').trim(),
           pincode: (form.pincode || '').trim(),
           careSetting: form.careType === 'Hospital Care' ? 'Hospital Care' : 'Home Care',
+          coordinates: form.coordinates?.latitude && form.coordinates?.longitude
+            ? {
+                latitude: Number(form.coordinates.latitude),
+                longitude: Number(form.coordinates.longitude),
+              }
+            : undefined,
         },
         patientDetails: {
           name: form.patientName.trim(),
@@ -765,7 +771,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
       setCreated(booking)
       toast.success('Booking broadcasted successfully', {
-        description: `Reference ${booking.ref} — all active caretakers in ${form.city} have been notified. You can pay once your shift is completed.`,
+        description: `Reference ${booking.ref} — all active caretakers within 30 km in ${form.city} have been notified. You can pay once your shift is completed.`,
       })
     } catch (err) {
       toast.error('Booking creation failed', {

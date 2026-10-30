@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowLeft, MessageSquare, Phone, Send } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ChevronDown, MessageSquare, Phone, Send, Trash2 } from 'lucide-react'
+import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { useData } from '@/context/DataContext'
 import { useAuth } from '@/context/AuthContext'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -43,6 +44,42 @@ export function MessagesPage() {
   const [threadMessages, setThreadMessages] = useState({})
   const [unreadMap, setUnreadMap] = useState({})
   const [partnerTyping, setPartnerTyping] = useState(false)
+
+  const currentUserId = String(user?._id || user?.id || 'guest')
+  const storageKey = `bystander.deleted_chats_caregiver_${currentUserId}`
+
+  const [deletedChatIds, setDeletedChatIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      setDeletedChatIds(saved ? JSON.parse(saved) : [])
+    } catch {
+      setDeletedChatIds([])
+    }
+  }, [storageKey])
+
+  const [menuOpenId, setMenuOpenId] = useState(null)
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
+  const [deleteDialog, setDeleteDialog] = useState(null)
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('[data-chat-menu]')) {
+        setMenuOpenId(null)
+        setHeaderMenuOpen(false)
+      }
+    }
+    window.addEventListener('click', handleOutsideClick)
+    return () => window.removeEventListener('click', handleOutsideClick)
+  }, [])
   const threadRef = useRef(null)
   const typingTimeoutRef = useRef(null)
 
@@ -129,9 +166,55 @@ export function MessagesPage() {
 
   // Determine conversation list: authenticated user always uses apiThreads
   const caregiverConversations = useMemo(() => {
-    if (user) return apiThreads
-    return (localConversations || []).filter((c) => c.audience?.includes('caregiver'))
-  }, [user, apiThreads, localConversations])
+    const base = user ? apiThreads : (localConversations || []).filter((c) => c.audience?.includes('caregiver'))
+    return base.filter((c) => !deletedChatIds.includes(String(c.id)))
+  }, [user, apiThreads, localConversations, deletedChatIds])
+
+  const handleDeleteChat = useCallback((thread) => {
+    if (!thread?.id) return
+    const idStr = String(thread.id)
+
+    setDeletedChatIds((prev) => {
+      const next = Array.from(new Set([...prev, idStr]))
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next))
+      } catch (e) {
+        console.error('Failed to save deleted chat:', e)
+      }
+      return next
+    })
+
+    setDeleteDialog(null)
+    setMenuOpenId(null)
+    setHeaderMenuOpen(false)
+
+    if (activeId === idStr) {
+      const remaining = caregiverConversations.filter((c) => String(c.id) !== idStr)
+      if (remaining.length > 0) {
+        setActiveId(remaining[0].id)
+      } else {
+        setActiveId(null)
+        setShowThread(false)
+      }
+    }
+
+    toast.success('Chat deleted', {
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          setDeletedChatIds((prev) => {
+            const next = prev.filter((id) => id !== idStr)
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(next))
+            } catch (_) {}
+            return next
+          })
+          setActiveId(idStr)
+          toast.info('Chat restored')
+        },
+      },
+    })
+  }, [storageKey, activeId, caregiverConversations])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -351,9 +434,25 @@ export function MessagesPage() {
             title="No conversations yet"
             description="Chat opens once you and a customer are connected through an accepted booking."
             action={
-              <Button variant="primary" to="/caregiver/jobs">
-                Browse available jobs
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Button variant="primary" to="/caregiver/jobs">
+                  Browse available jobs
+                </Button>
+                {deletedChatIds.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDeletedChatIds([])
+                      try {
+                        localStorage.removeItem(storageKey)
+                      } catch (_) {}
+                      toast.success('Deleted chats restored')
+                    }}
+                  >
+                    Restore deleted chats
+                  </Button>
+                )}
+              </div>
             }
           />
         </Card>
@@ -371,44 +470,87 @@ export function MessagesPage() {
                   const isActive = c.id === activeId
                   const unreadCount = unreadMap[c.id] ?? c.unread ?? 0
 
+                  const isMenuOpen = menuOpenId === c.id
+
                   return (
-                    <button
+                    <div
                       key={c.id}
-                      type="button"
-                      onClick={() => openConversation(c.id)}
                       className={cn(
-                        'flex w-full gap-3 border-b border-line px-4 py-3.5 text-left transition',
+                        'group relative flex w-full items-start border-b border-line text-left transition',
                         isActive ? 'bg-mint-50' : 'hover:bg-slate-50',
                       )}
                     >
-                      <Avatar src={c.avatar} name={c.name} size="md" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-bold text-ink">{c.name}</p>
-                          <span className="shrink-0 text-[11px] text-faint">
-                            {last ? relativeTime(last.at) : ''}
-                          </span>
-                        </div>
-                        <p className="truncate text-xs text-muted">
-                          {c.roleLabel ? (
-                            <>
-                              <span className="font-semibold text-primary-700">{c.roleLabel}</span>
-                              {c.serviceTitle ? ` · ${c.serviceTitle}` : ''}
-                            </>
-                          ) : (
-                            c.role
-                          )}
-                        </p>
-                        <div className="mt-1 flex items-center justify-between gap-2">
-                          <p className="truncate text-xs text-faint">{last?.text || 'No messages yet'}</p>
-                          {unreadCount ? (
-                            <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary-700 px-1.5 text-[10px] font-bold text-white">
-                              {unreadCount}
+                      <button
+                        type="button"
+                        onClick={() => openConversation(c.id)}
+                        className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3.5 text-left"
+                      >
+                        <Avatar src={c.avatar} name={c.name} size="md" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-bold text-ink">{c.name}</p>
+                            <span className="shrink-0 text-[11px] text-faint">
+                              {last ? relativeTime(last.at) : ''}
                             </span>
-                          ) : null}
+                          </div>
+                          <p className="truncate text-xs text-muted">
+                            {c.roleLabel ? (
+                              <>
+                                <span className="font-semibold text-primary-700">{c.roleLabel}</span>
+                                {c.serviceTitle ? ` · ${c.serviceTitle}` : ''}
+                              </>
+                            ) : (
+                              c.role
+                            )}
+                          </p>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <p className="truncate text-xs text-faint">{last?.text || 'No messages yet'}</p>
+                            {unreadCount ? (
+                              <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary-700 px-1.5 text-[10px] font-bold text-white">
+                                {unreadCount}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
+                      </button>
+
+                      {/* Small down arrow dropdown trigger */}
+                      <div className="relative self-center pr-3" data-chat-menu>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMenuOpenId((prev) => (prev === c.id ? null : c.id))
+                          }}
+                          className={cn(
+                            'grid h-7 w-7 place-items-center rounded-lg text-faint transition hover:bg-slate-200/80 hover:text-ink',
+                            isMenuOpen ? 'opacity-100 bg-slate-200/80 text-ink' : 'opacity-0 group-hover:opacity-100 focus:opacity-100 max-md:opacity-100',
+                          )}
+                          title="Chat options"
+                          aria-label={`Options for ${c.name}`}
+                        >
+                          <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', isMenuOpen && 'rotate-180')} />
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        {isMenuOpen && (
+                          <div className="absolute right-0 top-8 z-30 min-w-[130px] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-lg animate-in fade-in zoom-in-95">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setMenuOpenId(null)
+                                setDeleteDialog(c)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-danger-600 transition hover:bg-danger-50 hover:text-danger-700"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Delete chat</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    </button>
+                    </div>
                   )
                 })
               ) : (
@@ -452,14 +594,50 @@ export function MessagesPage() {
                       </Chip>
                     ) : null}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    aria-label="Call"
-                    onClick={() => toast.info('Direct calling is not integrated. Please coordinate via secure in-app chat.')}
-                  >
-                    <Phone className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Call"
+                      onClick={() => toast.info('Direct calling is not integrated. Please coordinate via secure in-app chat.')}
+                    >
+                      <Phone className="h-4 w-4" />
+                    </Button>
+
+                    {/* Header Chat Options */}
+                    <div className="relative shrink-0" data-chat-menu>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setHeaderMenuOpen((prev) => !prev)
+                        }}
+                        className={cn(headerMenuOpen && 'bg-slate-100 text-ink')}
+                        title="Conversation options"
+                        aria-label="Conversation options"
+                      >
+                        <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', headerMenuOpen && 'rotate-180')} />
+                      </Button>
+
+                      {headerMenuOpen && (
+                        <div className="absolute right-0 top-10 z-30 min-w-[130px] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-lg animate-in fade-in zoom-in-95">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setHeaderMenuOpen(false)
+                              setDeleteDialog(active)
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-danger-600 transition hover:bg-danger-50 hover:text-danger-700"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Delete chat</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {active.canSend === false ? (
@@ -539,6 +717,17 @@ export function MessagesPage() {
           </Card>
         </div>
       )}
+
+      <ConfirmationDialog
+        open={Boolean(deleteDialog)}
+        onClose={() => setDeleteDialog(null)}
+        onConfirm={() => handleDeleteChat(deleteDialog)}
+        title="Delete chat?"
+        message={`Are you sure you want to delete your conversation with ${deleteDialog?.name || 'this contact'}? This will remove the conversation from your inbox.`}
+        confirmLabel="Delete chat"
+        cancelLabel="Cancel"
+        tone="danger"
+      />
     </div>
   )
 }

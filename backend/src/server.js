@@ -232,9 +232,9 @@ export const startServer = async () => {
   }
 };
 
-// Start the server process only when executed directly as entrypoint
-const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
-if (isDirectRun) {
+// Start the server unless this module is being imported by tests.
+if (process.env.NODE_ENV !== 'test') {
+  console.log('[Server] Starting Bystander API...');
   startServer();
 }
 

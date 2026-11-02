@@ -1,3 +1,4 @@
+
 name: Bystander Backend CI/CD
 
 on:
@@ -6,12 +7,15 @@ on:
       - main
     paths:
       - 'backend/**'
+      - 'package-lock.json'
       - '.github/workflows/backend-ci-cd.yml'
+
   pull_request:
     branches:
       - main
     paths:
       - 'backend/**'
+      - 'package-lock.json'
       - '.github/workflows/backend-ci-cd.yml'
 
 permissions:
@@ -22,10 +26,6 @@ jobs:
     name: Backend Tests
     runs-on: ubuntu-24.04
 
-    defaults:
-      run:
-        working-directory: backend
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,10 +35,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install MongoDB server binary
-        working-directory: .
         run: |
           sudo apt-get update
           sudo apt-get install -y curl gnupg
@@ -50,8 +49,9 @@ jobs:
           sudo apt-get install -y mongodb-org-server
           mongod --version
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install backend dependencies
+        run: npm ci --workspace=backend --include-workspace-root=false
 
       - name: Run backend tests
-        run: npm test
+        run: npm test --workspace=backend
+

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MapPin, ExternalLink, Move } from 'lucide-react'
@@ -8,7 +8,7 @@ const createPinIcon = () =>
   L.divIcon({
     className: 'bystander-map-pin',
     html: `
-      <div style="position: relative; width: 36px; height: 44px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35)); cursor: grab;">
+      <div style="position: relative; width: 36px; height: 44px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.45)); cursor: grab;">
         <svg width="36" height="44" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 0C5.37258 0 0 5.37258 0 12C0 19.5 10.5 28.5 11.5 29.5C11.7761 29.7414 12.2239 29.7414 12.5 29.5C13.5 28.5 24 19.5 24 12C24 5.37258 18.6274 0 12 0Z" fill="#0F766E"/>
           <circle cx="12" cy="11" r="5" fill="#FFFFFF"/>
@@ -20,6 +20,27 @@ const createPinIcon = () =>
     iconAnchor: [18, 44],
   })
 
+const TILE_LAYERS = {
+  hybrid: {
+    id: 'hybrid',
+    label: 'Satellite',
+    icon: '🛰️',
+    url: 'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    maxZoom: 20,
+    attribution: '&copy; Google Maps Satellite',
+  },
+  roadmap: {
+    id: 'roadmap',
+    label: 'Streets',
+    icon: '🗺️',
+    url: 'https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    maxZoom: 20,
+    attribution: '&copy; Google Maps',
+  },
+}
+
 export default function InteractiveLocationPicker({
   lat,
   lng,
@@ -30,7 +51,28 @@ export default function InteractiveLocationPicker({
   const mapContainerRef = useRef(null)
   const mapRef = useRef(null)
   const markerRef = useRef(null)
+  const tileLayerRef = useRef(null)
   const isInternalMove = useRef(false)
+  const [mapMode, setMapMode] = useState('hybrid')
+
+  const applyTileLayer = (mode, mapInstance) => {
+    const targetMap = mapInstance || mapRef.current
+    if (!targetMap) return
+
+    if (tileLayerRef.current) {
+      targetMap.removeLayer(tileLayerRef.current)
+    }
+
+    const cfg = TILE_LAYERS[mode] || TILE_LAYERS.hybrid
+    const layer = L.tileLayer(cfg.url, {
+      subdomains: cfg.subdomains,
+      maxZoom: cfg.maxZoom,
+      attribution: cfg.attribution,
+    }).addTo(targetMap)
+
+    tileLayerRef.current = layer
+    setMapMode(mode)
+  }
 
   useEffect(() => {
     if (!mapContainerRef.current) return
@@ -40,15 +82,13 @@ export default function InteractiveLocationPicker({
 
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLng],
-      zoom: 17,
+      zoom: 18,
       scrollWheelZoom: true,
       zoomControl: true,
     })
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap',
-    }).addTo(map)
+    // Default to Google Hybrid Satellite with Road and Landmark Labels
+    applyTileLayer('hybrid', map)
 
     const marker = L.marker([initialLat, initialLng], {
       icon: createPinIcon(),
@@ -85,6 +125,7 @@ export default function InteractiveLocationPicker({
       map.remove()
       mapRef.current = null
       markerRef.current = null
+      tileLayerRef.current = null
     }
   }, [])
 
@@ -104,7 +145,7 @@ export default function InteractiveLocationPicker({
       !Number.isNaN(lng)
     ) {
       markerRef.current.setLatLng([lat, lng])
-      mapRef.current.setView([lat, lng], 17, { animate: true })
+      mapRef.current.setView([lat, lng], 18, { animate: true })
     }
   }, [lat, lng])
 
@@ -124,7 +165,7 @@ export default function InteractiveLocationPicker({
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline"
         >
-          <span>Verify in Google Maps</span>
+          <span>Open Google Maps</span>
           <ExternalLink className="h-3 w-3" />
         </a>
       </div>
@@ -132,18 +173,45 @@ export default function InteractiveLocationPicker({
       <div className="relative">
         <div
           ref={mapContainerRef}
-          className="relative h-52 w-full rounded-lg bg-slate-200 shadow-inner z-0"
+          className="relative h-60 w-full rounded-lg bg-slate-200 shadow-inner z-0"
         />
+
+        {/* Top-Left: Drag instruction pill */}
         <div className="pointer-events-none absolute top-2 left-2 z-10 flex items-center gap-1.5 rounded-lg bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-primary-900 shadow-sm border border-slate-200">
           <Move className="h-3 w-3 text-primary-700 animate-pulse" />
-          Drag the pin or click on map to pinpoint your exact gate/building
+          Drag pin onto your roof / building gate
+        </div>
+
+        {/* Top-Right: Satellite vs Streets layer switcher */}
+        <div className="absolute top-2 right-2 z-10 flex items-center overflow-hidden rounded-lg bg-white/95 p-0.5 shadow-md border border-slate-200">
+          <button
+            type="button"
+            onClick={() => applyTileLayer('hybrid')}
+            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition cursor-pointer ${
+              mapMode === 'hybrid'
+                ? 'bg-primary-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            🛰️ Satellite
+          </button>
+          <button
+            type="button"
+            onClick={() => applyTileLayer('roadmap')}
+            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition cursor-pointer ${
+              mapMode === 'roadmap'
+                ? 'bg-primary-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            🗺️ Streets
+          </button>
         </div>
       </div>
 
       <p className="mt-2 px-1 text-[11px] text-slate-500">
-        📍 The caretaker's map will navigate directly to this pin. Confirm or refine your house / flat number below.
+        📍 The caretaker's navigation will drive directly to this pin. Confirm or refine your house / flat number below.
       </p>
     </div>
   )
 }
-

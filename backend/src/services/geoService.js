@@ -32,6 +32,80 @@ export const reverseGeocode = async (lat, lng) => {
     throw err;
   }
 
+  const mapplsApiKey =
+    process.env.MAPPLS_API_KEY ||
+    process.env.MAPMYINDIA_KEY ||
+    process.env.VITE_MAPPLS_API_KEY;
+
+  // 1. Mappls (MapmyIndia) Reverse Geocoding API (High-accuracy doorstep mapping for India)
+  if (mapplsApiKey && typeof mapplsApiKey === 'string' && mapplsApiKey.trim().length > 10) {
+    try {
+      const mapplsUrl = `https://search.mappls.com/search/address/rev-geocode?lat=${latitude}&lng=${longitude}&access_token=${mapplsApiKey.trim()}`;
+      const mRes = await fetch(mapplsUrl, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Bystander/1.0',
+        },
+      });
+
+      if (mRes.ok) {
+        const mData = await mRes.json();
+        if (
+          (mData.responseCode === 200 || mData.responseCode === '200') &&
+          Array.isArray(mData.results) &&
+          mData.results.length > 0
+        ) {
+          const item = mData.results[0];
+
+          let district = (item.district || '').replace(/\s+District$/i, '').trim();
+          if (!district && item.subDistrict) {
+            district = item.subDistrict.replace(/\s+District$/i, '').trim();
+          }
+          district = district || item.city || 'Kozhikode';
+
+          const state = item.state || 'Kerala';
+          const pincode = item.pincode ? String(item.pincode).replace(/\D/g, '').slice(0, 6) : '';
+          const city = item.city || item.district || district || 'Kozhikode';
+
+          const streetParts = [
+            item.poi,
+            item.houseNumber ? `#${item.houseNumber}` : '',
+            item.houseName,
+            item.subLocality,
+            item.street,
+          ].filter(Boolean);
+
+          const address =
+            streetParts.length > 0
+              ? streetParts.join(', ')
+              : item.formatted_address?.split(',').slice(0, 2).join(', ') || '';
+
+          const area =
+            item.locality ||
+            item.subLocality ||
+            item.subSubLocality ||
+            item.village ||
+            city;
+
+          return {
+            address: address || area,
+            area: item.locality || item.subLocality || area,
+            city,
+            district,
+            state,
+            pincode,
+            formattedAddress: item.formatted_address,
+            lat: latitude,
+            lng: longitude,
+            source: 'mappls',
+          };
+        }
+      }
+    } catch (mErr) {
+      console.warn('[GeoService] Mappls reverse-geocoding failed, falling back:', mErr.message);
+    }
+  }
+
   const googleApiKey =
     process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
 

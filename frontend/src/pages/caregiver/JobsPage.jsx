@@ -363,8 +363,7 @@ export function JobsPage() {
             size="sm"
             icon={RotateCw}
             onClick={() => fetchJobs(true)}
-            disabled={loading}
-            className={loading ? 'animate-spin' : ''}
+            loading={loading}
           >
             Refresh
           </Button>

@@ -155,8 +155,7 @@ export function AcceptedCaregiversPage() {
             size="sm"
             icon={RotateCw}
             onClick={() => loadBookings(true)}
-            disabled={loading}
-            className={loading ? 'animate-spin' : ''}
+            loading={loading}
           >
             Refresh
           </Button>

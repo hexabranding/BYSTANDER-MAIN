@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { User, CustomerProfile, CaregiverProfile, Document, Service, Blacklist, Ambulance } from '../models/index.js';
 import { hashPassword, comparePassword, generateToken, sanitizeUser, formatAccountStatusMessage } from '../utils/auth.js';
 import { generateNumericOtp } from '../utils/otpUtils.js';
+import { sendOtpEmail } from './emailService.js';
 
 /**
  * Register a new Customer.
@@ -474,9 +475,25 @@ export const requestGuestOtp = async (email, mode = 'any') => {
 
   console.log(`[Guest OTP Dispatch] Code for ${cleanEmail} (mode: ${mode}): ${otp}`);
 
+  // Send real email via Resend
+  let emailDelivery = { success: false };
+  try {
+    emailDelivery = await sendOtpEmail({
+      to: cleanEmail,
+      otp,
+      mode,
+    });
+  } catch (err) {
+    console.error(`[Guest OTP Dispatch Error] Failed to send email to ${cleanEmail}:`, err.message);
+  }
+
   return {
     email: cleanEmail,
-    message: `Verification code sent to ${cleanEmail}`,
+    message: emailDelivery.success
+      ? `Verification code sent to ${cleanEmail}`
+      : `Verification code generated for ${cleanEmail}`,
+    emailSent: emailDelivery.success,
+    emailError: emailDelivery.error,
     devOtp: process.env.NODE_ENV !== 'production' ? otp : undefined,
   };
 };

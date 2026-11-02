@@ -19,6 +19,7 @@ export function RegisterCustomerPage() {
   const [step, setStep] = useState('email') // 'email' | 'otp' | 'password'
   const [email, setEmail] = useState(rememberedEmail || '')
   const [otp, setOtp] = useState('')
+  const [devOtp, setDevOtp] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -41,6 +42,9 @@ export function RegisterCustomerPage() {
       const res = await requestGuestOtp(cleanEmail, 'signup')
       if (res.ok) {
         setStep('otp')
+        if (res.data?.devOtp) {
+          setDevOtp(res.data.devOtp)
+        }
         toast.success('Verification code sent!', {
           description: `Enter the 6-digit code sent to ${cleanEmail}`,
         })
@@ -277,12 +281,35 @@ export function RegisterCustomerPage() {
                 onClick={() => {
                   setStep('email')
                   setOtp('')
+                  setDevOtp('')
                 }}
                 className="shrink-0 font-bold text-primary-800 hover:underline text-xs"
               >
                 Change email
               </button>
             </div>
+
+            {devOtp ? (
+              <div className="flex items-center justify-between rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900 animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-full bg-teal-500 animate-pulse" />
+                  <span>
+                    Test Code: <strong className="font-mono text-sm tracking-wider text-teal-950">{devOtp}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOtp(devOtp)}
+                  className="rounded-md bg-teal-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-teal-800 transition"
+                >
+                  Auto-fill
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                💡 Test shortcut: You can also use <strong className="font-mono font-bold text-slate-800">123456</strong> to verify instantly.
+              </div>
+            )}
 
             <FormField
               label="Enter 6-digit verification code"

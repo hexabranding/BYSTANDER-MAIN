@@ -43,4 +43,11 @@ router.patch(
   adminVerificationController.updateCaregiverVerificationStatus,
 );
 
+// 6. Confirm in-office physical document verification and mark 100% verified
+router.post(
+  '/:id/verify-physical',
+  validateCaregiverIdParam,
+  adminVerificationController.verifyPhysicalDocuments,
+);
+
 export default router;

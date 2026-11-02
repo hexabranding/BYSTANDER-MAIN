@@ -549,9 +549,17 @@ export const getMyDocuments = async (userId) => {
   const verifiedCount = items.filter((d) => d.status === 'Verified').length;
   const uploadedCount = items.filter((d) => d.status !== 'Not uploaded' && d.status !== 'Optional').length;
   const totalRequired = mandatoryItems.length;
-  const completionPct = mandatoryItems.length > 0
-    ? Math.round((mandatoryVerifiedCount / mandatoryItems.length) * 100)
-    : Math.round((verifiedCount / items.length) * 100);
+
+  const isFullyVerified = profile.verificationStatus === 'verified';
+  const physicalStatus = profile.physicalVerification?.status || (isFullyVerified ? 'verified' : 'pending');
+  const isPhysicalVerified = physicalStatus === 'verified' || isFullyVerified;
+
+  // Two-stage scoring: Digital docs account for 50%, physical in-office verification accounts for 50%
+  const digitalPct = mandatoryItems.length > 0
+    ? Math.round((mandatoryVerifiedCount / mandatoryItems.length) * 50)
+    : Math.round((verifiedCount / items.length) * 50);
+  const physicalPct = isPhysicalVerified ? 50 : 0;
+  const completionPct = isFullyVerified ? 100 : digitalPct + physicalPct;
 
   // Construct truthful chronological audit history
   const history = [
@@ -619,6 +627,14 @@ export const getMyDocuments = async (userId) => {
     verifiedCount,
     uploadedCount,
     totalRequired,
+    digitalVerified: mandatoryVerifiedCount === mandatoryItems.length,
+    physicalVerification: {
+      status: physicalStatus,
+      verifiedAt: profile.physicalVerification?.verifiedAt || (isFullyVerified ? profile.updatedAt : null),
+      verifiedBy: profile.physicalVerification?.verifiedBy || null,
+      notes: profile.physicalVerification?.notes || '',
+      officeLocation: profile.physicalVerification?.officeLocation || 'Bystander Head Office',
+    },
     documents: items,
     history,
   };

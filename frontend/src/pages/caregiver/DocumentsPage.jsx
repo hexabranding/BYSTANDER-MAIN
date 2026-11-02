@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import {
   AlertCircle,
   Award,
+  Building2,
   CheckCircle2,
   Clock,
   Download,
@@ -13,6 +14,7 @@ import {
   Home,
   Landmark,
   Lock,
+  MapPin,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
@@ -407,12 +409,65 @@ export function DocumentsPage() {
         </div>
       ) : null}
 
+      {record.status !== 'Verified' && completionPct >= 50 ? (
+        <div className="rounded-2xl border-2 border-primary-500 bg-mint-50/80 p-5 shadow-sm">
+          <div className="flex items-start gap-3.5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-700 text-white shadow-sm">
+              <Building2 className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-display text-base font-bold text-primary-950">
+                  Step 2 of 2: In-Person Physical Verification at Bystander Office
+                </h3>
+                <span className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 text-xs font-bold">
+                  Action Required for 100%
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-primary-900 leading-relaxed">
+                Your digital documents have been verified by compliance (50% progress). To reach <strong>100% full approval</strong> and unlock your full caretaker dashboard (Available Jobs, Bookings, Earnings), please visit our office directly with your original physical documents.
+              </p>
+              <div className="mt-3 grid gap-2.5 sm:grid-cols-2 text-xs">
+                <div className="rounded-xl border border-primary-200 bg-white/90 p-3 shadow-xs">
+                  <p className="font-bold text-primary-950 flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-primary-700" /> Office Location & Hours
+                  </p>
+                  <p className="mt-1 text-slate-700">Bystander Operations Hub, 4th Floor, Tech Park, Mumbai</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-slate-500">Timings: Mon – Sat, 9:30 AM – 6:00 PM</p>
+                </div>
+                <div className="rounded-xl border border-primary-200 bg-white/90 p-3 shadow-xs">
+                  <p className="font-bold text-primary-950 flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-primary-700" /> Original Documents to Bring
+                  </p>
+                  <ul className="mt-1 list-disc list-inside text-slate-700 space-y-0.5">
+                    <li>Original Government Photo ID (Aadhaar / Passport)</li>
+                    <li>Original Police Clearance Certificate / Verification Slip</li>
+                    <li>Bank Passbook or Original Cancelled Cheque</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardBody className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-faint">Verification completion</p>
-              <p className="mt-1 font-display text-2xl font-extrabold tabular-nums text-ink">{completionPct}%</p>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <p className="mt-1 font-display text-2xl font-extrabold tabular-nums text-ink">{completionPct}%</p>
+                {completionPct === 50 && record.status !== 'Verified' ? (
+                  <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                    Digital Approved · In-Office Physical Verification Pending for 100%
+                  </span>
+                ) : completionPct === 100 ? (
+                  <span className="rounded-full bg-success-50 border border-success-200 px-2 py-0.5 text-xs font-semibold text-success-700">
+                    100% Fully Approved
+                  </span>
+                ) : null}
+              </div>
             </div>
             <div className="text-right text-sm text-muted">
               <p>

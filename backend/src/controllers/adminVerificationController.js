@@ -100,3 +100,25 @@ export const requestCaregiverDocument = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * POST /api/admin/verifications/:id/verify-physical
+ * Admin confirms in-office physical document verification.
+ */
+export const verifyPhysicalDocuments = async (req, res, next) => {
+  try {
+    const result = await adminVerificationService.verifyPhysicalDocuments(
+      req.params.id,
+      req.body,
+      req.user,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Physical documents verified in office. Caretaker is now 100% fully approved.',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

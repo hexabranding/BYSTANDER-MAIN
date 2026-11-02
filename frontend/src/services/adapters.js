@@ -968,21 +968,27 @@ export const adaptVerificationRecord = (raw) => {
   const rawDocs = Array.isArray(raw.documents) ? raw.documents : []
   const documents = rawDocs.map(adaptVerificationDocument)
 
-  // Document verification completion score: starts at 0% initially and increases with each approved document
-  const verifiedDocsCount = documents.filter(
-    (d) => d.status === 'Verified' || d.verificationStatus === 'verified'
+  const physicalVerification = raw.physicalVerification || {
+    status: status === 'Verified' ? 'verified' : 'pending',
+    verifiedAt: null,
+    notes: '',
+    officeLocation: 'Bystander Head Office',
+  }
+
+  // Document verification completion score: Two-stage verification
+  // Digital documents account for up to 50%, In-Office Physical Verification accounts for 50%
+  const isFullyVerified = status === 'Verified'
+  const isPhysicalVerified = physicalVerification.status === 'verified' || isFullyVerified
+
+  const mandatoryDocs = documents.filter((d) => d.required !== false)
+  const verifiedMandatory = mandatoryDocs.filter(
+    (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
   ).length
-  const totalDocs = documents.length
-  const overallScore =
-    typeof raw.trustScore === 'number'
-      ? raw.trustScore
-      : typeof raw.overallScore === 'number'
-        ? raw.overallScore
-        : totalDocs > 0
-          ? Math.round((verifiedDocsCount / totalDocs) * 100)
-          : status === 'Verified'
-            ? 100
-            : 0
+  const digitalScore = mandatoryDocs.length > 0
+    ? Math.round((verifiedMandatory / mandatoryDocs.length) * 50)
+    : Math.round((verifiedDocsCount / (totalDocs || 1)) * 50)
+  const physicalScore = isPhysicalVerified ? 50 : 0
+  const overallScore = isFullyVerified && isPhysicalVerified ? 100 : digitalScore + physicalScore
 
   // Construct auditable action history
   let history = []
@@ -1026,6 +1032,7 @@ export const adaptVerificationRecord = (raw) => {
     overallScore,
     status,
     verificationStatus: (raw.verificationStatus || status).toLowerCase(),
+    physicalVerification,
     documents,
     history,
     bio: raw.bio || '',

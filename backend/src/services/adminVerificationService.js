@@ -158,6 +158,15 @@ export const getVerifications = async (query = {}) => {
 
     const cgDocs = docsByCaregiver.get(cgKey) || docsByCaregiver.get(userKey) || [];
 
+    if (!cgObj.physicalVerification) {
+      cgObj.physicalVerification = {
+        status: cgObj.verificationStatus === 'verified' ? 'verified' : 'pending',
+        verifiedAt: cgObj.verificationStatus === 'verified' ? cgObj.updatedAt : null,
+        notes: '',
+        officeLocation: 'Bystander Head Office',
+      };
+    }
+
     return {
       ...cgObj,
       documents: buildCanonicalDocuments(cgDocs, cg._id),
@@ -221,6 +230,15 @@ export const getVerificationById = async (id) => {
 
   const cgObj = caregiver.toObject ? caregiver.toObject() : { ...caregiver };
   cgObj.documents = buildCanonicalDocuments(sanitizedDocs, caregiver._id);
+
+  if (!cgObj.physicalVerification) {
+    cgObj.physicalVerification = {
+      status: cgObj.verificationStatus === 'verified' ? 'verified' : 'pending',
+      verifiedAt: cgObj.verificationStatus === 'verified' ? cgObj.updatedAt : null,
+      notes: '',
+      officeLocation: 'Bystander Head Office',
+    };
+  }
 
   return cgObj;
 };
@@ -296,6 +314,16 @@ export const updateCaregiverVerificationStatus = async (caregiverId, payload, re
 
   caregiver.verificationStatus = status;
 
+  if (status === 'verified') {
+    caregiver.physicalVerification = {
+      status: 'verified',
+      verifiedAt: caregiver.physicalVerification?.verifiedAt || new Date(),
+      verifiedBy: reviewerUser?._id,
+      notes: reason || caregiver.physicalVerification?.notes || 'In-office physical verification completed',
+      officeLocation: caregiver.physicalVerification?.officeLocation || 'Bystander Head Office',
+    };
+  }
+
   if (trustScore !== undefined && typeof trustScore === 'number') {
     caregiver.trustScore = trustScore;
   } else if (status === 'verified' && caregiver.trustScore < 85) {
@@ -315,6 +343,81 @@ export const updateCaregiverVerificationStatus = async (caregiverId, payload, re
   );
 
   return updated;
+};
+
+/**
+ * Admin confirms in-person physical document verification at office.
+ * Sets physicalVerification to 'verified', application status to 'verified' (100% full approval),
+ * and unlocks all features for caregiver.
+ *
+ * @param {string} caregiverId - CaregiverProfile ObjectId or User ObjectId
+ * @param {Object} payload - { notes, officeLocation }
+ * @param {Object} reviewerUser - Authenticated Admin User
+ * @returns {Promise<Object>} Updated CaregiverProfile dossier
+ */
+export const verifyPhysicalDocuments = async (caregiverId, payload, reviewerUser) => {
+  if (!mongoose.Types.ObjectId.isValid(caregiverId)) {
+    const err = new Error('Caregiver not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const { notes, officeLocation = 'Bystander Head Office' } = payload || {};
+
+  let caregiver = await CaregiverProfile.findById(caregiverId).populate('user');
+  if (!caregiver) {
+    caregiver = await CaregiverProfile.findOne({ user: caregiverId }).populate('user');
+  }
+
+  if (!caregiver) {
+    const err = new Error('Caregiver not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const reviewNote = notes || 'Original physical documents submitted and verified at Bystander office';
+
+  caregiver.physicalVerification = {
+    status: 'verified',
+    verifiedAt: new Date(),
+    verifiedBy: reviewerUser?._id,
+    notes: reviewNote,
+    officeLocation,
+  };
+
+  // Physical document verification in office triggers 100% full approval!
+  caregiver.verificationStatus = 'verified';
+  if (caregiver.trustScore < 90) {
+    caregiver.trustScore = 95;
+  }
+
+  await caregiver.save();
+
+  // If verified, ensure associated User status is updated from pending_verification to active
+  if (caregiver.user?._id) {
+    await User.findByIdAndUpdate(caregiver.user._id, { status: 'active' });
+
+    try {
+      const { createNotification } = await import('./notificationService.js');
+      await createNotification({
+        recipient: caregiver.user._id,
+        type: 'verification_approved',
+        title: 'Physical Verification Complete — 100% Approved!',
+        message: 'Your original documents have been verified in our office. Your profile is now 100% verified and all dashboard features are unlocked!',
+        metadata: {
+          verifiedBy: reviewerUser?.fullName || 'Admin',
+          officeLocation,
+          overallScore: 100,
+        },
+      });
+    } catch (notifErr) {
+      console.warn('[Physical Verification] Notification dispatch failed:', notifErr.message);
+    }
+  }
+
+  return getVerificationById(caregiver._id);
 };
 
 /**

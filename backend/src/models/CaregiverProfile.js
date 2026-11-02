@@ -256,6 +256,32 @@ const caregiverProfileSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    physicalVerification: {
+      status: {
+        type: String,
+        enum: ['pending', 'verified', 'rejected'],
+        default: 'pending',
+      },
+      verifiedAt: {
+        type: Date,
+        default: null,
+      },
+      verifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+      notes: {
+        type: String,
+        trim: true,
+        default: '',
+      },
+      officeLocation: {
+        type: String,
+        trim: true,
+        default: 'Bystander Head Office',
+      },
+    },
     rating: {
       average: {
         type: Number,

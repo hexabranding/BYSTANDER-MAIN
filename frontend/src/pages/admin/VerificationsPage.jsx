@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
   BadgeCheck,
+  Building2,
   Check,
   Download,
   ExternalLink,
@@ -9,6 +10,7 @@ import {
   FileCheck2,
   FileText,
   History,
+  MapPin,
   RefreshCw,
   SearchX,
   Send,
@@ -48,26 +50,43 @@ const APP_REJECT_PRESETS = [
 ]
 
 export function calculateVerificationScore(recordOrDocs, status) {
+  const isObj = recordOrDocs && typeof recordOrDocs === 'object' && !Array.isArray(recordOrDocs)
   const docs = Array.isArray(recordOrDocs)
     ? recordOrDocs
     : Array.isArray(recordOrDocs?.documents)
       ? recordOrDocs.documents
       : []
-  if (!docs.length) {
-    const s = typeof recordOrDocs === 'object' ? recordOrDocs?.status : status
-    return s === 'Verified' ? 100 : (typeof recordOrDocs?.overallScore === 'number' ? recordOrDocs.overallScore : 0)
+
+  const currentStatus = isObj ? recordOrDocs.status || recordOrDocs.verificationStatus : status
+  const isFullyVerified = String(currentStatus || '').toLowerCase() === 'verified'
+
+  const physicalVerified = isObj
+    ? recordOrDocs.physicalVerification?.status === 'verified' || isFullyVerified
+    : isFullyVerified
+
+  // 100% full approval requires both digital docs and in-office physical verification
+  if (isFullyVerified && physicalVerified) {
+    return 100
   }
+
+  // Digital document score contributes up to 50%
   const mandatoryDocs = docs.filter((d) => d.required !== false)
+  let digitalScore = 0
   if (mandatoryDocs.length > 0) {
     const verifiedMandatory = mandatoryDocs.filter(
       (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
     ).length
-    return Math.round((verifiedMandatory / mandatoryDocs.length) * 100)
+    digitalScore = Math.round((verifiedMandatory / mandatoryDocs.length) * 50)
+  } else if (docs.length > 0) {
+    const verified = docs.filter(
+      (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
+    ).length
+    digitalScore = Math.round((verified / docs.length) * 50)
   }
-  const verified = docs.filter(
-    (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
-  ).length
-  return Math.round((verified / docs.length) * 100)
+
+  // In-Office Physical Verification contributes 50%
+  const physicalScore = physicalVerified ? 50 : 0
+  return Math.min(100, digitalScore + physicalScore)
 }
 
 function DocumentVisualFallback({ record, doc }) {
@@ -208,6 +227,7 @@ function DetailPanel({
   onApproveDoc,
   onRejectDoc,
   onRequestDoc,
+  onVerifyPhysical,
 }) {
   const score = calculateVerificationScore(record)
   const scoreTone = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'
@@ -231,9 +251,11 @@ function DetailPanel({
                 {relativeTime(record.submittedOn)})
               </p>
             </div>
-            <div className="shrink-0 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-center sm:w-40">
+            <div className="shrink-0 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-center sm:w-44">
               <p className="font-display text-2xl font-extrabold tabular-nums text-ink">{score}%</p>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">Overall score</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-faint">
+                {score === 100 ? '100% Fully Approved' : score >= 50 ? '50% · Office Pending' : 'Overall score'}
+              </p>
               <ProgressBar value={score} tone={scoreTone} className="mt-2" />
             </div>
           </div>
@@ -249,6 +271,77 @@ function DetailPanel({
             <Button variant="dangerGhost" icon={XCircle} onClick={onRejectApplication} disabled={record.status === 'Rejected'}>
               Reject application
             </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Stage 2: In-Person Physical Verification at Office */}
+      <Card
+        className={cn(
+          'border-2 transition-all',
+          record.status === 'Verified' || record.physicalVerification?.status === 'verified'
+            ? 'border-success-300 bg-success-50/20'
+            : score >= 50
+              ? 'border-amber-300 bg-amber-50/30'
+              : 'border-line bg-white',
+        )}
+      >
+        <CardBody className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span
+                className={cn(
+                  'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
+                  record.status === 'Verified' || record.physicalVerification?.status === 'verified'
+                    ? 'bg-success-100 text-success-700'
+                    : 'bg-amber-100 text-amber-800',
+                )}
+              >
+                <Building2 className="h-5 w-5" />
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-display text-sm font-bold text-ink">
+                    Stage 2: In-Person Physical Document Verification at Office
+                  </h3>
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                      record.status === 'Verified' || record.physicalVerification?.status === 'verified'
+                        ? 'border border-success-300 bg-success-100 text-success-800'
+                        : 'border border-amber-300 bg-amber-100 text-amber-800',
+                    )}
+                  >
+                    {record.status === 'Verified' || record.physicalVerification?.status === 'verified'
+                      ? 'Verified (In-Office)'
+                      : 'Pending Office Visit'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  {record.status === 'Verified' || record.physicalVerification?.status === 'verified'
+                    ? `Physical original documents were verified in person at ${record.physicalVerification?.officeLocation || 'Bystander Head Office'}. The caretaker has 100% full approval.`
+                    : 'The caretaker must visit the office with original hard-copy proofs (Govt ID, Police Clearance, Bank Proof) to achieve 100% full approval and unlock their dashboard.'}
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0 sm:self-center">
+              {record.status === 'Verified' || record.physicalVerification?.status === 'verified' ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-success-700">
+                  <BadgeCheck className="h-4 w-4" /> 100% Approved
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={Building2}
+                  onClick={onVerifyPhysical}
+                  disabled={score < 50}
+                  title={score < 50 ? 'Approve mandatory digital documents first' : 'Confirm in-office physical documents verification'}
+                >
+                  Verify In-Office (100% Full Approval)
+                </Button>
+              )}
+            </div>
           </div>
         </CardBody>
       </Card>
@@ -711,6 +804,44 @@ export function VerificationsPage() {
         toast.error('Failed to approve document', { description: err.message })
         fetchVerifications(false)
       }
+    } else if (action.kind === 'verifyPhysical') {
+      try {
+        await adminService.verifyPhysicalDocuments(record.id, {
+          notes: 'Original physical documents verified in person at Bystander office',
+          officeLocation: 'Bystander Head Office',
+        })
+        toast.success(`In-office physical verification confirmed for ${record.name}!`, {
+          description: 'Application is now 100% fully approved and caretaker dashboard is unlocked.',
+        })
+        setRealVerifications((prev) =>
+          prev.map((v) => {
+            if (v.id !== record.id) return v
+            return {
+              ...v,
+              status: 'Verified',
+              verificationStatus: 'verified',
+              physicalVerification: {
+                status: 'verified',
+                verifiedAt: new Date().toISOString(),
+                notes: 'Original physical documents verified in person at Bystander office',
+                officeLocation: 'Bystander Head Office',
+              },
+              overallScore: 100,
+              history: [
+                {
+                  at: new Date().toISOString(),
+                  action: 'Physical documents verified at Bystander office — 100% full approval',
+                  by: 'Admin',
+                },
+                ...(v.history || []),
+              ],
+            }
+          }),
+        )
+        fetchVerifications(false)
+      } catch (err) {
+        toast.error('Failed to confirm physical verification', { description: err.message })
+      }
     }
   }
 
@@ -763,6 +894,11 @@ export function VerificationsPage() {
     dialogTitle = 'Approve this document?'
     dialogMessage = `${confirmPrompt.doc?.type} will be marked Verified with the note “Approved by admin”.`
     dialogLabel = 'Approve document'
+  } else if (confirmPrompt?.kind === 'verifyPhysical') {
+    dialogTone = 'success'
+    dialogTitle = 'Confirm In-Office Physical Verification?'
+    dialogMessage = `Confirm that ${record?.name} has visited the office and submitted all original physical documents. This will award 100% full approval and unlock their dashboard.`
+    dialogLabel = 'Confirm Physical Verification (100%)'
   }
 
   const detailProps = record
@@ -774,6 +910,7 @@ export function VerificationsPage() {
         onApproveDoc: (doc) => setConfirmPrompt({ kind: 'approveDocument', doc }),
         onRejectDoc: openRejectDocument,
         onRequestDoc: handleRequestDocument,
+        onVerifyPhysical: () => setConfirmPrompt({ kind: 'verifyPhysical' }),
       }
     : null
 

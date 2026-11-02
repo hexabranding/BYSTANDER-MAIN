@@ -28,7 +28,14 @@ router.patch(
 // 3. Retrieve authorized document metadata and application details for a caregiver
 router.get('/:id', validateCaregiverIdParam, adminVerificationController.getVerificationById);
 
-// 4. Update overall caregiver verification status under approved business rules
+// 4. Request missing or optional document from caregiver
+router.post(
+  '/:id/request-document',
+  validateCaregiverIdParam,
+  adminVerificationController.requestCaregiverDocument,
+);
+
+// 5. Update overall caregiver verification status under approved business rules
 router.patch(
   '/:id/status',
   validateCaregiverIdParam,

@@ -20,6 +20,60 @@ const sanitizeDocumentMetadata = (doc) => {
   return d;
 };
 
+export const CANONICAL_DOCUMENTS = [
+  { type: 'identity', label: 'Government Photo ID', required: true },
+  { type: 'police_clearance', label: 'Police Clearance Certificate', required: true },
+  { type: 'bank_verification', label: 'Bank Account Proof', required: true },
+  { type: 'nursing_registration', label: 'Nursing / Qualification Certificate', required: false },
+  { type: 'address_proof', label: 'Address Proof', required: false },
+];
+
+/**
+ * Builds canonical 5-document dossier slots with placeholders for missing documents.
+ * Ensures admin UI consistently displays all 5 documents.
+ */
+export const buildCanonicalDocuments = (sanitizedDocs = [], caregiverId = '') => {
+  const docsByType = new Map();
+  for (const doc of sanitizedDocs) {
+    if (doc.documentType && !docsByType.has(doc.documentType)) {
+      docsByType.set(doc.documentType, doc);
+    }
+  }
+
+  return CANONICAL_DOCUMENTS.map((def) => {
+    const existing = docsByType.get(def.type);
+    if (existing) {
+      let statusLabel = 'Under Review';
+      if (existing.verificationStatus === 'verified') statusLabel = 'Verified';
+      else if (existing.verificationStatus === 'rejected') statusLabel = 'Rejected';
+      else if (existing.verificationStatus === 'requested') statusLabel = 'Requested by Admin';
+      else if (existing.verificationStatus === 'pending') statusLabel = 'Pending';
+
+      return {
+        ...existing,
+        type: existing.type || def.label,
+        status: statusLabel,
+        required: def.required,
+        canRequest: !def.required,
+      };
+    }
+
+    return {
+      id: `missing-${def.type}-${caregiverId}`,
+      documentType: def.type,
+      type: def.label,
+      file: 'Not submitted',
+      fileName: '',
+      status: 'Not uploaded',
+      verificationStatus: 'not_uploaded',
+      reviewerNotes: '',
+      uploadedOn: null,
+      required: def.required,
+      canRequest: true,
+    };
+  });
+};
+
 
 
 /**
@@ -106,7 +160,7 @@ export const getVerifications = async (query = {}) => {
 
     return {
       ...cgObj,
-      documents: cgDocs,
+      documents: buildCanonicalDocuments(cgDocs, cg._id),
     };
   });
 
@@ -163,8 +217,10 @@ export const getVerificationById = async (id) => {
     .sort({ createdAt: -1 })
     .populate('reviewedBy', 'fullName email');
 
+  const sanitizedDocs = documents.map(sanitizeDocumentMetadata);
+
   const cgObj = caregiver.toObject ? caregiver.toObject() : { ...caregiver };
-  cgObj.documents = documents.map(sanitizeDocumentMetadata);
+  cgObj.documents = buildCanonicalDocuments(sanitizedDocs, caregiver._id);
 
   return cgObj;
 };
@@ -259,4 +315,88 @@ export const updateCaregiverVerificationStatus = async (caregiverId, payload, re
   );
 
   return updated;
+};
+
+/**
+ * Admin requests a missing or optional document from a caregiver.
+ * Transitions or creates document with status 'requested' and sends notification.
+ *
+ * @param {string} caregiverId - CaregiverProfile ObjectId or User ObjectId
+ * @param {Object} payload - { documentType, notes }
+ * @param {Object} reviewerUser - Authenticated Admin User
+ * @returns {Promise<Object>} Updated document metadata and confirmation message
+ */
+export const requestCaregiverDocument = async (caregiverId, payload, reviewerUser) => {
+  const { documentType, notes } = payload || {};
+  if (!documentType || typeof documentType !== 'string') {
+    const err = new Error('A valid documentType is required to request document');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  const cleanType = documentType.trim();
+
+  let caregiver = await CaregiverProfile.findById(caregiverId).populate('user');
+  if (!caregiver && mongoose.Types.ObjectId.isValid(caregiverId)) {
+    caregiver = await CaregiverProfile.findOne({ user: caregiverId }).populate('user');
+  }
+
+  if (!caregiver) {
+    const err = new Error('Caregiver verification profile not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  const requestNote = notes || 'Additional documentation requested by verification team';
+
+  // Find or create document with status 'requested'
+  let doc = await Document.findOne({
+    $or: [{ caregiverProfile: caregiver._id }, { user: caregiver.user?._id }],
+    documentType: cleanType,
+  });
+
+  if (!doc) {
+    doc = await Document.create({
+      user: caregiver.user?._id,
+      caregiverProfile: caregiver._id,
+      documentType: cleanType,
+      fileName: `${cleanType}.pdf`,
+      fileKey: `requested/${caregiver.user?._id || caregiver._id}/${cleanType}_${Date.now()}`,
+      verificationStatus: 'requested',
+      reviewerNotes: requestNote,
+      reviewedBy: reviewerUser?._id,
+      reviewedAt: new Date(),
+    });
+  } else {
+    doc.verificationStatus = 'requested';
+    doc.reviewerNotes = requestNote;
+    doc.reviewedBy = reviewerUser?._id;
+    doc.reviewedAt = new Date();
+    await doc.save();
+  }
+
+  // Create notification for caregiver
+  try {
+    const { createNotification } = await import('./notificationService.js');
+    if (caregiver.user?._id) {
+      const typeLabel = cleanType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      await createNotification({
+        recipient: caregiver.user._id,
+        type: 'document_requested',
+        title: 'Document Requested by Admin',
+        message: `Admin has requested you to upload: ${typeLabel}. Please visit your Documents tab to submit it.`,
+        metadata: { documentType: cleanType, requestedBy: reviewerUser?.fullName || 'Admin' },
+      });
+    }
+  } catch (notifErr) {
+    console.warn('[Admin Document Request] Notification dispatch failed:', notifErr.message);
+  }
+
+  return {
+    success: true,
+    message: `Requested ${cleanType} from caretaker`,
+    document: sanitizeDocumentMetadata(doc),
+  };
 };

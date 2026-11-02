@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const VALID_STATUSES = ['pending', 'under_review', 'verified', 'rejected'];
+const VALID_STATUSES = ['pending', 'under_review', 'verified', 'rejected', 'requested'];
 
 /**
  * Validates query parameters for listing caregiver verifications.

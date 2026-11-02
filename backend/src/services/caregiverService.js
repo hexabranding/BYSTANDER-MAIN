@@ -442,32 +442,38 @@ export const getMyDocuments = async (userId) => {
       type: 'identity',
       label: 'Identity Verification',
       hint: 'Government-issued photo ID (Aadhaar / Passport / Voter ID)',
-    },
-    isStudent
-      ? {
-          type: 'college_id',
-          label: 'Nursing Student College ID',
-          hint: 'Valid nursing college identity card with current academic year',
-        }
-      : {
-          type: 'nursing_registration',
-          label: 'Nursing Registration Certificate',
-          hint: 'State Nursing Council registration certificate or degree proof',
-        },
-    {
-      type: 'address_proof',
-      label: 'Address Verification',
-      hint: 'Recent utility bill, rent agreement, or bank passbook address page',
+      required: true,
     },
     {
       type: 'police_clearance',
       label: 'Police Clearance Certificate',
       hint: 'Police clearance certificate issued within the last 12 months',
+      required: true,
     },
     {
       type: 'bank_verification',
       label: 'Bank Verification',
       hint: 'Cancelled cheque or bank passbook showing account number and IFSC',
+      required: true,
+    },
+    isStudent
+      ? {
+          type: 'college_id',
+          label: 'Nursing Student College ID',
+          hint: 'Valid nursing college identity card with current academic year (Optional unless requested)',
+          required: false,
+        }
+      : {
+          type: 'nursing_registration',
+          label: 'Nursing Registration Certificate',
+          hint: 'State Nursing Council registration certificate or degree proof (Optional unless requested)',
+          required: false,
+        },
+    {
+      type: 'address_proof',
+      label: 'Address Verification',
+      hint: 'Recent utility bill, rent agreement, or bank passbook address page (Optional unless requested)',
+      required: false,
     },
   ];
 
@@ -495,6 +501,7 @@ export const getMyDocuments = async (userId) => {
       if (existing.verificationStatus === 'verified') statusLabel = 'Verified';
       else if (existing.verificationStatus === 'rejected') statusLabel = 'Rejected';
       else if (existing.verificationStatus === 'under_review') statusLabel = 'Under Review';
+      else if (existing.verificationStatus === 'requested') statusLabel = 'Requested by Admin';
 
       return {
         id: String(existing._id),
@@ -507,12 +514,12 @@ export const getMyDocuments = async (userId) => {
         fileUrl: existing.fileKey?.startsWith('data:') ? existing.fileKey : null,
         status: statusLabel,
         verificationStatus: existing.verificationStatus,
-        feedback: existing.reviewerNotes || '',
+        feedback: existing.reviewerNotes || (existing.verificationStatus === 'requested' ? 'Admin requested this document. Please upload.' : ''),
         reviewerNotes: existing.reviewerNotes || '',
         reviewedBy: existing.reviewedBy?.fullName || null,
         reviewedAt: existing.reviewedAt || null,
         uploadedOn: existing.createdAt ? existing.createdAt.toISOString().slice(0, 10) : null,
-        required: true,
+        required: reqDef.required,
         hint: reqDef.hint,
       };
     }
@@ -525,22 +532,23 @@ export const getMyDocuments = async (userId) => {
       fileSize: 0,
       mimeType: '',
       fileUrl: null,
-      status: 'Not uploaded',
+      status: reqDef.required ? 'Not uploaded' : 'Optional',
       verificationStatus: 'not_uploaded',
       feedback: '',
       reviewerNotes: '',
       reviewedBy: null,
       reviewedAt: null,
       uploadedOn: null,
-      required: true,
+      required: reqDef.required,
       hint: reqDef.hint,
     };
   });
 
-  const verifiedCount = items.filter((d) => d.status === 'Verified').length;
-  const uploadedCount = items.filter((d) => d.status !== 'Not uploaded').length;
-  const totalRequired = requiredTypes.length;
-  const completionPct = Math.round((verifiedCount / totalRequired) * 100);
+  const mandatoryItems = items.filter((d) => d.required);
+  const mandatoryVerifiedCount = mandatoryItems.filter((d) => d.status === 'Verified').length;
+  const completionPct = mandatoryItems.length > 0
+    ? Math.round((mandatoryVerifiedCount / mandatoryItems.length) * 100)
+    : Math.round((items.filter((d) => d.status === 'Verified').length / items.length) * 100);
 
   // Construct truthful chronological audit history
   const history = [

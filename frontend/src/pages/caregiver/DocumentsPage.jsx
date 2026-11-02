@@ -434,30 +434,56 @@ export function DocumentsPage() {
           const isRejected = doc.status === 'Rejected'
           const isVerified = doc.status === 'Verified'
           const isUnderReview = doc.status === 'Under Review' || doc.status === 'Pending'
-          const isNotUploaded = doc.status === 'Not uploaded' || !doc.file
+          const isRequested = doc.status === 'Requested by Admin' || doc.verificationStatus === 'requested'
+          const isNotUploaded = (doc.status === 'Not uploaded' || doc.status === 'Optional' || !doc.file) && !isRequested
 
           return (
-            <Card key={doc.id || doc.type} className="flex flex-col">
+            <Card
+              key={doc.id || doc.type}
+              className={cn(
+                'flex flex-col',
+                isRequested && 'border-amber-300 ring-2 ring-amber-100 bg-amber-50/20'
+              )}
+            >
               <CardBody className="flex flex-1 flex-col gap-3">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
+                  <span
+                    className={cn(
+                      'grid h-11 w-11 shrink-0 place-items-center rounded-xl',
+                      isRequested ? 'bg-amber-100 text-amber-800' : 'bg-mint-100 text-primary-700'
+                    )}
+                  >
                     <Icon className="h-5 w-5" />
                   </span>
                   <StatusBadge status={doc.status} size="sm" />
                 </div>
-                <h3 className="font-display text-sm font-bold text-ink">{doc.type}</h3>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-display text-sm font-bold text-ink">{doc.type}</h3>
+                  {doc.required ? (
+                    <span className="text-danger-500 font-bold" title="Mandatory document">*</span>
+                  ) : (
+                    <span className="text-[11px] font-medium text-muted">(Optional)</span>
+                  )}
+                </div>
                 {doc.hint ? <p className="text-xs text-faint">{doc.hint}</p> : null}
+
+                {isRequested ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+                    <p className="font-bold">⚠️ Action Required: Requested by Admin</p>
+                    <p className="mt-0.5 text-amber-800">{doc.feedback || 'Please upload this document to complete verification.'}</p>
+                  </div>
+                ) : null}
 
                 <div className="mt-auto pt-2">
                   <p className="text-xs font-semibold text-muted">
-                    {doc.file || doc.fileName || 'No document submitted'}
+                    {doc.file || doc.fileName || (isRequested ? 'Awaiting upload' : 'No document submitted')}
                   </p>
                   {doc.uploadedOn ? (
                     <p className="mt-0.5 text-[11px] text-faint">Uploaded {formatDate(doc.uploadedOn)}</p>
                   ) : null}
                 </div>
 
-                {doc.feedback ? (
+                {!isRequested && doc.feedback ? (
                   <div
                     className={cn(
                       'rounded-xl p-3 text-xs leading-relaxed',
@@ -475,15 +501,15 @@ export function DocumentsPage() {
               </CardBody>
 
               <div className="flex gap-2 border-t border-line px-5 py-3.5">
-                {isNotUploaded || isRejected ? (
+                {isRequested || isNotUploaded || isRejected ? (
                   <Button
-                    variant="primary"
+                    variant={isRequested ? 'primary' : 'primary'}
                     size="sm"
                     className="flex-1"
                     icon={UploadCloud}
                     onClick={() => openUpload(doc)}
                   >
-                    {isRejected ? 'Re-upload Proof' : 'Upload File'}
+                    {isRequested ? 'Upload Requested File' : isRejected ? 'Re-upload Proof' : 'Upload File'}
                   </Button>
                 ) : isUnderReview ? (
                   <>

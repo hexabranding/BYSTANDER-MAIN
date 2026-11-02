@@ -11,6 +11,7 @@ import {
   History,
   RefreshCw,
   SearchX,
+  Send,
   XCircle,
 } from 'lucide-react'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
@@ -55,6 +56,13 @@ export function calculateVerificationScore(recordOrDocs, status) {
   if (!docs.length) {
     const s = typeof recordOrDocs === 'object' ? recordOrDocs?.status : status
     return s === 'Verified' ? 100 : (typeof recordOrDocs?.overallScore === 'number' ? recordOrDocs.overallScore : 0)
+  }
+  const mandatoryDocs = docs.filter((d) => d.required !== false)
+  if (mandatoryDocs.length > 0) {
+    const verifiedMandatory = mandatoryDocs.filter(
+      (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
+    ).length
+    return Math.round((verifiedMandatory / mandatoryDocs.length) * 100)
   }
   const verified = docs.filter(
     (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
@@ -199,6 +207,7 @@ function DetailPanel({
   onPreview,
   onApproveDoc,
   onRejectDoc,
+  onRequestDoc,
 }) {
   const score = calculateVerificationScore(record)
   const scoreTone = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'
@@ -247,49 +256,87 @@ function DetailPanel({
       <Card>
         <CardHeader
           title="Document review"
-          subtitle={`${record.documents.length} document${record.documents.length === 1 ? '' : 's'} submitted`}
+          subtitle={`${record.documents.filter((d) => d.file && d.file !== 'Not submitted' && !String(d.id).startsWith('missing-')).length} of ${record.documents.length} documents submitted (3 mandatory)`}
           icon={FileCheck2}
         />
         <CardBody className="grid gap-4 sm:grid-cols-2">
-          {record.documents.map((doc) => (
-            <div key={doc.id} className="rounded-xl border border-line bg-white p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-ink">{doc.type}</p>
-                  <p className="truncate text-xs text-faint">{doc.file}</p>
+          {record.documents.map((doc) => {
+            const hasFile = doc.file && doc.file !== 'Not submitted' && !String(doc.id).startsWith('missing-')
+            const isRequested = doc.status === 'Requested by Admin' || doc.verificationStatus === 'requested'
+
+            return (
+              <div
+                key={doc.id || doc.type}
+                className={cn(
+                  'rounded-xl border p-4 transition-all',
+                  isRequested ? 'border-amber-300 bg-amber-50/20' : 'border-line bg-white'
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="truncate text-sm font-bold text-ink">{doc.type}</p>
+                      {doc.required !== false ? (
+                        <span className="rounded-full bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 text-[10px] font-bold">
+                          Mandatory *
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium">
+                          Optional
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-faint mt-0.5">{doc.file || 'Not submitted'}</p>
+                  </div>
+                  <StatusBadge status={doc.status} size="sm" />
                 </div>
-                <StatusBadge status={doc.status} size="sm" />
+                <p className="mt-2 text-[11px] text-faint">
+                  {doc.uploadedOn ? `Uploaded ${formatDate(doc.uploadedOn)}` : 'Not uploaded yet'}
+                </p>
+                <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-muted">
+                  <span className="font-semibold text-ink-soft">Reviewer note: </span>
+                  {doc.feedback || doc.reviewerNotes || (isRequested ? 'Document requested from caretaker' : 'No feedback recorded yet.')}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {hasFile ? (
+                    <>
+                      <Button size="xs" variant="outline" icon={Eye} onClick={() => onPreview(doc)}>
+                        Preview
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        icon={Check}
+                        onClick={() => onApproveDoc(doc)}
+                        disabled={doc.status === 'Verified'}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="dangerGhost"
+                        icon={XCircle}
+                        onClick={() => onRejectDoc(doc)}
+                        disabled={doc.status === 'Rejected'}
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      size="xs"
+                      variant={isRequested ? 'outline' : 'primary'}
+                      icon={Send}
+                      onClick={() => onRequestDoc?.(doc)}
+                      disabled={isRequested}
+                    >
+                      {isRequested ? 'Requested from caretaker' : 'Request document'}
+                    </Button>
+                  )}
+                </div>
               </div>
-              <p className="mt-2 text-[11px] text-faint">Uploaded {formatDate(doc.uploadedOn)}</p>
-              <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-muted">
-                <span className="font-semibold text-ink-soft">Reviewer note: </span>
-                {doc.feedback || 'No feedback recorded yet.'}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="xs" variant="outline" icon={Eye} onClick={() => onPreview(doc)}>
-                  Preview
-                </Button>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  icon={Check}
-                  onClick={() => onApproveDoc(doc)}
-                  disabled={doc.status === 'Verified'}
-                >
-                  Approve
-                </Button>
-                <Button
-                  size="xs"
-                  variant="dangerGhost"
-                  icon={XCircle}
-                  onClick={() => onRejectDoc(doc)}
-                  disabled={doc.status === 'Rejected'}
-                >
-                  Reject
-                </Button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </CardBody>
       </Card>
 
@@ -667,6 +714,40 @@ export function VerificationsPage() {
     }
   }
 
+  const handleRequestDocument = async (doc) => {
+    if (!record) return
+    const docType = doc.documentType || (doc.type || '').toLowerCase().replace(/\s+/g, '_')
+    try {
+      await adminService.requestCaregiverDocument(record.id, {
+        documentType: docType,
+        notes: `Admin requested ${doc.type || docType}`,
+      })
+      toast.success(`Requested ${doc.type} from ${record.name}`, {
+        description: 'The caretaker will be notified to upload this document in their portal.',
+      })
+      setRealVerifications((prev) =>
+        prev.map((v) => {
+          if (v.id !== record.id) return v
+          const nextDocs = (v.documents || []).map((d) =>
+            d.documentType === docType || d.id === doc.id
+              ? {
+                  ...d,
+                  status: 'Requested by Admin',
+                  verificationStatus: 'requested',
+                  reviewerNotes: `Admin requested ${doc.type || docType}`,
+                  feedback: `Admin requested ${doc.type || docType}`,
+                }
+              : d,
+          )
+          return { ...v, documents: nextDocs }
+        }),
+      )
+      fetchVerifications(false)
+    } catch (err) {
+      toast.error('Failed to request document', { description: err.message })
+    }
+  }
+
   let dialogTone = 'primary'
   let dialogTitle = 'Are you sure?'
   let dialogMessage = ''
@@ -692,6 +773,7 @@ export function VerificationsPage() {
         onPreview: setPreviewDoc,
         onApproveDoc: (doc) => setConfirmPrompt({ kind: 'approveDocument', doc }),
         onRejectDoc: openRejectDocument,
+        onRequestDoc: handleRequestDocument,
       }
     : null
 

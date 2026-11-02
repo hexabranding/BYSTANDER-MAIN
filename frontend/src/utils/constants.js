@@ -51,6 +51,9 @@ export const STATUS_STYLES = {
   dismissed: 'bg-slate-100 text-slate-600 ring-slate-400/40',
   'action-taken': 'bg-accent-50 text-accent-600 ring-accent-500/40',
   'not-uploaded': 'bg-slate-100 text-slate-600 ring-slate-400/40',
+  requested: 'bg-amber-50 text-amber-800 ring-amber-400/50',
+  'requested-by-admin': 'bg-amber-50 text-amber-800 ring-amber-400/50',
+  optional: 'bg-slate-100 text-slate-600 ring-slate-400/40',
 }
 
 export const STATUS_DOT = {
@@ -58,6 +61,9 @@ export const STATUS_DOT = {
   'payment-pending': 'bg-warning-400',
   unpaid: 'bg-warning-400',
   'under-review': 'bg-warning-400',
+  requested: 'bg-amber-500',
+  'requested-by-admin': 'bg-amber-500',
+  optional: 'bg-slate-400',
   reviewing: 'bg-warning-400',
   verified: 'bg-success-500',
   'not-uploaded': 'bg-slate-400',

@@ -58,8 +58,8 @@ const documentSchema = new mongoose.Schema(
     verificationStatus: {
       type: String,
       enum: {
-        values: ['pending', 'under_review', 'verified', 'rejected'],
-        message: 'Status must be pending, under_review, verified, or rejected',
+        values: ['pending', 'under_review', 'verified', 'rejected', 'requested'],
+        message: 'Status must be pending, under_review, verified, rejected, or requested',
       },
       default: 'pending',
       required: true,

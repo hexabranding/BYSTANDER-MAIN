@@ -97,6 +97,20 @@ export const updateCaregiverVerificationStatus = async (caregiverId, payload) =>
 }
 
 /**
+ * Admin requests an optional or missing document from a caregiver.
+ * @param {string} caregiverId - CaregiverProfile ObjectId
+ * @param {Object} payload - { documentType: string, notes?: string }
+ * @returns {Promise<Object>} Result message and updated document
+ */
+export const requestCaregiverDocument = async (caregiverId, payload) => {
+  if (!caregiverId) {
+    throw new Error('A valid caregiver identifier is required')
+  }
+  const response = await apiClient.post(`/admin/verifications/${caregiverId}/request-document`, payload)
+  return response?.data || response
+}
+
+/**
  * Retrieves paginated list of registered customers with real database profile and booking summaries.
  * @param {Object} [query={}] - Optional filters (page, limit, status, city, search)
  * @returns {Promise<{ customers: Array, pagination: Object, stats: Object }>}
@@ -537,6 +551,7 @@ export const adminService = {
   getVerificationById,
   updateDocumentStatus,
   updateCaregiverVerificationStatus,
+  requestCaregiverDocument,
   getCustomers,
   getCaregivers,
   updateUserStatus,

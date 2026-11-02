@@ -882,7 +882,7 @@ export const adaptSosIncident = (raw) => {
 const DOCUMENT_TYPE_LABELS = {
   identity: 'Government Photo ID',
   address_proof: 'Address Proof',
-  nursing_registration: 'Nursing Council Registration',
+  nursing_registration: 'Nursing / Qualification Certificate',
   college_id: 'College / Institute ID',
   police_clearance: 'Police Clearance Certificate',
   bank_verification: 'Bank Account Proof',
@@ -895,6 +895,8 @@ export const normalizeVerificationStatus = (status) => {
   if (s === 'under_review' || s === 'under review') return 'Under Review'
   if (s === 'verified') return 'Verified'
   if (s === 'rejected') return 'Rejected'
+  if (s === 'requested' || s === 'requested by admin' || s === 'requested_by_admin') return 'Requested by Admin'
+  if (s === 'not_uploaded' || s === 'not uploaded' || s === 'optional') return 'Not uploaded'
   return 'Pending'
 }
 
@@ -923,21 +925,25 @@ export const adaptVerificationDocument = (doc) => {
       ? doc.fileKey
       : null)
 
+  const isNotUploaded = status === 'Not uploaded' || doc.verificationStatus === 'not_uploaded'
+
   return {
     id,
     _id: id,
     type,
     documentType: docType,
-    file: doc.fileName || `${docType}.pdf`,
-    fileName: doc.fileName || `${docType}.pdf`,
+    file: doc.file || (isNotUploaded ? 'Not submitted' : (doc.fileName || `${docType}.pdf`)),
+    fileName: doc.fileName || (isNotUploaded ? '' : `${docType}.pdf`),
     fileUrl,
-    uploadedOn: doc.createdAt || doc.uploadedOn || new Date().toISOString(),
+    uploadedOn: doc.uploadedOn || doc.createdAt || (isNotUploaded ? null : new Date().toISOString()),
     status,
     verificationStatus: (doc.verificationStatus || status).toLowerCase(),
     feedback: doc.reviewerNotes || doc.feedback || '',
     reviewerNotes: doc.reviewerNotes || doc.feedback || '',
     reviewedBy: reviewer,
     reviewedAt: doc.reviewedAt || null,
+    required: doc.required !== undefined ? doc.required : true,
+    canRequest: doc.canRequest !== undefined ? doc.canRequest : true,
   }
 }
 

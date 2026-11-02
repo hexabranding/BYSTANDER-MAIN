@@ -193,20 +193,13 @@ export function RegisterCaregiverPage() {
   }
 
   const validateDocs = () => {
-    const currentQualification = getValues('qualification')
     const currentDocs = getValues('docs') || {}
     const missing = []
-    if (isNursingStudent(currentQualification) && !currentDocs.nursingStudentId?.name) {
-      missing.push('nursing student college ID')
-    }
-    if (isNursingQualification(currentQualification) && !isNursingStudent(currentQualification) && !currentDocs.nursingCertificate?.name) {
-      missing.push('nursing registration certificate')
-    }
-    if (!currentDocs.identityDoc?.name) missing.push('identity verification document')
-    if (!currentDocs.addressProof?.name) missing.push('address proof')
-    if (!currentDocs.bankProof?.name) missing.push('bank verification document')
+    if (!currentDocs.identityDoc?.name) missing.push('Identity verification document')
+    if (!currentDocs.policeClearance?.name) missing.push('Police clearance certificate')
+    if (!currentDocs.bankProof?.name) missing.push('Bank verification document')
     if (missing.length) {
-      setDocError(`Please upload the required file${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`)
+      setDocError(`Please upload the 3 mandatory files (*): ${missing.join(', ')}`)
       return false
     }
     setDocError('')
@@ -761,67 +754,68 @@ export function RegisterCaregiverPage() {
                   </p>
                 </div>
 
-                {isNursingStudent(qualification) ? (
-                  <FileUpload
-                    id="doc-student-id"
-                    label="Nursing student college ID"
-                    required
-                    hint={`We check that the ID is from a recognised nursing college and shows your expected graduation year. ${DEMO_UPLOAD_HINT}`}
-                    value={docs.nursingStudentId}
-                    onChange={(file) => setDoc('nursingStudentId', file)}
-                    error={errors.docs?.nursingStudentId?.message}
-                  />
-                ) : null}
-
-                {isNursingQualification(qualification) && !isNursingStudent(qualification) ? (
-                  <FileUpload
-                    id="doc-nursing-cert"
-                    label="Nursing registration certificate"
-                    required
-                    hint={`We verify the council name, registration number and validity against your entered details. ${DEMO_UPLOAD_HINT}`}
-                    value={docs.nursingCertificate}
-                    onChange={(file) => setDoc('nursingCertificate', file)}
-                    error={errors.docs?.nursingCertificate?.message}
-                  />
-                ) : null}
-
+                {/* 1. Identity Verification (Mandatory) */}
                 <FileUpload
                   id="doc-identity"
-                  label="Identity verification document"
+                  label="Identity verification document *"
                   required
-                  hint={`Aadhaar, Passport or Voter ID — the photo and full name must match your application. ${DEMO_UPLOAD_HINT}`}
+                  hint={`Aadhaar, Passport or Voter ID — photo and full name must match your application. ${DEMO_UPLOAD_HINT}`}
                   value={docs.identityDoc}
                   onChange={(file) => setDoc('identityDoc', file)}
                   error={errors.docs?.identityDoc?.message}
                 />
 
-                <FileUpload
-                  id="doc-address"
-                  label="Address proof"
-                  required
-                  hint={`A recent utility bill, bank statement or rent agreement with your current address. ${DEMO_UPLOAD_HINT}`}
-                  value={docs.addressProof}
-                  onChange={(file) => setDoc('addressProof', file)}
-                  error={errors.docs?.addressProof?.message}
-                />
-
+                {/* 2. Police Clearance Certificate (Mandatory) */}
                 <FileUpload
                   id="doc-police"
-                  label="Police clearance certificate"
-                  hint={`Optional for now, but strongly recommended — families trust verified caretakers more. ${DEMO_UPLOAD_HINT}`}
+                  label="Police clearance certificate *"
+                  required
+                  hint={`Police clearance certificate or verification slip issued within last 12 months. ${DEMO_UPLOAD_HINT}`}
                   value={docs.policeClearance}
                   onChange={(file) => setDoc('policeClearance', file)}
                   error={errors.docs?.policeClearance?.message}
                 />
 
+                {/* 3. Bank Verification (Mandatory) */}
                 <FileUpload
                   id="doc-bank"
-                  label="Bank verification (cancelled cheque or passbook)"
+                  label="Bank verification (cancelled cheque or passbook) *"
                   required
                   hint={`We match the account holder name with your application name before releasing payouts. ${DEMO_UPLOAD_HINT}`}
                   value={docs.bankProof}
                   onChange={(file) => setDoc('bankProof', file)}
                   error={errors.docs?.bankProof?.message}
+                />
+
+                {/* 4. Nursing / Qualification Certificate (Optional) */}
+                {isNursingStudent(qualification) ? (
+                  <FileUpload
+                    id="doc-student-id"
+                    label="Nursing student college ID (Optional unless requested)"
+                    hint={`Valid nursing college identity card with current academic year. ${DEMO_UPLOAD_HINT}`}
+                    value={docs.nursingStudentId}
+                    onChange={(file) => setDoc('nursingStudentId', file)}
+                    error={errors.docs?.nursingStudentId?.message}
+                  />
+                ) : (
+                  <FileUpload
+                    id="doc-nursing-cert"
+                    label="Nursing registration or qualification certificate (Optional unless requested)"
+                    hint={`State Nursing Council registration certificate, degree, or attendant certificate. ${DEMO_UPLOAD_HINT}`}
+                    value={docs.nursingCertificate}
+                    onChange={(file) => setDoc('nursingCertificate', file)}
+                    error={errors.docs?.nursingCertificate?.message}
+                  />
+                )}
+
+                {/* 5. Address Proof (Optional) */}
+                <FileUpload
+                  id="doc-address"
+                  label="Address proof (Optional unless requested)"
+                  hint={`Recent utility bill, bank statement or rent agreement with your current address. ${DEMO_UPLOAD_HINT}`}
+                  value={docs.addressProof}
+                  onChange={(file) => setDoc('addressProof', file)}
+                  error={errors.docs?.addressProof?.message}
                 />
 
                 {docError ? (

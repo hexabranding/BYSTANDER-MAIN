@@ -78,3 +78,25 @@ export const updateCaregiverVerificationStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * POST /api/admin/verifications/:id/request-document
+ * Admin requests an optional or missing document from a caregiver.
+ */
+export const requestCaregiverDocument = async (req, res, next) => {
+  try {
+    const result = await adminVerificationService.requestCaregiverDocument(
+      req.params.id,
+      req.body,
+      req.user,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result.document,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

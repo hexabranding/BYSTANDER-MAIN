@@ -43,6 +43,7 @@ import { PriceBreakdown } from '@/components/common/TimelinePrice'
 import { RatingStars } from '@/components/common/RatingStars'
 import { CardSkeleton } from '@/components/common/States'
 import { bookingService, servicesService, caregiversService, financeService, isMongoObjectId, apiClient } from '@/services'
+import InteractiveLocationPicker from './InteractiveLocationPicker'
 
 const CARE_REQUIREMENTS = [
   {
@@ -665,6 +666,51 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     }
   }
 
+  const handlePinMoved = async (newLat, newLng) => {
+    setLocationCaptured((prev) => ({
+      ...(prev || {}),
+      lat: newLat,
+      lng: newLng,
+    }))
+
+    setForm((prev) => ({
+      ...prev,
+      coordinates: {
+        latitude: newLat,
+        longitude: newLng,
+      },
+    }))
+
+    // Reverse geocode moved pin in background to enrich area/district/pincode if empty
+    try {
+      const geoRes = await apiClient.get('/geo/reverse', {
+        params: { lat: newLat, lng: newLng },
+      })
+      const geo = geoRes?.data || geoRes
+      if (geo) {
+        setForm((prev) => ({
+          ...prev,
+          // Preserve whatever user already typed; fill in if empty
+          area: prev.area || geo.area || '',
+          city: geo.city || prev.city,
+          district: geo.district || prev.district,
+          state: geo.state || prev.state,
+          pincode: prev.pincode || geo.pincode || '',
+          address: prev.address || geo.address || '',
+        }))
+        if (geo.area || geo.city) {
+          setLocationCaptured((prev) => ({
+            ...prev,
+            area: geo.area || prev?.area,
+            city: geo.city || prev?.city,
+          }))
+        }
+      }
+    } catch (_) {
+      // Non-blocking background enrichment
+    }
+  }
+
   const handleConfirm = async () => {
     let activeService = form.service
     if (isUrgent) {
@@ -1231,39 +1277,12 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     </div>
 
                     {locationCaptured?.lat && locationCaptured?.lng && (
-                      <div className="overflow-hidden rounded-xl border border-line bg-slate-50 p-2.5 text-xs">
-                        <div className="mb-2 flex items-center justify-between px-1 text-slate-700">
-                          <span className="flex items-center gap-1.5 font-medium text-[11px]">
-                            <MapPin className="h-3.5 w-3.5 text-primary-700" />
-                            GPS: {locationCaptured.lat}, {locationCaptured.lng}
-                            {locationCaptured.accuracy && (
-                              <span className="text-[10px] text-muted font-normal">(±{locationCaptured.accuracy}m)</span>
-                            )}
-                          </span>
-                          <a
-                            href={`https://www.google.com/maps?q=${locationCaptured.lat},${locationCaptured.lng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline"
-                          >
-                            <span>Open Google Maps</span>
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                        <div className="relative h-36 w-full overflow-hidden rounded-lg bg-slate-200 shadow-inner">
-                          <iframe
-                            title="OpenStreetMap Location Preview"
-                            width="100%"
-                            height="100%"
-                            loading="lazy"
-                            className="border-0 pointer-events-none"
-                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationCaptured.lng - 0.005}%2C${locationCaptured.lat - 0.004}%2C${locationCaptured.lng + 0.005}%2C${locationCaptured.lat + 0.004}&layer=mapnik&marker=${locationCaptured.lat}%2C${locationCaptured.lng}`}
-                          />
-                        </div>
-                        <p className="mt-1.5 px-1 text-[11px] text-slate-500">
-                          Auto-detected from GPS and postal database. Confirm or enter your specific house / building / flat number below if needed.
-                        </p>
-                      </div>
+                      <InteractiveLocationPicker
+                        lat={locationCaptured.lat}
+                        lng={locationCaptured.lng}
+                        accuracy={locationCaptured.accuracy}
+                        onLocationChange={handlePinMoved}
+                      />
                     )}
 
                     <FormField label="House / Building / Flat Name & Street Address / Hospital Room" required>

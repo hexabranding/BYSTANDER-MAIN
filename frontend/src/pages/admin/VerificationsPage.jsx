@@ -9,7 +9,6 @@ import {
   FileCheck2,
   FileText,
   History,
-  Info,
   RefreshCw,
   SearchX,
   XCircle,
@@ -197,7 +196,6 @@ function DetailPanel({
   record,
   onApproveApplication,
   onRejectApplication,
-  onRequestInfo,
   onPreview,
   onApproveDoc,
   onRejectDoc,
@@ -241,9 +239,6 @@ function DetailPanel({
             </Button>
             <Button variant="dangerGhost" icon={XCircle} onClick={onRejectApplication} disabled={record.status === 'Rejected'}>
               Reject application
-            </Button>
-            <Button variant="outline" icon={Info} onClick={onRequestInfo}>
-              Request more information
             </Button>
           </div>
         </CardBody>
@@ -672,13 +667,6 @@ export function VerificationsPage() {
     }
   }
 
-  const requestInfo = () => {
-    if (!record) return
-    toast.info(`More information requested from ${record.name}`, {
-      description: 'They have 72 hours to respond before the application is closed.',
-    })
-  }
-
   let dialogTone = 'primary'
   let dialogTitle = 'Are you sure?'
   let dialogMessage = ''
@@ -701,7 +689,6 @@ export function VerificationsPage() {
         record,
         onApproveApplication: () => setConfirmPrompt({ kind: 'approveApplication' }),
         onRejectApplication: openRejectApplication,
-        onRequestInfo: requestInfo,
         onPreview: setPreviewDoc,
         onApproveDoc: (doc) => setConfirmPrompt({ kind: 'approveDocument', doc }),
         onRejectDoc: openRejectDocument,

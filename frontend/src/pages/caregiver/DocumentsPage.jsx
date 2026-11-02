@@ -131,43 +131,6 @@ export function DocumentsPage() {
         hint: 'Government-issued photo ID (Aadhaar / Passport / Voter ID)',
         required: true,
       },
-      isStudent
-        ? {
-            id: 'missing-college-id',
-            type: 'Nursing Student College ID',
-            documentType: 'college_id',
-            file: '',
-            fileName: '',
-            status: 'Not uploaded',
-            verificationStatus: 'not_uploaded',
-            feedback: '',
-            hint: 'Valid nursing college identity card with current academic year',
-            required: true,
-          }
-        : {
-            id: 'missing-nursing-reg',
-            type: 'Nursing Registration Certificate',
-            documentType: 'nursing_registration',
-            file: '',
-            fileName: '',
-            status: 'Not uploaded',
-            verificationStatus: 'not_uploaded',
-            feedback: '',
-            hint: 'State Nursing Council registration certificate or degree proof',
-            required: true,
-          },
-      {
-        id: 'missing-address',
-        type: 'Address Verification',
-        documentType: 'address_proof',
-        file: '',
-        fileName: '',
-        status: 'Not uploaded',
-        verificationStatus: 'not_uploaded',
-        feedback: '',
-        hint: 'Recent utility bill, rent agreement, or bank passbook address page',
-        required: true,
-      },
       {
         id: 'missing-pcc',
         type: 'Police Clearance Certificate',
@@ -191,6 +154,43 @@ export function DocumentsPage() {
         feedback: '',
         hint: 'Cancelled cheque or bank passbook showing account number and IFSC',
         required: true,
+      },
+      isStudent
+        ? {
+            id: 'missing-college-id',
+            type: 'Nursing Student College ID',
+            documentType: 'college_id',
+            file: '',
+            fileName: '',
+            status: 'Optional',
+            verificationStatus: 'not_uploaded',
+            feedback: '',
+            hint: 'Valid nursing college identity card with current academic year (Optional unless requested)',
+            required: false,
+          }
+        : {
+            id: 'missing-nursing-reg',
+            type: 'Nursing Registration Certificate',
+            documentType: 'nursing_registration',
+            file: '',
+            fileName: '',
+            status: 'Optional',
+            verificationStatus: 'not_uploaded',
+            feedback: '',
+            hint: 'State Nursing Council registration certificate or degree proof (Optional unless requested)',
+            required: false,
+          },
+      {
+        id: 'missing-address',
+        type: 'Address Verification',
+        documentType: 'address_proof',
+        file: '',
+        fileName: '',
+        status: 'Optional',
+        verificationStatus: 'not_uploaded',
+        feedback: '',
+        hint: 'Recent utility bill, rent agreement, or bank passbook address page (Optional unless requested)',
+        required: false,
       },
     ]
 
@@ -220,9 +220,16 @@ export function DocumentsPage() {
   }, [apiDossier, verifications, myId, caregiver, user])
 
   const docs = record.documents || []
+  const mandatoryDocs = docs.filter((d) => d.required !== false)
+  const totalMandatory = mandatoryDocs.length || 3
   const verifiedCount = docs.filter((d) => d.status === 'Verified').length
   const totalRequired = docs.length || 5
-  const completionPct = Math.round((verifiedCount / totalRequired) * 100)
+  const completionPct =
+    typeof record.completionPct === 'number'
+      ? record.completionPct
+      : totalMandatory > 0
+        ? Math.round((mandatoryDocs.filter((d) => d.status === 'Verified').length / totalMandatory) * 100)
+        : Math.round((verifiedCount / totalRequired) * 100)
 
   const maskedReg = record.regNo ? `XXXX XXXX ${String(record.regNo).slice(-4)}` : 'Not provided'
 
@@ -341,7 +348,7 @@ export function DocumentsPage() {
           <div className="flex items-center gap-3">
             <StatusBadge status={record.status} />
             <span className="text-sm font-medium text-muted">
-              {verifiedCount} of {totalRequired} documents verified
+              {verifiedCount} of {totalRequired} documents verified ({totalMandatory} mandatory)
             </span>
             <Button
               variant="ghost"
@@ -360,7 +367,7 @@ export function DocumentsPage() {
           <div className="min-w-0 text-sm">
             <p className="font-bold">Verification Pending — Upload Your Proofs</p>
             <p className="mt-0.5 text-xs text-warning-800">
-              Please upload all {totalRequired} required verification documents below. Once submitted, our compliance
+              Please upload all {totalMandatory} mandatory verification documents below. Once submitted, our compliance
               desk will review your credentials to unlock your full caretaker dashboard.
             </p>
           </div>
@@ -417,7 +424,7 @@ export function DocumentsPage() {
               <p className="text-xs">Ref {record.id}</p>
             </div>
           </div>
-          <ProgressBar value={verifiedCount} max={totalRequired} tone="primary" />
+          <ProgressBar value={completionPct} max={100} tone="primary" />
           <div className="flex items-start gap-3 rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4">
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
             <p className="text-xs leading-relaxed text-muted">

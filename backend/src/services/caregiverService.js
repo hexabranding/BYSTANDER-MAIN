@@ -546,9 +546,12 @@ export const getMyDocuments = async (userId) => {
 
   const mandatoryItems = items.filter((d) => d.required);
   const mandatoryVerifiedCount = mandatoryItems.filter((d) => d.status === 'Verified').length;
+  const verifiedCount = items.filter((d) => d.status === 'Verified').length;
+  const uploadedCount = items.filter((d) => d.status !== 'Not uploaded' && d.status !== 'Optional').length;
+  const totalRequired = mandatoryItems.length;
   const completionPct = mandatoryItems.length > 0
     ? Math.round((mandatoryVerifiedCount / mandatoryItems.length) * 100)
-    : Math.round((items.filter((d) => d.status === 'Verified').length / items.length) * 100);
+    : Math.round((verifiedCount / items.length) * 100);
 
   // Construct truthful chronological audit history
   const history = [

@@ -42,7 +42,7 @@ import { FormField, Input, Select, Textarea } from '@/components/forms/FormField
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
 import { RatingStars } from '@/components/common/RatingStars'
 import { CardSkeleton } from '@/components/common/States'
-import { bookingService, servicesService, caregiversService, financeService, isMongoObjectId } from '@/services'
+import { bookingService, servicesService, caregiversService, financeService, isMongoObjectId, apiClient } from '@/services'
 
 const CARE_REQUIREMENTS = [
   {
@@ -418,32 +418,32 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   const handleChooseCurrentLocation = async () => {
     setDetectingLocation(true)
 
-    // Fast browser Wi-Fi/GPS check
+    // High-accuracy browser GPS / Wi-Fi positioning (enableHighAccuracy forces GPS chip / Wi-Fi trilateration)
     const getBrowserCoords = () =>
       new Promise((resolve) => {
         if (typeof navigator === 'undefined' || !navigator.geolocation) {
           resolve(null)
           return
         }
-        const timer = setTimeout(() => resolve(null), 3000)
+        const timer = setTimeout(() => resolve(null), 8000)
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             clearTimeout(timer)
             resolve({
-              latitude: Number(pos.coords.latitude.toFixed(5)),
-              longitude: Number(pos.coords.longitude.toFixed(5)),
-              accuracy: pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 25,
+              latitude: Number(pos.coords.latitude.toFixed(6)),
+              longitude: Number(pos.coords.longitude.toFixed(6)),
+              accuracy: pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 10,
             })
           },
           () => {
             clearTimeout(timer)
             resolve(null)
           },
-          { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
         )
       })
 
-    // Instant IP Geolocation fallback (works reliably on computers without GPS hardware)
+    // Instant IP Geolocation fallback (works when GPS hardware/permission is blocked)
     const getIpCoords = async () => {
       try {
         const res = await fetch('https://ipwho.is/')
@@ -451,8 +451,8 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           const data = await res.json()
           if (data.latitude && data.longitude) {
             return {
-              latitude: Number(Number(data.latitude).toFixed(5)),
-              longitude: Number(Number(data.longitude).toFixed(5)),
+              latitude: Number(Number(data.latitude).toFixed(6)),
+              longitude: Number(Number(data.longitude).toFixed(6)),
               city: data.city || '',
               region: data.region || '',
               postal: data.postal || '',
@@ -468,8 +468,8 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           const d2 = await res2.json()
           if (d2.latitude && d2.longitude) {
             return {
-              latitude: Number(Number(d2.latitude).toFixed(5)),
-              longitude: Number(Number(d2.longitude).toFixed(5)),
+              latitude: Number(Number(d2.latitude).toFixed(6)),
+              longitude: Number(Number(d2.longitude).toFixed(6)),
               city: d2.city || '',
               region: d2.region || '',
               postal: d2.postal || '',
@@ -483,11 +483,11 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     }
 
     try {
-      // 1. Try browser device coordinates
+      // 1. Try browser device coordinates with high-accuracy GPS
       let coords = await getBrowserCoords()
       let ipData = null
 
-      // 2. If browser GPS timed out or failed, immediately use IP Geolocation
+      // 2. If browser GPS timed out or failed, fallback to IP Geolocation
       if (!coords) {
         ipData = await getIpCoords()
         if (ipData) {
@@ -511,85 +511,118 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       let detectedState = ''
       let detectedPincode = ''
 
-      // 3. Reverse Geocode with Nominatim (3.5s timeout)
+      // 3. Reverse Geocode via Bystander Geo Service (Google Maps API + High-Resolution Nominatim + India Post)
       try {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 3500)
-        const geoRes = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-          {
-            signal: controller.signal,
-            headers: { 'Accept-Language': 'en' },
-          },
-        )
-        clearTimeout(timer)
-
-        if (geoRes.ok) {
-          const data = await geoRes.json()
-          const addr = data.address || {}
-
-          const rawCity =
-            addr.city || addr.town || addr.city_district || addr.suburb || addr.state_district || ipData?.city || ''
-          const rawState = addr.state || ipData?.region || ''
-
-          let matchedCity = CITIES.find((c) => {
-            const base = c.split(',')[0].toLowerCase()
-            return (
-              rawCity.toLowerCase().includes(base) ||
-              base.includes(rawCity.toLowerCase()) ||
-              (base === 'bengaluru' && rawCity.toLowerCase().includes('bangalore')) ||
-              (base === 'mumbai' &&
-                (rawCity.toLowerCase().includes('bombay') || rawCity.toLowerCase().includes('thane'))) ||
-              (base === 'delhi ncr' &&
-                (rawCity.toLowerCase().includes('delhi') ||
-                  rawCity.toLowerCase().includes('noida') ||
-                  rawCity.toLowerCase().includes('gurugram') ||
-                  rawCity.toLowerCase().includes('gurgaon')))
-            )
-          })
-
-          if (!matchedCity && rawCity) {
-            matchedCity = rawState ? `${rawCity}, ${rawState}` : rawCity
-          }
-
-          detectedCity = matchedCity || rawCity
-          detectedArea =
-            addr.suburb ||
-            addr.neighbourhood ||
-            addr.residential ||
-            addr.subdistrict ||
-            addr.quarter ||
-            addr.city_district ||
-            ipData?.city ||
-            ''
-
-          detectedDistrict =
-            KERALA_DISTRICTS.find(
-              (d) =>
-                (addr.state_district && addr.state_district.toLowerCase().includes(d.toLowerCase())) ||
-                (addr.county && addr.county.toLowerCase().includes(d.toLowerCase())),
-            ) || ''
-          detectedPincode = addr.postcode ? String(addr.postcode).replace(/\D/g, '').slice(0, 6) : ''
-          detectedState = addr.state || (detectedDistrict ? 'Kerala' : '')
-
-          const streetParts = [
-            addr.building || addr.amenity || addr.house_name,
-            addr.house_number ? `#${addr.house_number}` : '',
-            addr.road,
-            detectedArea,
-          ].filter(Boolean)
-
-          detectedAddress =
-            streetParts.length > 0
-              ? streetParts.join(', ')
-              : data.display_name?.split(',').slice(0, 3).join(', ') || `${detectedArea}, ${detectedCity}`
+        const geoRes = await apiClient.get('/geo/reverse', {
+          params: { lat, lng },
+        })
+        const geo = geoRes?.data || geoRes
+        if (geo?.address || geo?.area) {
+          detectedAddress = geo.address || detectedAddress
+          detectedArea = geo.area || detectedArea
+          detectedCity = geo.city || detectedCity
+          detectedDistrict = geo.district || detectedDistrict
+          detectedState = geo.state || detectedState
+          detectedPincode = geo.pincode || detectedPincode
         }
-      } catch (_) {}
+      } catch (geoErr) {
+        console.warn('[Booking] Server reverse-geocoding fallback:', geoErr?.message)
+      }
+
+      // 4. Client-side fallback if backend was unavailable
+      if (!detectedAddress || !detectedArea) {
+        try {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), 4000)
+          const geoRes = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1`,
+            {
+              signal: controller.signal,
+              headers: { 'Accept-Language': 'en' },
+            },
+          )
+          clearTimeout(timer)
+
+          if (geoRes.ok) {
+            const data = await geoRes.json()
+            const addr = data.address || {}
+
+            const rawCity =
+              addr.city || addr.town || addr.city_district || addr.suburb || addr.state_district || ipData?.city || ''
+            const rawState = addr.state || ipData?.region || ''
+
+            let matchedCity = CITIES.find((c) => {
+              const base = c.split(',')[0].toLowerCase()
+              return (
+                rawCity.toLowerCase().includes(base) ||
+                base.includes(rawCity.toLowerCase()) ||
+                (base === 'bengaluru' && rawCity.toLowerCase().includes('bangalore')) ||
+                (base === 'mumbai' &&
+                  (rawCity.toLowerCase().includes('bombay') || rawCity.toLowerCase().includes('thane'))) ||
+                (base === 'delhi ncr' &&
+                  (rawCity.toLowerCase().includes('delhi') ||
+                    rawCity.toLowerCase().includes('noida') ||
+                    rawCity.toLowerCase().includes('gurugram') ||
+                    rawCity.toLowerCase().includes('gurgaon')))
+              )
+            })
+
+            if (!matchedCity && rawCity) {
+              matchedCity = rawState ? `${rawCity}, ${rawState}` : rawCity
+            }
+
+            detectedCity = detectedCity || matchedCity || rawCity
+            detectedArea =
+              detectedArea ||
+              addr.suburb ||
+              addr.neighbourhood ||
+              addr.residential ||
+              addr.subdistrict ||
+              addr.quarter ||
+              addr.city_district ||
+              ipData?.city ||
+              ''
+
+            detectedDistrict =
+              detectedDistrict ||
+              KERALA_DISTRICTS.find(
+                (d) =>
+                  (addr.state_district && addr.state_district.toLowerCase().includes(d.toLowerCase())) ||
+                  (addr.county && addr.county.toLowerCase().includes(d.toLowerCase())),
+              ) || ''
+            detectedPincode =
+              detectedPincode || (addr.postcode ? String(addr.postcode).replace(/\D/g, '').slice(0, 6) : '')
+            detectedState = detectedState || addr.state || (detectedDistrict ? 'Kerala' : '')
+
+            const landmark =
+              addr.shop ||
+              addr.building ||
+              addr.amenity ||
+              addr.office ||
+              addr.commercial ||
+              addr.house_name ||
+              addr.place
+
+            const streetParts = [
+              landmark ? `Near ${landmark}` : '',
+              addr.house_number ? `#${addr.house_number}` : '',
+              addr.road,
+            ].filter(Boolean)
+
+            if (!detectedAddress) {
+              detectedAddress =
+                streetParts.length > 0
+                  ? streetParts.join(', ')
+                  : data.display_name?.split(',').slice(0, 3).join(', ') || `${detectedArea}, ${detectedCity}`
+            }
+          }
+        } catch (_) {}
+      }
 
       if (!detectedCity && ipData) {
         detectedCity = ipData.region ? `${ipData.city}, ${ipData.region}` : ipData.city
-        detectedArea = ipData.city
-        detectedAddress = `${ipData.city}, ${ipData.region}`
+        detectedArea = detectedArea || ipData.city
+        detectedAddress = detectedAddress || `${ipData.city}, ${ipData.region}`
       }
 
       if (!detectedAddress) {
@@ -1207,9 +1240,17 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                               <span className="text-[10px] text-muted font-normal">(±{locationCaptured.accuracy}m)</span>
                             )}
                           </span>
-                          <span className="text-[10px] text-muted">OpenStreetMap Preview</span>
+                          <a
+                            href={`https://www.google.com/maps?q=${locationCaptured.lat},${locationCaptured.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline"
+                          >
+                            <span>Open Google Maps</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
                         </div>
-                        <div className="relative h-32 w-full overflow-hidden rounded-lg bg-slate-200 shadow-inner">
+                        <div className="relative h-36 w-full overflow-hidden rounded-lg bg-slate-200 shadow-inner">
                           <iframe
                             title="OpenStreetMap Location Preview"
                             width="100%"
@@ -1219,6 +1260,9 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                             src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationCaptured.lng - 0.005}%2C${locationCaptured.lat - 0.004}%2C${locationCaptured.lng + 0.005}%2C${locationCaptured.lat + 0.004}&layer=mapnik&marker=${locationCaptured.lat}%2C${locationCaptured.lng}`}
                           />
                         </div>
+                        <p className="mt-1.5 px-1 text-[11px] text-slate-500">
+                          Auto-detected from GPS and postal database. Confirm or enter your specific house / building / flat number below if needed.
+                        </p>
                       </div>
                     )}
 

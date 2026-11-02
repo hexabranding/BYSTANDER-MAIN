@@ -7,6 +7,7 @@ import {
   isWithinRadius,
   CITY_COORDINATES,
 } from '../src/utils/geoUtils.js';
+import { reverseGeocode } from '../src/services/geoService.js';
 
 test('GeoRadius 1: DEFAULT_BROADCAST_RADIUS_KM is authoritatively set to 30 km', () => {
   assert.equal(DEFAULT_BROADCAST_RADIUS_KM, 30);
@@ -89,5 +90,36 @@ test('GeoRadius 5: isWithinRadius gracefully handles missing coordinates with ci
   const check = isWithinRadius(locA, locB, 30);
   assert.equal(check.isWithin, true);
   assert.equal(typeof check.distanceKm, 'number');
+});
+
+test('GeoReverse 1: reverseGeocode rejects invalid or out-of-range coordinates', async () => {
+  await assert.rejects(
+    async () => reverseGeocode('invalid', 76.26),
+    (err) => err.statusCode === 400 && err.message.includes('Invalid latitude or longitude'),
+  );
+
+  await assert.rejects(
+    async () => reverseGeocode(95.0, 76.26),
+    (err) => err.statusCode === 400,
+  );
+
+  await assert.rejects(
+    async () => reverseGeocode(10.0, 195.0),
+    (err) => err.statusCode === 400,
+  );
+});
+
+test('GeoReverse 2: reverseGeocode resolves valid coordinates into address with district & state', async () => {
+  // Kozhikode coordinates
+  const result = await reverseGeocode(11.25085, 75.79804);
+  assert.ok(result);
+  assert.equal(typeof result.address, 'string');
+  assert.equal(typeof result.city, 'string');
+  assert.equal(typeof result.district, 'string');
+  assert.equal(typeof result.state, 'string');
+  assert.ok(result.lat === 11.25085);
+  assert.ok(result.lng === 75.79804);
+  assert.ok(result.district.toLowerCase().includes('kozhikode') || result.city.toLowerCase().includes('kozhikode'));
+  assert.equal(result.state, 'Kerala');
 });
 

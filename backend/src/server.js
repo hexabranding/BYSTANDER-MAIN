@@ -32,6 +32,7 @@ import customerRoutes from './routes/customerRoutes.js';
 import ambulanceRoutes from './routes/ambulanceRoutes.js';
 import testPaymentRoutes from './routes/testPaymentRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import geoRoutes from './routes/geoRoutes.js';
 import { assertValidJwtSecret } from './utils/auth.js';
 import { assertValidOtpSecret } from './utils/otpUtils.js';
 
@@ -145,6 +146,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/geo', geoRoutes);
 app.use('/api/admin', adminAnalyticsRoutes);
 app.use('/api/admin', adminFinanceRoutes);
 app.use('/api/admin/financials', adminFinanceRoutes);

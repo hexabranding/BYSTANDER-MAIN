@@ -82,6 +82,9 @@ function useBadgeValues() {
     fetchOpenJobs()
 
     const unsubBroadcast = onBookingBroadcast((newBooking) => {
+      if (newBooking?.distanceKm !== undefined && newBooking?.distanceKm !== null && Number(newBooking.distanceKm) > 30) {
+        return // Ignore broadcasts outside 30 km radius
+      }
       fetchOpenJobs()
       playBroadcastSound()
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/caregiver/jobs')) {

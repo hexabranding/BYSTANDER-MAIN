@@ -65,6 +65,9 @@ export const initSocket = (httpServer, clientUrl = 'http://localhost:5173') => {
     if (userId) {
       socket.join(`user:${userId}`);
     }
+    if (socket.user?.role) {
+      socket.join(`role:${socket.user.role}`);
+    }
 
     // Join booking conversation room
     socket.on('join_booking', ({ bookingId }) => {

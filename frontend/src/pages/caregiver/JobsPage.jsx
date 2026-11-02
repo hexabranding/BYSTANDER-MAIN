@@ -37,14 +37,21 @@ export function JobsPage() {
   const myUserId = String(user?._id || user?.id || '')
   const caregiver = caregivers?.find((c) => c.id === myId) || caregivers?.[0]
   const [profileGender, setProfileGender] = useState(null)
+  const [profileLocation, setProfileLocation] = useState(null)
 
   useEffect(() => {
     let active = true
     profileService
       .getCaregiverProfile()
       .then((data) => {
-        if (active && data?.gender) {
-          setProfileGender(data.gender)
+        if (active && data) {
+          if (data.gender) setProfileGender(data.gender)
+          setProfileLocation({
+            city: data.city,
+            district: data.district,
+            area: data.area,
+            coordinates: data.coordinates,
+          })
         }
       })
       .catch(() => {})
@@ -126,6 +133,17 @@ export function JobsPage() {
       // 30 km radius threshold check
       if (newBooking.distanceKm !== undefined && newBooking.distanceKm !== null && Number(newBooking.distanceKm) > 30) {
         return // Ignore broadcast beyond 30 km radius
+      }
+
+      // Safeguard against mismatching geographical regions when distanceKm is not explicitly verified
+      const jobCity = (newBooking.location?.city || '').trim().toLowerCase()
+      const myCity = (profileLocation?.city || caregiver?.city || '').trim().toLowerCase()
+      if (jobCity && myCity && newBooking.distanceKm === undefined) {
+        const normJob = jobCity.replace(/,.*$/, '').trim()
+        const normMy = myCity.replace(/,.*$/, '').trim()
+        if (normJob && normMy && normJob !== normMy) {
+          return // Ignore broadcast in different city when distance cannot be confirmed within 30 km
+        }
       }
 
       // Automatically play notification alert chime

@@ -435,12 +435,14 @@ export const createBooking = async (customerId, bookingData) => {
   // Real-time broadcast: Emit Socket.IO event and dispatch alerts to active verified caregivers within 30 km radius
   try {
     const io = getIO();
+    let populated = null;
     if (io) {
-      const populated = await Booking.findById(createdBooking._id)
+      populated = await Booking.findById(createdBooking._id)
         .populate('customer', 'fullName email phone avatar')
         .populate('service', 'name slug category baseHourlyRate')
         .lean();
-      io.emit('booking:broadcast', populated || createdBooking);
+      // Admin monitoring room receives the broadcast with full details
+      io.to('role:admin').emit('booking:broadcast', populated || createdBooking);
     }
 
     const verifiedFilter = { verificationStatus: 'verified' };
@@ -460,6 +462,15 @@ export const createBooking = async (customerId, bookingData) => {
       const geoCheck = isWithinRadius(locationWithCoords, cg, allowedRadius);
       if (!geoCheck.isWithin) {
         continue; // Exclude caregivers outside the 30 km radius
+      }
+
+      // Real-time Socket.IO emission targeted to this specific caregiver within radius
+      if (io) {
+        const payloadForCaregiver = {
+          ...(populated || createdBooking.toObject?.() || createdBooking),
+          distanceKm: geoCheck.distanceKm !== null ? geoCheck.distanceKm : 5.0,
+        };
+        io.to(`user:${cg.user}`).emit('booking:broadcast', payloadForCaregiver);
       }
 
       const distanceText = geoCheck.distanceKm !== null ? ` (${geoCheck.distanceKm} km away)` : '';
@@ -1519,19 +1530,20 @@ export const rebroadcastBooking = async (user, bookingId) => {
   booking.declinedByCaregivers = [];
   await booking.save();
 
-  // Real-time broadcast: Emit Socket.IO event and dispatch alerts to active verified caregivers
+  // Real-time broadcast: Emit Socket.IO event and dispatch alerts to active verified caregivers within 30 km radius
   try {
     const io = getIO();
+    let populated = null;
     if (io) {
-      const populated = await Booking.findById(booking._id)
+      populated = await Booking.findById(booking._id)
         .populate('customer', 'fullName email phone avatar')
         .populate('service', 'name slug category baseHourlyRate')
         .lean();
-      io.emit('booking:broadcast', populated || booking);
       io.to(`booking:${booking._id}`).emit('booking:rebroadcast', {
         bookingId: booking._id.toString(),
         broadcastExpiresAt: booking.broadcastExpiresAt,
       });
+      io.to('role:admin').emit('booking:broadcast', populated || booking);
     }
 
     const verifiedFilter = { verificationStatus: 'verified' };
@@ -1540,24 +1552,41 @@ export const rebroadcastBooking = async (user, bookingId) => {
     }
 
     const verifiedCaregivers = await CaregiverProfile.find(verifiedFilter)
-      .select('user')
+      .select('user city area district coordinates maxDistanceKm address')
       .lean();
 
     for (const cg of verifiedCaregivers) {
-      if (cg.user) {
-        safeDispatchNotification({
-          recipient: cg.user,
-          type: 'booking_created',
-          title: 'Booking Request Re-Broadcasted',
-          message: `Booking request for ${booking.serviceName} in ${booking.location?.city || 'your area'} is actively seeking a caretaker.`,
-          metadata: {
-            bookingId: booking._id,
-            serviceName: booking.serviceName,
-            city: booking.location?.city,
-          },
-          idempotencyKey: `rebroadcast:${booking._id}:${now.getTime().toString().slice(0, 8)}:${cg.user}`,
-        });
+      if (!cg.user) continue;
+
+      const allowedRadius = Math.min(DEFAULT_BROADCAST_RADIUS_KM, cg.maxDistanceKm || DEFAULT_BROADCAST_RADIUS_KM);
+      const geoCheck = isWithinRadius(booking.location, cg, allowedRadius);
+      if (!geoCheck.isWithin) {
+        continue;
       }
+
+      if (io) {
+        const payloadForCaregiver = {
+          ...(populated || booking.toObject?.() || booking),
+          distanceKm: geoCheck.distanceKm !== null ? geoCheck.distanceKm : 5.0,
+        };
+        io.to(`user:${cg.user}`).emit('booking:broadcast', payloadForCaregiver);
+      }
+
+      const distanceText = geoCheck.distanceKm !== null ? ` (${geoCheck.distanceKm} km away)` : '';
+
+      safeDispatchNotification({
+        recipient: cg.user,
+        type: 'booking_created',
+        title: 'Booking Request Re-Broadcasted',
+        message: `Booking request for ${booking.serviceName} in ${booking.location?.city || 'your area'}${distanceText} is actively seeking a caretaker.`,
+        metadata: {
+          bookingId: booking._id,
+          serviceName: booking.serviceName,
+          city: booking.location?.city,
+          distanceKm: geoCheck.distanceKm,
+        },
+        idempotencyKey: `rebroadcast:${booking._id}:${now.getTime().toString().slice(0, 8)}:${cg.user}`,
+      });
     }
   } catch (err) {
     console.error('Rebroadcast notification error:', err.message);

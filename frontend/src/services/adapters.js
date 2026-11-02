@@ -961,7 +961,16 @@ export const adaptVerificationRecord = (raw) => {
   const avatar = user.avatar || raw.avatar || ''
   const qualification = raw.qualification || 'Certified Caregiver'
   const regNo = raw.nursingRegNo || raw.regNo || 'N/A'
-  const city = raw.city || 'Mumbai, MH'
+  const email = user.email || raw.email || ''
+  const phone = user.phone || raw.phone || ''
+  const street = raw.street || raw.address?.street || ''
+  const area = raw.area || raw.address?.area || ''
+  const city = raw.city || raw.address?.city || 'Mumbai, MH'
+  const district = raw.district || raw.address?.district || ''
+  const state = raw.state || raw.address?.state || 'Kerala'
+  const pincode = raw.pincode || raw.address?.pincode || ''
+  const address = raw.address || { street, area, city, district, state, pincode }
+  const coordinates = raw.coordinates || null
   const submittedOn = raw.createdAt || raw.submittedOn || new Date().toISOString()
   const status = normalizeVerificationStatus(raw.verificationStatus || raw.status)
 
@@ -1027,7 +1036,16 @@ export const adaptVerificationRecord = (raw) => {
     avatar,
     qualification,
     regNo,
+    email,
+    phone,
+    street,
+    area,
     city,
+    district,
+    state,
+    pincode,
+    address,
+    coordinates,
     submittedOn,
     overallScore,
     status,
@@ -1114,6 +1132,14 @@ export const adaptCaregiverAccount = (raw) => {
   const hourlyRate = Number(raw.hourlyRate) || 0
   const city = raw.city || ''
   const area = raw.area || ''
+  const street = raw.street || raw.address?.street || ''
+  const district = raw.district || raw.address?.district || ''
+  const state = raw.state || raw.address?.state || 'Kerala'
+  const pincode = raw.pincode || raw.address?.pincode || ''
+  const address = raw.address || { street, area, city, district, state, pincode }
+  const coordinates = raw.coordinates || null
+  const email = raw.email || raw.user?.email || ''
+  const phone = raw.phone || raw.user?.phone || ''
   const services = Array.isArray(raw.services) ? raw.services : []
   const careSettings = Array.isArray(raw.careSettings) ? raw.careSettings : ['Home Care']
   const availabilityStatus = raw.availabilityStatus || 'Available Now'
@@ -1155,6 +1181,14 @@ export const adaptCaregiverAccount = (raw) => {
     hourlyRate,
     city,
     area,
+    street,
+    district,
+    state,
+    pincode,
+    address,
+    coordinates,
+    email,
+    phone,
     services,
     careSettings,
     availabilityStatus,

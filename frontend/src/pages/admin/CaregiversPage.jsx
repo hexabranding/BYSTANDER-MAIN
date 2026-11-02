@@ -7,6 +7,9 @@ import {
   ExternalLink,
   Eye,
   Languages,
+  Mail,
+  MapPin,
+  Phone,
   SearchX,
   ShieldAlert,
   ShieldCheck,
@@ -552,7 +555,11 @@ export function CaregiversPage() {
         open={Boolean(selected)}
         onClose={() => setViewingId(null)}
         title={selected?.name || 'Caretaker details'}
-        subtitle={selected ? `${selected.qualification} · ${selected.city}` : ''}
+        subtitle={
+          selected
+            ? `${selected.qualification} · ${[selected.city, selected.district, selected.state].filter(Boolean).join(', ')}`
+            : ''
+        }
         size="xl"
         footer={
           selected ? (
@@ -564,13 +571,6 @@ export function CaregiversPage() {
                 {selected.isBlocked || selected.isSuspended ? 'Reinstate account' : 'Suspend account'}
               </Button>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  variant="outline"
-                  icon={ExternalLink}
-                  onClick={() => navigate(`/caregivers/${selected.id}`)}
-                >
-                  Public profile
-                </Button>
                 {selected.verificationStatus !== 'Verified' && !selected.isBlocked && !selected.isSuspended ? (
                   <Button
                     variant="primary"
@@ -671,6 +671,56 @@ export function CaregiversPage() {
                       <span className="text-xs text-muted">No services listed</span>
                     )}
                   </div>
+                </CardBody>
+              </Card>
+
+              <Card className="sm:col-span-2">
+                <CardHeader
+                  title="Full Residential Address & Contact"
+                  subtitle="Doorstep location and direct contact details"
+                  icon={MapPin}
+                />
+                <CardBody className="grid gap-4 text-sm sm:grid-cols-2 md:grid-cols-4">
+                  <div>
+                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">House / Street</span>
+                    <span className="mt-1 block font-medium text-ink">
+                      {selected.street || selected.address?.street || 'Not specified'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">Locality / Area</span>
+                    <span className="mt-1 block font-medium text-ink">
+                      {selected.area || selected.address?.area || '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">City & District</span>
+                    <span className="mt-1 block font-medium text-ink">
+                      {selected.city || '—'}{selected.district ? `, ${selected.district}` : ''}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">State & PIN Code</span>
+                    <span className="mt-1 block font-medium text-ink">
+                      {selected.state || 'Kerala'} {selected.pincode ? `— ${selected.pincode}` : ''}
+                    </span>
+                  </div>
+                  {(selected.phone || selected.email) && (
+                    <div className="sm:col-span-2 md:col-span-4 flex flex-wrap items-center gap-5 pt-3 border-t border-line text-xs">
+                      {selected.phone && (
+                        <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                          <Phone className="h-3.5 w-3.5 text-primary-700" />
+                          Phone: <span className="font-mono text-ink font-semibold">{selected.phone}</span>
+                        </span>
+                      )}
+                      {selected.email && (
+                        <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                          <Mail className="h-3.5 w-3.5 text-primary-700" />
+                          Email: <span className="text-ink font-medium">{selected.email}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </CardBody>
               </Card>
             </div>

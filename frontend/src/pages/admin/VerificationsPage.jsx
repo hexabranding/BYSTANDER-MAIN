@@ -10,7 +10,9 @@ import {
   FileCheck2,
   FileText,
   History,
+  Mail,
   MapPin,
+  Phone,
   RefreshCw,
   SearchX,
   Send,
@@ -258,6 +260,48 @@ function DetailPanel({
               </p>
               <ProgressBar value={score} tone={scoreTone} className="mt-2" />
             </div>
+          </div>
+
+          {/* Full Residential Address & Contact Details */}
+          <div className="rounded-xl border border-line bg-slate-50/70 p-3.5 text-xs">
+            <div className="mb-2 flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-700 text-[11px]">
+              <MapPin className="h-3.5 w-3.5 text-primary-700" />
+              <span>Full Address & Contact Details</span>
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-4">
+              <div>
+                <span className="block text-[10px] uppercase font-semibold text-muted">House / Street</span>
+                <span className="font-medium text-ink">{record.street || record.address?.street || 'Not specified'}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] uppercase font-semibold text-muted">Locality / Area</span>
+                <span className="font-medium text-ink">{record.area || record.address?.area || '—'}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] uppercase font-semibold text-muted">City & District</span>
+                <span className="font-medium text-ink">{record.city}{record.district ? `, ${record.district}` : ''}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] uppercase font-semibold text-muted">State & PIN Code</span>
+                <span className="font-medium text-ink">{record.state || 'Kerala'} {record.pincode ? `— ${record.pincode}` : ''}</span>
+              </div>
+            </div>
+            {(record.phone || record.email) && (
+              <div className="mt-2.5 pt-2 border-t border-slate-200/80 flex flex-wrap gap-4 text-[11px]">
+                {record.phone && (
+                  <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <Phone className="h-3 w-3 text-primary-700" />
+                    Phone: <span className="font-mono font-semibold text-ink">{record.phone}</span>
+                  </span>
+                )}
+                {record.email && (
+                  <span className="flex items-center gap-1 text-slate-700 font-medium">
+                    <Mail className="h-3 w-3 text-primary-700" />
+                    Email: <span className="text-ink font-medium">{record.email}</span>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">

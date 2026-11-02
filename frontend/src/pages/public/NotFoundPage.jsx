@@ -14,9 +14,9 @@ export function NotFoundPage() {
     event.preventDefault()
     const q = term.trim()
     if (q) {
-      navigate(`/caregivers?search=${encodeURIComponent(q)}`)
+      navigate(`/book-caregiver?search=${encodeURIComponent(q)}`)
     } else {
-      navigate('/caregivers')
+      navigate('/book-caregiver')
     }
   }
 

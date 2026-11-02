@@ -42,7 +42,7 @@ export function PublicNavbar() {
       )}
     >
       <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-4 px-4 sm:h-28 sm:px-6 lg:px-8">
-        <Logo size="xl" />
+        <Logo size="xl" className="shrink-0" />
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
           {links.map((link) =>
@@ -72,37 +72,57 @@ export function PublicNavbar() {
           )}
         </nav>
 
-        <div className="hidden items-center gap-2.5 lg:flex">
+        <div className="flex items-center gap-2 sm:gap-2.5">
           {isLoggedIn ? (
             <>
-              <Button to={dashboardFor(user.role)} variant="outline" size="sm">
-                My Dashboard
+              <Button
+                to={dashboardFor(user.role)}
+                variant="outline"
+                size="sm"
+                className="h-8 px-2.5 text-xs sm:h-9 sm:px-3.5 sm:text-sm"
+              >
+                <span className="hidden sm:inline">My </span>Dashboard
               </Button>
-              <Button variant="ghost" size="sm" onClick={logout}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={logout}
+                className="hidden lg:inline-flex"
+              >
                 Log out
               </Button>
             </>
           ) : (
             <>
-              <Button to="/login" variant="outline" size="sm">
+              <Button
+                to="/login"
+                variant="outline"
+                size="sm"
+                className="h-8 px-2.5 text-xs sm:h-9 sm:px-3.5 sm:text-sm"
+              >
                 Login
               </Button>
-              <Button to="/register" size="sm" icon={HeartHandshake}>
+              <Button
+                to="/register"
+                size="sm"
+                icon={HeartHandshake}
+                className="h-8 px-2.5 text-xs sm:h-9 sm:px-3.5 sm:text-sm [&>svg]:hidden sm:[&>svg]:block"
+              >
                 Get Started
               </Button>
             </>
           )}
-        </div>
 
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="grid h-10 w-10 place-items-center rounded-lg border border-line text-ink lg:hidden"
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          aria-expanded={open}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="grid h-8 w-8 place-items-center rounded-lg border border-line text-ink sm:h-10 sm:w-10 lg:hidden"
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-expanded={open}
+          >
+            {open ? <X className="h-4 w-4 sm:h-5 sm:w-5" /> : <Menu className="h-4 w-4 sm:h-5 sm:w-5" />}
+          </button>
+        </div>
       </div>
 
       {open ? (
@@ -122,19 +142,26 @@ export function PublicNavbar() {
           <div className="mt-4 grid gap-2 border-t border-line pt-4">
             {isLoggedIn ? (
               <>
-                <Button to={dashboardFor(user.role)} size="sm">
+                <Button to={dashboardFor(user.role)} size="sm" onClick={() => setOpen(false)}>
                   My Dashboard
                 </Button>
-                <Button variant="outline" size="sm" onClick={logout}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setOpen(false)
+                    logout()
+                  }}
+                >
                   Log out
                 </Button>
               </>
             ) : (
               <>
-                <Button to="/login" variant="outline" size="sm">
+                <Button to="/login" variant="outline" size="sm" onClick={() => setOpen(false)}>
                   Login
                 </Button>
-                <Button to="/register" size="sm">
+                <Button to="/register" size="sm" icon={HeartHandshake} onClick={() => setOpen(false)}>
                   Get Started
                 </Button>
               </>

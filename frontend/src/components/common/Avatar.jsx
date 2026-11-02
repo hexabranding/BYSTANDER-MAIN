@@ -63,7 +63,7 @@ export function Avatar({ src, name = '', size = 'md', className, verified = fals
   )
 }
 
-export function ImageWithFallback({ src, alt = '', className, imgClassName, fallback, children }) {
+export function ImageWithFallback({ src, alt = '', className, imgClassName, fallback, children, priority = false }) {
   const [failed, setFailed] = useState(!src)
   if (failed) {
     return (
@@ -77,7 +77,8 @@ export function ImageWithFallback({ src, alt = '', className, imgClassName, fall
       <img
         src={src}
         alt={alt}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : undefined}
         onError={() => setFailed(true)}
         className={cn('h-full w-full object-cover', imgClassName)}
       />

@@ -161,13 +161,14 @@ export function HomePage() {
       <section ref={heroRef} className="relative overflow-hidden border-b border-line bg-canvas lg:min-h-[575px]">
         <motion.div
           style={heroLayer({ y: photoY, scale: photoScale })}
-          className="absolute inset-0"
+          className="absolute inset-x-0 top-0 h-[340px] sm:h-[420px] lg:inset-0 lg:h-full"
         >
           <ImageWithFallback
             src="https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=1920&q=80"
             alt="Nurse caring for a senior patient at home"
-            className="absolute inset-0 h-full w-full"
-            imgClassName="object-[center_43%]"
+            priority
+            className="h-full w-full"
+            imgClassName="object-cover object-[center_20%] lg:object-[center_43%]"
             fallback={
               <div className="flex flex-col items-center gap-3 p-8 text-center text-white">
                 <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15">
@@ -185,7 +186,7 @@ export function HomePage() {
           style={heroLayer({ y: copyY, opacity: copyFade })}
           className="relative z-[1]"
         >
-          <Container className="py-14 sm:py-20 lg:py-24">
+          <Container className="pt-[220px] pb-14 sm:pt-[300px] sm:pb-20 lg:py-24">
             <motion.div
               initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}

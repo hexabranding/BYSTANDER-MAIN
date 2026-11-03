@@ -18,6 +18,12 @@ router.patch(
   authorizeRoles('ambulance'),
   ambulanceController.toggleAvailability
 );
+router.patch(
+  '/me/location',
+  authenticate,
+  authorizeRoles('ambulance'),
+  ambulanceController.updateLocation
+);
 
 // Admin Management (Role: admin)
 router.get('/admin', authenticate, authorizeRoles('admin'), ambulanceController.adminList);

@@ -263,9 +263,9 @@ export function SosButton({ bookingId: explicitBookingId, className }) {
             <Button
               variant="outline"
               icon={Phone}
-              onClick={() => toast.info('Care helpline simulated (+91 22 4890 1100). Telephony integration not configured.')}
+              href="tel:+912248901100"
             >
-              Helpline info
+              Call Helpline
             </Button>
             <Button
               variant="danger"

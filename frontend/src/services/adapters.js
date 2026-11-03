@@ -884,7 +884,7 @@ export const adaptSosIncident = (raw) => {
 const DOCUMENT_TYPE_LABELS = {
   identity: 'Government Photo ID',
   address_proof: 'Address Proof',
-  nursing_registration: 'Nursing / Qualification Certificate',
+  nursing_registration: 'Nursing Council Registration',
   college_id: 'College / Institute ID',
   police_clearance: 'Police Clearance Certificate',
   bank_verification: 'Bank Account Proof',
@@ -991,6 +991,10 @@ export const adaptVerificationRecord = (raw) => {
   const isFullyVerified = status === 'Verified'
   const isPhysicalVerified = physicalVerification.status === 'verified' || isFullyVerified
 
+  const totalDocs = documents.length
+  const verifiedDocsCount = documents.filter(
+    (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
+  ).length
   const mandatoryDocs = documents.filter((d) => d.required !== false)
   const verifiedMandatory = mandatoryDocs.filter(
     (d) => d.status === 'Verified' || d.verificationStatus === 'verified',
@@ -999,7 +1003,11 @@ export const adaptVerificationRecord = (raw) => {
     ? Math.round((verifiedMandatory / mandatoryDocs.length) * 50)
     : Math.round((verifiedDocsCount / (totalDocs || 1)) * 50)
   const physicalScore = isPhysicalVerified ? 50 : 0
-  const overallScore = isFullyVerified && isPhysicalVerified ? 100 : digitalScore + physicalScore
+  const overallScore = typeof raw.trustScore === 'number'
+    ? raw.trustScore
+    : typeof raw.overallScore === 'number'
+    ? raw.overallScore
+    : (isFullyVerified && isPhysicalVerified ? 100 : digitalScore + physicalScore)
 
   // Construct auditable action history
   let history = []

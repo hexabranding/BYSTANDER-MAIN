@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
 import { Ambulance } from '../models/Ambulance.js';
+import { calculateDistanceKm, resolveCoordinates, CITY_COORDINATES } from '../utils/geoUtils.js';
 
 /**
  * Register a new Ambulance Driver.
@@ -59,10 +60,10 @@ export async function registerAmbulance(data) {
     phone: cleanPhone,
     passwordHash,
     role: 'ambulance',
-    status: 'active',
+    status: 'pending_verification',
   });
 
-  // Create Ambulance record
+  // Create Ambulance record (pending admin verification by default)
   const ambulance = await Ambulance.create({
     user: user._id,
     driverName: fullName.trim(),
@@ -73,8 +74,8 @@ export async function registerAmbulance(data) {
     city: city.trim(),
     area: area ? area.trim() : '',
     baseHospital: baseHospital ? baseHospital.trim() : 'City Trauma Network',
-    isAvailable: true,
-    verificationStatus: 'verified',
+    isAvailable: false,
+    verificationStatus: 'pending',
     oxygenFitted: Boolean(oxygenFitted),
     ventilatorFitted: Boolean(ventilatorFitted),
   });
@@ -93,9 +94,10 @@ export async function registerAmbulance(data) {
 
 /**
  * Fetch public/active verified ambulances for customer & caregiver emergency lookup.
+ * Supports location-based 20km radius filtering, Haversine distance, and estimated response ETA.
  */
 export async function getPublicAmbulances(filters = {}) {
-  const { city, ambulanceType, search, availableOnly } = filters;
+  const { city, ambulanceType, search, availableOnly, lat, lng, latitude, longitude, radius, radiusOnly } = filters;
 
   const query = {
     verificationStatus: 'verified',
@@ -106,7 +108,8 @@ export async function getPublicAmbulances(filters = {}) {
   }
 
   if (city && city !== 'All') {
-    query.city = { $regex: new RegExp(`^${city.trim()}$`, 'i') };
+    const cleanCity = city.replace(/,\s*[A-Z]{2}$/i, '').trim();
+    query.city = { $regex: cleanCity, $options: 'i' };
   }
 
   if (ambulanceType && ambulanceType !== 'All') {
@@ -128,7 +131,104 @@ export async function getPublicAmbulances(filters = {}) {
     .sort({ isAvailable: -1, emergencyCallCount: -1, createdAt: -1 })
     .lean();
 
-  return list;
+  const userLat = parseFloat(lat ?? latitude);
+  const userLng = parseFloat(lng ?? longitude);
+  const hasUserCoords = !isNaN(userLat) && !isNaN(userLng);
+  const targetRadius = parseFloat(radius) || 30; // default 30 km radius
+
+  // Map and calculate Haversine distance and estimated response arrival time
+  const enriched = list.map((amb) => {
+    let ambLat = amb.location?.latitude;
+    let ambLng = amb.location?.longitude;
+
+    // Fallback to city/district coordinates if driver hasn't pinged GPS yet
+    if (!ambLat || !ambLng) {
+      const resolved = resolveCoordinates({ city: amb.city, area: amb.area });
+      if (resolved) {
+        ambLat = resolved.latitude;
+        ambLng = resolved.longitude;
+      }
+    }
+
+    let distanceKm = null;
+    let etaMinutes = null;
+    if (hasUserCoords && ambLat && ambLng) {
+      distanceKm = calculateDistanceKm(userLat, userLng, ambLat, ambLng);
+      if (distanceKm !== null) {
+        // Average urban emergency speed: ~35 km/h
+        etaMinutes = Math.max(3, Math.round((distanceKm / 35) * 60));
+      }
+    }
+
+    const isLiveGps = Boolean(
+      amb.location?.lastPingAt &&
+      Date.now() - new Date(amb.location.lastPingAt).getTime() < 10 * 60 * 1000
+    );
+
+    return {
+      ...amb,
+      latitude: ambLat,
+      longitude: ambLng,
+      distanceKm,
+      etaMinutes,
+      isWithinRadius: distanceKm !== null ? distanceKm <= targetRadius : true,
+      isLiveGps,
+    };
+  });
+
+  // If user coordinates provided, sort by nearest distance first
+  if (hasUserCoords) {
+    enriched.sort((a, b) => {
+      // Prioritize available drivers
+      if (a.isAvailable !== b.isAvailable) {
+        return a.isAvailable ? -1 : 1;
+      }
+      if (a.distanceKm === null && b.distanceKm === null) return 0;
+      if (a.distanceKm === null) return 1;
+      if (b.distanceKm === null) return -1;
+      return a.distanceKm - b.distanceKm;
+    });
+
+    if (radiusOnly === 'true' || radiusOnly === true) {
+      return enriched.filter((a) => a.isWithinRadius);
+    }
+  }
+
+  return enriched;
+}
+
+/**
+ * Update authenticated driver's real-time GPS location coordinates.
+ */
+export async function updateAmbulanceLocation(userId, latitude, longitude) {
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
+
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    const error = new Error('Invalid latitude or longitude coordinates.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const ambulance = await Ambulance.findOneAndUpdate(
+    { user: userId },
+    {
+      'location.type': 'Point',
+      'location.coordinates': [lng, lat],
+      'location.latitude': lat,
+      'location.longitude': lng,
+      'location.lastPingAt': new Date(),
+    },
+    { new: true }
+  );
+
+  if (!ambulance) {
+    const error = new Error('Ambulance driver profile not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return ambulance;
 }
 
 /**
@@ -216,19 +316,22 @@ export async function updateAmbulanceProfile(userId, updateData) {
  * Toggle driver's live on-call availability.
  */
 export async function toggleAmbulanceAvailability(userId, isAvailable) {
-  const ambulance = await Ambulance.findOneAndUpdate(
-    { user: userId },
-    { isAvailable: Boolean(isAvailable) },
-    { new: true }
-  );
-
-  if (!ambulance) {
+  const existing = await Ambulance.findOne({ user: userId });
+  if (!existing) {
     const error = new Error('Ambulance driver profile not found.');
     error.statusCode = 404;
     throw error;
   }
 
-  return ambulance;
+  if (existing.verificationStatus !== 'verified') {
+    const error = new Error('Your ambulance profile is pending admin approval. You cannot go on-call until verified.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  existing.isAvailable = Boolean(isAvailable);
+  await existing.save();
+  return existing;
 }
 
 /**
@@ -294,12 +397,19 @@ export async function updateAmbulanceVerification(ambulanceId, verificationStatu
     throw error;
   }
 
+  const updateFields = {
+    verificationStatus,
+    ...(notes ? { notes } : {}),
+  };
+
+  // If suspended or rejected, automatically take off-duty
+  if (verificationStatus !== 'verified') {
+    updateFields.isAvailable = false;
+  }
+
   const ambulance = await Ambulance.findByIdAndUpdate(
     ambulanceId,
-    {
-      verificationStatus,
-      ...(notes ? { notes } : {}),
-    },
+    updateFields,
     { new: true }
   );
 
@@ -307,6 +417,17 @@ export async function updateAmbulanceVerification(ambulanceId, verificationStatu
     const error = new Error('Ambulance not found.');
     error.statusCode = 404;
     throw error;
+  }
+
+  // Synchronize associated user account status
+  if (ambulance.user) {
+    const userStatus =
+      verificationStatus === 'verified'
+        ? 'active'
+        : verificationStatus === 'suspended'
+        ? 'suspended'
+        : 'pending_verification';
+    await User.findByIdAndUpdate(ambulance.user, { status: userStatus });
   }
 
   return ambulance;

@@ -1,5 +1,7 @@
 import * as ambulanceService from '../services/ambulanceService.js';
-import { generateToken } from '../utils/auth.js';
+import { generateToken, getCookieOptions } from '../utils/auth.js';
+
+const COOKIE_NAME = process.env.COOKIE_NAME || 'token';
 
 export async function register(req, res, next) {
   try {
@@ -11,16 +13,11 @@ export async function register(req, res, next) {
     });
 
     // Set auth cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie(COOKIE_NAME, token, getCookieOptions());
 
     return res.status(201).json({
       success: true,
-      message: 'Ambulance driver registered successfully.',
+      message: 'Ambulance driver registered successfully. Awaiting administrative approval.',
       data: {
         token,
         user: result.user,
@@ -94,6 +91,24 @@ export async function toggleAvailability(req, res, next) {
     return res.status(200).json({
       success: true,
       message: `Status updated to ${ambulance.isAvailable ? 'Available' : 'Off-duty'}.`,
+      data: { ambulance },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateLocation(req, res, next) {
+  try {
+    const { latitude, longitude } = req.body;
+    const ambulance = await ambulanceService.updateAmbulanceLocation(
+      req.user._id,
+      latitude,
+      longitude
+    );
+    return res.status(200).json({
+      success: true,
+      message: 'Ambulance GPS location updated.',
       data: { ambulance },
     });
   } catch (err) {

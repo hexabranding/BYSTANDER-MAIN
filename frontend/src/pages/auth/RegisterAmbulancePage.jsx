@@ -61,16 +61,32 @@ export function RegisterAmbulancePage() {
     setLoading(true)
     try {
       const res = await registerAmbulance(form)
-      toast.success('Registration successful!', {
-        description: 'Welcome to Bystander Emergency Network. Your ambulance is now live.',
+      const token = res?.token || res?.data?.token
+      if (token) {
+        apiClient.setAuthToken(token)
+      }
+
+      // Automatically authenticate the driver session into AuthContext
+      let loggedIn = false
+      try {
+        const loginRes = await login({
+          identifier: form.phone.trim() || form.email.trim(),
+          password: form.password,
+          role: 'ambulance',
+        })
+        loggedIn = Boolean(loginRes?.ok)
+      } catch (authErr) {
+        console.warn('Auto-login notice:', authErr)
+      }
+
+      toast.success('Registration submitted!', {
+        description: 'Welcome to Bystander Emergency Network. Your application has been submitted for admin verification.',
       })
 
-      // Authenticate directly if login context method supports it or navigate to login
-      if (res?.data?.token) {
-        apiClient.setAuthToken(res.data.token)
-        window.location.href = '/ambulance/dashboard'
+      if (loggedIn) {
+        navigate('/ambulance/dashboard', { replace: true })
       } else {
-        navigate('/login?role=ambulance')
+        window.location.href = '/ambulance/dashboard'
       }
     } catch (err) {
       toast.error('Registration failed', {

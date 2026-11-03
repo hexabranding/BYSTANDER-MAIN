@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Clock,
   Sparkles,
+  Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -20,7 +21,11 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
-import { getAmbulanceProfile, toggleAmbulanceAvailability } from '@/services/ambulanceService'
+import {
+  getAmbulanceProfile,
+  toggleAmbulanceAvailability,
+  updateAmbulanceLocation,
+} from '@/services/ambulanceService'
 
 export function AmbulanceDashboardPage() {
   useDocumentTitle('Ambulance Dashboard · Bystander')
@@ -45,8 +50,8 @@ export function AmbulanceDashboardPage() {
           baseHospital: '',
           city: '',
           area: '',
-          isAvailable: true,
-          verificationStatus: 'verified',
+          isAvailable: false,
+          verificationStatus: 'pending',
           oxygenFitted: true,
           ventilatorFitted: false,
           stretcherAvailable: true,
@@ -62,8 +67,8 @@ export function AmbulanceDashboardPage() {
         baseHospital: '',
         city: '',
         area: '',
-        isAvailable: true,
-        verificationStatus: 'verified',
+        isAvailable: false,
+        verificationStatus: 'pending',
         oxygenFitted: true,
         ventilatorFitted: false,
         stretcherAvailable: true,
@@ -78,7 +83,59 @@ export function AmbulanceDashboardPage() {
     loadProfile()
   }, [])
 
+  const isVerified = (ambulance?.verificationStatus || '').toLowerCase() === 'verified'
+  const isAvail = isVerified && ambulance?.isAvailable !== false
+
+  const [gpsStatus, setGpsStatus] = useState({
+    active: false,
+    lastPing: null,
+    coords: null,
+  })
+
+  // Heartbeat live GPS ping every 60 seconds when on-call
+  useEffect(() => {
+    if (!isAvail) {
+      setGpsStatus({ active: false, lastPing: null, coords: null })
+      return
+    }
+
+    const pingLocation = () => {
+      if (typeof navigator === 'undefined' || !navigator.geolocation) return
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords
+          try {
+            await updateAmbulanceLocation(latitude, longitude)
+            setGpsStatus({
+              active: true,
+              lastPing: new Date(),
+              coords: {
+                latitude: Number(latitude.toFixed(4)),
+                longitude: Number(longitude.toFixed(4)),
+              },
+            })
+          } catch (_) {}
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+      )
+    }
+
+    // Initial ping on going on-call
+    pingLocation()
+
+    // 60-second periodic heartbeat
+    const interval = setInterval(pingLocation, 60000)
+    return () => clearInterval(interval)
+  }, [isAvail])
+
   const handleToggle = async () => {
+    if (!isVerified) {
+      toast.error('Verification pending', {
+        description: 'Your ambulance profile is awaiting admin approval before you can switch to on-call.',
+      })
+      return
+    }
     if (!ambulance || toggling) return
     const nextState = !ambulance.isAvailable
     setToggling(true)
@@ -102,8 +159,6 @@ export function AmbulanceDashboardPage() {
     }
   }
 
-  const isAvail = ambulance?.isAvailable !== false
-
   return (
     <div className="space-y-6">
       {/* Top Banner */}
@@ -117,9 +172,23 @@ export function AmbulanceDashboardPage() {
               <h1 className="font-display text-2xl font-extrabold text-ink">
                 Welcome, {ambulance?.driverName || user?.fullName || user?.name || 'Driver'}
               </h1>
-              <span className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-mint-50 px-2.5 py-0.5 text-xs font-bold text-primary-800">
-                <ShieldCheck className="h-3.5 w-3.5" /> Verified Driver
-              </span>
+              {isVerified ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-mint-50 px-2.5 py-0.5 text-xs font-bold text-primary-800">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Verified Driver
+                </span>
+              ) : ambulance?.verificationStatus === 'suspended' ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-800">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Suspended
+                </span>
+              ) : ambulance?.verificationStatus === 'rejected' ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-bold text-rose-800">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Rejected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-800">
+                  <Clock className="h-3.5 w-3.5 text-amber-600" /> Pending Verification
+                </span>
+              )}
             </div>
             <p className="mt-1 text-xs text-muted sm:text-sm">
               Vehicle Registration:{' '}
@@ -146,11 +215,38 @@ export function AmbulanceDashboardPage() {
         </div>
       </div>
 
+      {/* Account Verification Warning Banner (When not verified) */}
+      {!isVerified && (
+        <div className="flex items-start gap-3.5 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-orange-50/50 p-4 sm:p-5 text-amber-950 shadow-sm">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-500 text-white shadow-sm">
+            <Lock className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
+            <p className="font-bold text-sm sm:text-base text-amber-950">
+              {ambulance?.verificationStatus === 'suspended'
+                ? 'Account Suspended by Operations Admin'
+                : ambulance?.verificationStatus === 'rejected'
+                ? 'Registration Rejected by Operations Desk'
+                : 'Account Under Review by Admin'}
+            </p>
+            <p className="text-xs sm:text-sm text-amber-900/80 leading-relaxed">
+              {ambulance?.verificationStatus === 'suspended'
+                ? 'Your emergency dispatch privileges have been temporarily suspended. Please contact the Bystander operations desk.'
+                : ambulance?.verificationStatus === 'rejected'
+                ? 'Your registration could not be verified with the provided credentials. Please contact support or update your vehicle details.'
+                : 'Your ambulance vehicle credentials, driving license, and base hospital information are currently awaiting administrative review. Once approved by the operations desk, your on-call switch will unlock.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* BIG AVAILABILITY TOGGLE CARD */}
       <Card
         className={cn(
           'transition-all duration-300 border-2',
-          isAvail
+          !isVerified
+            ? 'border-slate-300 bg-slate-50/80'
+            : isAvail
             ? 'border-emerald-500 bg-gradient-to-r from-emerald-50 via-teal-50 to-mint-50/40 shadow-card'
             : 'border-slate-300 bg-slate-50',
         )}
@@ -162,30 +258,59 @@ export function AmbulanceDashboardPage() {
                 <span
                   className={cn(
                     'h-4 w-4 rounded-full',
-                    isAvail ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400',
+                    !isVerified
+                      ? 'bg-amber-400'
+                      : isAvail
+                      ? 'bg-emerald-500 animate-pulse'
+                      : 'bg-slate-400',
                   )}
                 />
                 <span className="font-display text-xl font-extrabold text-ink sm:text-2xl">
-                  {isAvail ? 'ON-CALL & AVAILABLE FOR EMERGENCY' : 'OFF-DUTY / OCCUPIED'}
+                  {!isVerified
+                    ? 'ON-CALL LOCKED — AWAITING VERIFICATION'
+                    : isAvail
+                    ? 'ON-CALL & AVAILABLE FOR EMERGENCY'
+                    : 'OFF-DUTY / OCCUPIED'}
                 </span>
               </div>
               <p className="max-w-xl text-xs leading-relaxed text-muted sm:text-sm">
-                {isAvail
+                {!isVerified
+                  ? 'Your profile is awaiting admin approval. Once Bystander operations desk approves your vehicle plate and credentials, you will be able to toggle on-call and receive direct emergency transfer calls.'
+                  : isAvail
                   ? 'Your ambulance is active on the radar! Customers and caretakers in your city can see your phone number and call you directly for urgent transfers.'
                   : 'You are currently hidden from search results. Toggle on when you are parked at your base hospital or ready to take emergency transfers.'}
               </p>
+              {isAvail && (
+                <div className="flex items-center gap-2 pt-1 text-xs font-semibold text-emerald-800">
+                  <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span>
+                    GPS Radar: {gpsStatus.active ? 'Broadcasting live coordinates' : 'Detecting GPS signal…'}
+                    {gpsStatus.coords ? ` (${gpsStatus.coords.latitude}, ${gpsStatus.coords.longitude})` : ''}
+                  </span>
+                </div>
+              )}
             </div>
 
             <Button
               size="lg"
               onClick={handleToggle}
               loading={toggling}
+              disabled={!isVerified}
+              icon={!isVerified ? Lock : undefined}
               className={cn(
                 'shrink-0 text-white shadow-md text-base px-8 py-3.5',
-                isAvail ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-800',
+                !isVerified
+                  ? 'bg-slate-400 cursor-not-allowed hover:bg-slate-400 opacity-80'
+                  : isAvail
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-slate-700 hover:bg-slate-800',
               )}
             >
-              {isAvail ? 'Switch to Off-Duty' : 'Go Available Now'}
+              {!isVerified
+                ? 'Locked — Awaiting Approval'
+                : isAvail
+                ? 'Switch to Off-Duty'
+                : 'Go Available Now'}
             </Button>
           </div>
         </CardBody>

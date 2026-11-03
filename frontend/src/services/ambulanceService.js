@@ -43,6 +43,11 @@ export async function toggleAmbulanceAvailability(isAvailable) {
   return res?.data?.ambulance || res?.ambulance || res?.data || null
 }
 
+export async function updateAmbulanceLocation(latitude, longitude) {
+  const res = await apiClient.patch('/api/ambulances/me/location', { latitude, longitude })
+  return res?.data?.ambulance || res?.ambulance || res?.data || null
+}
+
 export async function fetchAdminAmbulances(params = {}) {
   const res = await apiClient.get('/api/ambulances/admin', { params })
   return res?.data || res || { ambulances: [], pagination: {} }
@@ -62,4 +67,5 @@ export default {
   toggleAmbulanceAvailability,
   fetchAdminAmbulances,
   updateAdminAmbulanceStatus,
+  updateAmbulanceLocation,
 }

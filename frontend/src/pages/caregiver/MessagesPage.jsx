@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowLeft, ChevronDown, MessageSquare, Phone, Send, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ChevronDown, MessageSquare, Send, Trash2 } from 'lucide-react'
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { useData } from '@/context/DataContext'
 import { useAuth } from '@/context/AuthContext'
@@ -595,15 +595,6 @@ export function MessagesPage() {
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      aria-label="Call"
-                      onClick={() => toast.info('Direct calling is not integrated. Please coordinate via secure in-app chat.')}
-                    >
-                      <Phone className="h-4 w-4" />
-                    </Button>
-
                     {/* Header Chat Options */}
                     <div className="relative shrink-0" data-chat-menu>
                       <Button

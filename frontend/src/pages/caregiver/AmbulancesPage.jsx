@@ -13,7 +13,7 @@ export function CaregiverAmbulancesPage() {
         title="Emergency Ambulance Dispatch"
         subtitle="Direct phone numbers of ambulance drivers on call to transport patients immediately."
       />
-      <AmbulanceDirectory userCity={user?.city || 'Mumbai'} />
+      <AmbulanceDirectory userCity="All" />
     </div>
   )
 }

@@ -13,7 +13,7 @@ export function CustomerAmbulancesPage() {
         title="Emergency Ambulances"
         subtitle="Call verified ambulance drivers equipped with ICU, oxygen, and paramedic support."
       />
-      <AmbulanceDirectory userCity={user?.city || 'Mumbai'} />
+      <AmbulanceDirectory userCity="All" />
     </div>
   )
 }

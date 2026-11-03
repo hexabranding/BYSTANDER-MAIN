@@ -69,13 +69,13 @@ const ambulanceSchema = new mongoose.Schema(
     },
     isAvailable: {
       type: Boolean,
-      default: true,
+      default: false,
       index: true,
     },
     verificationStatus: {
       type: String,
       enum: ['pending', 'verified', 'rejected', 'suspended'],
-      default: 'verified',
+      default: 'pending',
       index: true,
     },
     oxygenFitted: {
@@ -95,6 +95,29 @@ const ambulanceSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number],
+        default: [75.7804, 11.2588],
+      },
+      latitude: {
+        type: Number,
+        default: 11.2588,
+      },
+      longitude: {
+        type: Number,
+        default: 75.7804,
+      },
+      lastPingAt: {
+        type: Date,
+        default: null,
+      },
+    },
     notes: {
       type: String,
       trim: true,
@@ -109,6 +132,7 @@ const ambulanceSchema = new mongoose.Schema(
 );
 
 ambulanceSchema.index({ city: 1, isAvailable: 1, verificationStatus: 1 });
+ambulanceSchema.index({ 'location.coordinates': '2dsphere' });
 
 export const Ambulance = mongoose.model('Ambulance', ambulanceSchema);
 export default Ambulance;

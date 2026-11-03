@@ -20,6 +20,7 @@ import {
 import { Modal } from '@/components/common/Modal'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
+import { RatingHistogram } from '@/components/common/RatingHistogram'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/States'
 import { cn } from '@/utils/cn'
@@ -113,7 +114,7 @@ export function CaregiverProfileModal({
   const reviewsCount = Number(
     detailedProfile?.reviewCount ?? (reviews.length || applicant.reviewCount || 0)
   )
-  const hourlyRate = Number(applicant.hourlyRate || detailedProfile?.hourlyRate || 399)
+  const hourlyRate = Number(applicant.hourlyRate || detailedProfile?.hourlyRate || 200)
   const city = detailedProfile?.city || applicant.city || 'Kozhikode'
   const area = detailedProfile?.area || applicant.area || 'Palayam'
   const distanceKm = detailedProfile?.distanceKm || applicant.distanceKm || 3.2
@@ -211,9 +212,10 @@ export function CaregiverProfileModal({
 
                 <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted">
                   <div className="flex items-center gap-1.5">
-                    <RatingStars value={ratingValue} size={13} />
-                    <span className="font-bold text-ink">{ratingValue.toFixed(1)}</span>
-                    <span>({reviewsCount} reviews)</span>
+                    <RatingStars value={ratingValue} count={reviewsCount} size={13} showValue />
+                    {reviewsCount > 0 ? (
+                      <span className="text-xs text-muted">({reviewsCount} {reviewsCount === 1 ? 'review' : 'reviews'})</span>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-1">
                     <Briefcase className="h-3.5 w-3.5 text-faint" />
@@ -467,24 +469,12 @@ export function CaregiverProfileModal({
         {/* Tab 2: Reviews */}
         {activeTab === 'reviews' ? (
           <div className="space-y-4">
-            {/* Reviews Summary Header */}
-            <div className="flex flex-col gap-3 rounded-xl border border-primary-100 bg-mint-50/50 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="font-display text-3xl font-black text-ink">
-                  {ratingValue.toFixed(1)}
-                </div>
-                <div>
-                  <RatingStars value={ratingValue} size={16} />
-                  <p className="text-xs font-medium text-muted">
-                    Based on {reviewsCount} verified patient feedback
-                  </p>
-                </div>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-primary-800 border border-primary-200">
-                <ShieldCheck className="h-4 w-4 text-primary-600" />
-                Verified Bystander Reviews
-              </div>
-            </div>
+            {/* Amazon / Flipkart Style Rating & 5-Star Distribution Histogram */}
+            <RatingHistogram
+              reviews={reviews}
+              averageRating={reviews.length > 0 ? ratingValue : (reviewsCount > 0 ? ratingValue : 0)}
+              totalRatings={reviews.length || reviewsCount}
+            />
 
             {/* Reviews List */}
             {loadingReviews ? (

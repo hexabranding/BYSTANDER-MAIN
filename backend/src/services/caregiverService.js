@@ -101,6 +101,18 @@ export const updateMyCaregiverProfile = async (userId, sanitizedUpdates) => {
     delete sanitizedUpdates.servicesOffered;
   }
 
+  // Update user fullName & phone if included
+  const caregiverUserUpdates = {};
+  if (sanitizedUpdates.fullName) {
+    caregiverUserUpdates.fullName = sanitizedUpdates.fullName;
+  }
+  if (sanitizedUpdates.phone !== undefined) {
+    caregiverUserUpdates.phone = sanitizedUpdates.phone;
+  }
+  if (Object.keys(caregiverUserUpdates).length > 0) {
+    await User.findByIdAndUpdate(userId, caregiverUserUpdates, { runValidators: true });
+  }
+
   // Apply permitted updates only
   Object.keys(sanitizedUpdates).forEach((key) => {
     profile[key] = sanitizedUpdates[key];

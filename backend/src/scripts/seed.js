@@ -20,7 +20,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'A trained caretaker tracks blood pressure, pulse, sugar levels, oxygen saturation and medication response, and keeps the family updated with structured daily reports.',
     features: ['Vitals check', 'Daily reports', 'Post-discharge observation', 'Sugar & BP monitoring'],
-    baseHourlyRate: 449,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -31,7 +31,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'Compassionate assistance with feeding plans, tube feeding coordination, bathing, dressing, diaper changes and infection-safe hygiene routines for patients with limited mobility.',
     features: ['Assisted feeding', 'Bathing & grooming', 'Diaper care', 'Oral hygiene'],
-    baseHourlyRate: 399,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -42,7 +42,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'Specialised post-operative support including dressing changes under guidance, drain management, pain monitoring, mobilisation and coordination with the treating hospital.',
     features: ['Wound dressing', 'Drain tracking', 'Mobility support', 'Pain observation'],
-    baseHourlyRate: 599,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -53,7 +53,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'Warm, patient companionship for seniors living alone — conversation, reading, light exercises, temple or park walks, and regular family updates.',
     features: ['Conversation & reading', 'Light walks', 'Mental wellness', 'Family check-in notes'],
-    baseHourlyRate: 329,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -64,7 +64,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'Strict timetable-based medicine reminders, refill alerts, prescription logging and escalation to the family if a dose is missed.',
     features: ['Prescription logging', 'Dose alerts', 'Refill tracking', 'Escalation to family'],
-    baseHourlyRate: 299,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -75,7 +75,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'Trained handling for bed-to-wheelchair transfers, walking support, fall prevention, brace and prosthesis care, and assisted physiotherapy routines.',
     features: ['Transfer support', 'Fall prevention', 'Physio routines', 'Wheelchair assistance'],
-    baseHourlyRate: 479,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -86,7 +86,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'Calm, structured support for memory-care patients — orientation cues, wandering prevention, safe nutrition, behavioural de-escalation and caretaker respite.',
     features: ['Memory cues', 'Wandering prevention', 'Behavioural support', 'Respite relief'],
-    baseHourlyRate: 649,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -97,7 +97,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       'Specialised bed care including 2-hourly turning schedules for bed sore prevention, sponge baths, back care, catheter care and passive range-of-motion movements.',
     features: ['2-hourly turning schedule', 'Bed baths', 'Bed sore prevention', 'Catheter hygiene'],
-    baseHourlyRate: 699,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -108,7 +108,7 @@ export const DEFAULT_SERVICES = Object.freeze([
     description:
       '12-hour overnight bedside care to assist with washroom visits, night vitals, hydration, emergency response and peaceful sleep for patients and families.',
     features: ['12-hour overnight shift', 'Night vitals observation', 'Washroom assistance', 'Emergency alerts'],
-    baseHourlyRate: 749,
+    baseHourlyRate: 199,
     minimumDurationHours: 2,
     isActive: true,
   },
@@ -330,7 +330,7 @@ export async function seedDemoUsers(options = {}, services = []) {
         city: 'Mumbai, MH',
         area: 'Powai',
         maxDistanceKm: 20,
-        hourlyRate: 649,
+        hourlyRate: 200,
         servicesOffered: serviceIds,
         services: serviceNames,
         careSettings: ['Home Care', 'Hospital Care'],

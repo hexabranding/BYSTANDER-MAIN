@@ -539,7 +539,7 @@ export function DataProvider({ children }) {
           experienceYears: Number(profile.experience) || 0,
           rating: 0,
           reviewCount: 0,
-          hourlyRate: 399,
+          hourlyRate: 200,
           services: [],
           languages: profile.languages || [],
           city: profile.city || 'Mumbai, MH',

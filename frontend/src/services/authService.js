@@ -476,7 +476,7 @@ export const registerCaregiver = async (payload) => {
   const phone = rawMobile ? String(rawMobile).trim().replace(/[\s-]/g, '') : undefined;
   const password = payload.password;
   const qualification = normalizeQualification(payload.qualification);
-  const hourlyRate = Number(payload.hourlyRate || payload.rate || 399);
+  const hourlyRate = Number(payload.hourlyRate || payload.rate || 200);
 
   if (!fullName || fullName.length < 2) {
     return { ok: false, message: 'Full name is required and must be at least 2 characters.' };

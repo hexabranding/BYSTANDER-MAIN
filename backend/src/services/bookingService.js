@@ -380,7 +380,7 @@ export const createBooking = async (customerId, bookingData) => {
 
   // 5. On-Demand Broadcast Booking Mode (Swiggy / Uber delivery style)
   // Derive transparent canonical hourly rate from Service Catalog
-  const hourlyRate = service.baseHourlyRate || 499;
+  const hourlyRate = service.baseHourlyRate || 199;
   const totalAmount = Math.round(hourlyRate * durationHours);
   const broadcastExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1-hour broadcast TTL
 

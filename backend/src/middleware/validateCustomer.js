@@ -31,6 +31,17 @@ export const validateUpdateCustomerProfile = (req, res, next) => {
     }
   }
 
+  // 1b. Phone / Mobile (updates User document)
+  const customerRawPhone = body.phone !== undefined ? body.phone : body.mobile;
+  if (customerRawPhone !== undefined) {
+    const cleanPhone = String(customerRawPhone).trim().replace(/[\s-]/g, '');
+    if (cleanPhone && !/^\+?[1-9]\d{6,14}$/.test(cleanPhone)) {
+      errors.push('Phone must be a valid 10-digit mobile or international phone number');
+    } else {
+      sanitized.phone = cleanPhone || null;
+    }
+  }
+
   // 2. Emergency Contact
   if (body.emergencyContact !== undefined) {
     if (!body.emergencyContact || typeof body.emergencyContact !== 'object' || Array.isArray(body.emergencyContact)) {

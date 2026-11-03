@@ -13,6 +13,9 @@ import { adaptCustomerProfile, adaptCaregiver } from './adapters.js'
 
 export const PERMITTED_CUSTOMER_PROFILE_FIELDS = [
   'fullName',
+  'name',
+  'phone',
+  'mobile',
   'emergencyContact',
   'defaultAddress',
   'careNotes',
@@ -20,6 +23,11 @@ export const PERMITTED_CUSTOMER_PROFILE_FIELDS = [
 ]
 
 export const PERMITTED_CAREGIVER_PROFILE_FIELDS = [
+  'name',
+  'fullName',
+  'phone',
+  'mobile',
+  'qualification',
   'bio',
   'experienceYears',
   'languages',

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Star, ShieldCheck, MessageSquare, ThumbsUp } from 'lucide-react'
+import { Star, ShieldCheck, MessageSquare, ThumbsUp, CheckCircle2 } from 'lucide-react'
 import { Modal } from '@/components/common/Modal'
 import { RatingStars } from '@/components/common/RatingStars'
+import { RatingHistogram } from '@/components/common/RatingHistogram'
 import { Avatar } from '@/components/common/Avatar'
 import { Button } from '@/components/common/Button'
 import { EmptyState } from '@/components/common/States'
@@ -63,25 +64,12 @@ export function CaregiverReviewsModal({ open, onClose, caregiver }) {
       }
     >
       <div className="space-y-5">
-        {/* Rating Overview Banner */}
-        <div className="flex flex-col gap-4 rounded-2xl border border-primary-100 bg-gradient-to-br from-mint-50/70 via-white to-white p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3.5">
-            <Avatar src={caregiver.photo || caregiver.avatar} name={caregiver.name} size="lg" verified={true} />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-display text-2xl font-black text-ink">{averageRating.toFixed(1)}</span>
-                <RatingStars value={averageRating} size={16} />
-              </div>
-              <p className="mt-0.5 text-xs font-medium text-muted">
-                Based on {reviewCount} verified booking review{reviewCount === 1 ? '' : 's'}
-              </p>
-            </div>
-          </div>
-          <div className="inline-flex items-center gap-1.5 rounded-xl border border-primary-200/60 bg-white px-3 py-1.5 text-xs font-semibold text-primary-800 shadow-xs">
-            <ShieldCheck className="h-4 w-4 text-primary-600" />
-            100% Verified Bystander Feedback
-          </div>
-        </div>
+        {/* Amazon / Flipkart Style Rating & 5-Star Distribution Histogram */}
+        <RatingHistogram
+          reviews={reviews}
+          averageRating={reviews.length > 0 ? averageRating : (reviewCount > 0 ? averageRating : 0)}
+          totalRatings={reviews.length || reviewCount}
+        />
 
         {/* Reviews List */}
         {loading ? (
@@ -98,13 +86,18 @@ export function CaregiverReviewsModal({ open, onClose, caregiver }) {
                   key={r._id || r.id}
                   className="rounded-xl border border-line bg-white p-4 shadow-xs transition hover:border-primary-200"
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5">
                       <div className="grid h-8 w-8 place-items-center rounded-full bg-primary-100 text-xs font-bold text-primary-800">
                         {customerName.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-ink">{customerName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-ink">{customerName}</p>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Verified Booking
+                          </span>
+                        </div>
                         <p className="text-[11px] text-faint">
                           {r.date || r.createdAt ? formatDate(r.date || r.createdAt) : 'Recent patient shift'}
                         </p>

@@ -135,7 +135,7 @@ export const adaptService = (raw) => {
   const id = String(raw._id || raw.id || '')
   const slug = raw.slug || ''
   const name = raw.name || ''
-  const baseRate = Number(raw.baseHourlyRate ?? raw.startingPrice ?? 399)
+  const baseRate = Number(raw.baseHourlyRate ?? raw.startingPrice ?? 199)
 
   const isNight = slug.includes('night') || name.toLowerCase().includes('night')
   const unit = raw.unit || (isNight ? 'shift' : 'hour')
@@ -187,15 +187,15 @@ export const adaptCaregiver = (raw) => {
   const photo = raw.avatar || raw.user?.avatar || raw.photo || ''
 
   // Rating normalization: backend provides { average: 4.9, count: 42 } or direct number
-  let ratingValue = 4.5
+  let ratingValue = 0
   let reviewCount = 0
 
   if (typeof raw.rating === 'object' && raw.rating !== null) {
-    ratingValue = Number(raw.rating.average ?? 4.5)
     reviewCount = Number(raw.rating.count ?? 0)
+    ratingValue = Number(raw.rating.average ?? (reviewCount > 0 ? 5.0 : 0))
   } else if (raw.rating !== undefined) {
-    ratingValue = Number(raw.rating) || 0
     reviewCount = Number(raw.reviewCount ?? 0)
+    ratingValue = Number(raw.rating) || (reviewCount > 0 ? 5.0 : 0)
   }
 
   // Extract service name strings
@@ -235,6 +235,8 @@ export const adaptCaregiver = (raw) => {
     caregiverId: raw.caregiverId ? String(raw.caregiverId) : id,
     name,
     fullName: name,
+    email: raw.user?.email || raw.email || '',
+    phone: raw.user?.phone || raw.phone || '',
     photo,
     avatar: photo,
     qualification: raw.qualification || 'Caregiver',
@@ -503,7 +505,7 @@ export const adaptBooking = (raw) => {
   }
 
   // Pricing normalization
-  const rate = Number(raw.hourlyRate ?? 399)
+  const rate = Number(raw.hourlyRate ?? 200)
   const subtotal = Number(raw.subtotal ?? (rate * hours))
   const platformFee = Number(raw.platformFee ?? 99)
   const tax = Number(raw.tax ?? Math.round((subtotal + platformFee) * 0.18))
@@ -1107,6 +1109,7 @@ export const adaptCustomerAccount = (raw) => {
     patients: Array.isArray(raw.patients) ? raw.patients : [],
     patientsCount: Number(raw.patientsCount) || (Array.isArray(raw.patients) ? raw.patients.length : 0),
     emergencyContact: raw.emergencyContact || null,
+    rating: raw.rating || { average: 5.0, count: 0 },
     lastLoginAt: raw.lastLoginAt || null,
     createdAt: raw.createdAt || new Date().toISOString(),
   }
@@ -1143,8 +1146,8 @@ export const adaptCaregiverAccount = (raw) => {
   const services = Array.isArray(raw.services) ? raw.services : []
   const careSettings = Array.isArray(raw.careSettings) ? raw.careSettings : ['Home Care']
   const availabilityStatus = raw.availabilityStatus || 'Available Now'
-  const rating = Number(raw.rating) || 5.0
-  const reviewCount = Number(raw.ratingCount ?? raw.reviewCount) || 0
+  const reviewCount = Number(raw.ratingCount ?? raw.reviewCount ?? raw.rating?.count) || 0
+  const rating = Number(raw.rating?.average ?? raw.rating) || (reviewCount > 0 ? 5.0 : 0)
   const completedJobs = Number(raw.completedJobs) || 0
   const trustScore = Number(raw.trustScore) || 50
   const badges = Array.isArray(raw.badges) ? raw.badges : []
@@ -1172,6 +1175,8 @@ export const adaptCaregiverAccount = (raw) => {
     caregiverId: id,
     name,
     fullName: name,
+    email: raw.user?.email || raw.email || '',
+    phone: raw.user?.phone || raw.phone || '',
     photo,
     avatar: photo,
     qualification,
@@ -1645,7 +1650,7 @@ export const adaptBookingToJob = (raw, currentUserId) => {
   )
 
   const hours = Number(b.hours || b.totalHours || 6)
-  const payment = Number(b.totalAmount || b.payment || b.subtotal || Math.round(hours * 399))
+  const payment = Number(b.totalAmount || b.payment || b.subtotal || Math.round(hours * 200))
 
   return {
     ...b,

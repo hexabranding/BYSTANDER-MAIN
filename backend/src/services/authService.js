@@ -184,7 +184,7 @@ export const registerCaregiver = async (data) => {
         state: resolvedState,
         pincode: resolvedPincode,
       },
-      hourlyRate: hourlyRate !== undefined ? hourlyRate : 499,
+      hourlyRate: hourlyRate !== undefined ? hourlyRate : 200,
       servicesOffered: initialServicesOffered,
       services: initialServices,
       careSettings:

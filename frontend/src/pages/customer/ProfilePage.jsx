@@ -161,8 +161,11 @@ export function ProfilePage() {
     try {
       const streetVal = (values.street || values.address || '').trim()
       const resolvedCity = values.area?.trim() || values.district || 'Kerala'
-      await profileService.updateCustomerProfile({
+      const mobileVal = values.mobile?.trim() || ''
+      const updatedProfile = await profileService.updateCustomerProfile({
         fullName: values.fullName.trim(),
+        phone: mobileVal,
+        mobile: mobileVal,
         defaultAddress: {
           street: streetVal,
           addressLine: streetVal,
@@ -173,10 +176,13 @@ export function ProfilePage() {
           pincode: values.pincode?.trim() || '',
         },
       })
+      if (updatedProfile) {
+        setProfileData(updatedProfile)
+      }
       updateProfile({
         name: values.fullName.trim(),
         email: values.email.trim(),
-        phone: values.mobile.trim(),
+        phone: mobileVal,
         city: resolvedCity,
         area: values.area.trim(),
         street: streetVal,
@@ -302,16 +308,22 @@ export function ProfilePage() {
               </span>
               <span className="hidden text-faint sm:inline">·</span>
               <span className="inline-flex items-center gap-1.5">
-                <UserRound className="h-3.5 w-3.5 text-faint" /> {user?.phone || 'No mobile on file'}
+                <UserRound className="h-3.5 w-3.5 text-faint" /> {profileData?.phone || user?.phone || 'No mobile on file'}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
               <Chip>{`Member since ${formatDate(user?.joinedOn, { long: true })}`}</Chip>
               <Chip>{user?.city || 'City not set'}</Chip>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-500/30">
-                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
-                {Number(profileData?.rating?.average ?? user?.rating?.average ?? 5.0).toFixed(1)} / 5.0 · {profileData?.rating?.count ?? user?.rating?.count ?? 0} Caretaker {(profileData?.rating?.count === 1) ? 'review' : 'reviews'}
-              </span>
+              {Number(profileData?.rating?.count ?? user?.rating?.count ?? 0) > 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-500/30">
+                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+                  {Number(profileData?.rating?.average ?? user?.rating?.average ?? 5.0).toFixed(1)} / 5.0 · {profileData?.rating?.count ?? user?.rating?.count} Caretaker {(profileData?.rating?.count === 1) ? 'review' : 'reviews'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-500/30">
+                  ✨ New Customer · 0 reviews
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-3 py-1.5 text-xs font-semibold text-success-700 ring-1 ring-inset ring-success-500/40">
                 <ShieldCheck className="h-3.5 w-3.5" /> Verified customer
               </span>

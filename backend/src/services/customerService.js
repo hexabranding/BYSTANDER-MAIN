@@ -39,13 +39,16 @@ export const updateMyCustomerProfile = async (userId, sanitizedUpdates) => {
     profile = new CustomerProfile({ user: userId });
   }
 
-  // 1. Update user fullName if included in sanitized updates
+  // 1. Update user fullName & phone if included in sanitized updates
+  const userUpdates = {};
   if (sanitizedUpdates.fullName) {
-    await User.findByIdAndUpdate(
-      userId,
-      { fullName: sanitizedUpdates.fullName },
-      { runValidators: true },
-    );
+    userUpdates.fullName = sanitizedUpdates.fullName;
+  }
+  if (sanitizedUpdates.phone !== undefined) {
+    userUpdates.phone = sanitizedUpdates.phone;
+  }
+  if (Object.keys(userUpdates).length > 0) {
+    await User.findByIdAndUpdate(userId, userUpdates, { runValidators: true });
   }
 
   // 2. Apply emergency contact

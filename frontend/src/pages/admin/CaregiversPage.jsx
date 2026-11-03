@@ -3,26 +3,32 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   BadgeCheck,
+  CheckCircle2,
   Download,
   ExternalLink,
   Eye,
   Languages,
   Mail,
   MapPin,
+  MessageSquare,
   Phone,
   SearchX,
   ShieldAlert,
   ShieldCheck,
   Star,
   Stethoscope,
+  ThumbsUp,
+  User,
   Users,
 } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
 import { adminService } from '@/services/adminService'
 import { bookingService } from '@/services/bookingService'
+import { reviewService } from '@/services/reviewService'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -35,6 +41,7 @@ import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
 import { RatingStars } from '@/components/common/RatingStars'
+import { RatingHistogram } from '@/components/common/RatingHistogram'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
@@ -158,25 +165,32 @@ export function CaregiversPage() {
 
   const selected = viewingId ? caregivers.find((c) => c.id === viewingId) : null
 
+  const [modalTab, setModalTab] = useState('overview')
   const [selectedBookings, setSelectedBookings] = useState([])
   const [selectedVerification, setSelectedVerification] = useState(null)
+  const [selectedReviews, setSelectedReviews] = useState([])
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false)
 
   useEffect(() => {
     if (!selected) {
       setSelectedBookings([])
       setSelectedVerification(null)
+      setSelectedReviews([])
+      setModalTab('overview')
       return
     }
     let cancelled = false
     setIsLoadingDetails(true)
+    setIsLoadingReviews(true)
     Promise.allSettled([
       bookingService.getBookings({ caregiverId: selected.id, limit: 10 }),
       adminService.getVerificationById(selected.id),
-    ]).then(([bookingsRes, verifRes]) => {
+      reviewService.getCaregiverReviews(selected.id),
+    ]).then(([bookingsRes, verifRes, reviewsRes]) => {
       if (cancelled) return
       if (bookingsRes.status === 'fulfilled') {
-        setSelectedBookings(bookingsRes.value.bookings || [])
+        setSelectedBookings(bookingsRes.value?.bookings || [])
       } else {
         setSelectedBookings([])
       }
@@ -185,7 +199,13 @@ export function CaregiversPage() {
       } else {
         setSelectedVerification(null)
       }
+      if (reviewsRes.status === 'fulfilled') {
+        setSelectedReviews(reviewsRes.value?.reviews || [])
+      } else {
+        setSelectedReviews([])
+      }
       setIsLoadingDetails(false)
+      setIsLoadingReviews(false)
     })
 
     return () => {
@@ -360,7 +380,7 @@ export function CaregiversPage() {
     {
       key: 'rating',
       header: 'Rating',
-      render: (c) => <RatingStars value={c.rating} size={13} showValue />,
+      render: (c) => <RatingStars value={c.rating} count={c.reviewCount ?? c.ratingCount} size={13} showValue />,
     },
     {
       key: 'completedJobs',
@@ -609,7 +629,24 @@ export function CaregiversPage() {
                   Council Reg: <span className="font-mono font-medium text-ink">{selected.regNo}</span> · {selected.city}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                  <RatingStars value={selected.rating} size={14} showValue />
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('reviews')}
+                    className="group inline-flex items-center gap-1.5 transition hover:opacity-80"
+                    title="Click to view verified customer reviews"
+                  >
+                    <RatingStars
+                      value={selected.rating}
+                      count={selectedReviews.length}
+                      size={14}
+                      showValue
+                    />
+                    {selectedReviews.length > 0 ? (
+                      <span className="text-xs font-semibold text-primary-700 underline decoration-primary-300 underline-offset-2">
+                        ({selectedReviews.length} {selectedReviews.length === 1 ? 'review' : 'reviews'})
+                      </span>
+                    ) : null}
+                  </button>
                   <span className="text-muted">·</span>
                   <span className="font-semibold tabular-nums text-ink">{selected.completedJobs} shifts done</span>
                   <span className="text-muted">·</span>
@@ -625,173 +662,296 @@ export function CaregiversPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Card>
-                <CardHeader title="Professional details" subtitle="Clinical registration" />
-                <CardBody className="space-y-3 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted">Qualification</span>
-                    <span className="font-semibold text-ink">{selected.qualification}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted">Experience</span>
-                    <span className="font-semibold tabular-nums text-ink">{selected.experienceYears} years</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted">Care settings</span>
-                    <span className="text-right font-semibold text-ink">
-                      {selected.careSettings?.join(', ') || 'Home Care'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted">Availability</span>
-                    <span className="font-semibold text-ink">{selected.availabilityStatus}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted">Trust score</span>
-                    <span className="font-semibold tabular-nums text-primary-700">{selected.trustScore} / 100</span>
-                  </div>
-                </CardBody>
-              </Card>
-
-              <Card>
-                <CardHeader title="Services offered" subtitle={`${selected.services?.length || 0} care competencies`} />
-                <CardBody className="space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {selected.services && selected.services.length ? (
-                      selected.services.map((svc) => (
-                        <span
-                          key={svc}
-                          className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
-                        >
-                          {svc}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-muted">No services listed</span>
-                    )}
-                  </div>
-                </CardBody>
-              </Card>
-
-              <Card className="sm:col-span-2">
-                <CardHeader
-                  title="Full Residential Address & Contact"
-                  subtitle="Doorstep location and direct contact details"
-                  icon={MapPin}
-                />
-                <CardBody className="grid gap-4 text-sm sm:grid-cols-2 md:grid-cols-4">
-                  <div>
-                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">House / Street</span>
-                    <span className="mt-1 block font-medium text-ink">
-                      {selected.street || selected.address?.street || 'Not specified'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">Locality / Area</span>
-                    <span className="mt-1 block font-medium text-ink">
-                      {selected.area || selected.address?.area || '—'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">City & District</span>
-                    <span className="mt-1 block font-medium text-ink">
-                      {selected.city || '—'}{selected.district ? `, ${selected.district}` : ''}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold uppercase tracking-wider text-muted">State & PIN Code</span>
-                    <span className="mt-1 block font-medium text-ink">
-                      {selected.state || 'Kerala'} {selected.pincode ? `— ${selected.pincode}` : ''}
-                    </span>
-                  </div>
-                  {(selected.phone || selected.email) && (
-                    <div className="sm:col-span-2 md:col-span-4 flex flex-wrap items-center gap-5 pt-3 border-t border-line text-xs">
-                      {selected.phone && (
-                        <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-                          <Phone className="h-3.5 w-3.5 text-primary-700" />
-                          Phone: <span className="font-mono text-ink font-semibold">{selected.phone}</span>
-                        </span>
-                      )}
-                      {selected.email && (
-                        <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-                          <Mail className="h-3.5 w-3.5 text-primary-700" />
-                          Email: <span className="text-ink font-medium">{selected.email}</span>
-                        </span>
-                      )}
-                    </div>
+            {/* Sub-tab Navigation */}
+            <div className="flex border-b border-line">
+              <button
+                type="button"
+                onClick={() => setModalTab('overview')}
+                className={cn(
+                  'flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition',
+                  modalTab === 'overview'
+                    ? 'border-primary-600 text-primary-700'
+                    : 'border-transparent text-muted hover:text-ink'
+                )}
+              >
+                <User className="h-4 w-4" />
+                <span>Overview & Dossier</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('reviews')}
+                className={cn(
+                  'flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition',
+                  modalTab === 'reviews'
+                    ? 'border-primary-600 text-primary-700'
+                    : 'border-transparent text-muted hover:text-ink'
+                )}
+              >
+                <Star className={cn('h-4 w-4', modalTab === 'reviews' ? 'text-amber-500 fill-amber-500' : 'text-muted')} />
+                <span>Customer Reviews</span>
+                <span
+                  className={cn(
+                    'ml-1 rounded-full px-2 py-0.5 text-xs font-bold',
+                    modalTab === 'reviews'
+                      ? 'bg-primary-100 text-primary-800'
+                      : 'bg-slate-100 text-slate-600'
                   )}
-                </CardBody>
-              </Card>
+                >
+                  {selectedReviews.length}
+                </span>
+              </button>
             </div>
 
-            {selectedVerification?.documents?.length ? (
-              <Card>
-                <CardHeader
-                  title="Verification documents"
-                  subtitle={`${selectedVerification.documents.length} credentials registered`}
-                  action={
-                    <Button variant="link" size="sm" onClick={() => navigate('/admin/verifications')}>
-                      View dossier
-                    </Button>
-                  }
-                />
-                <CardBody className="divide-y divide-line p-0">
-                  {selectedVerification.documents.map((doc) => (
-                    <div key={doc.id || doc.name} className="flex items-center justify-between gap-3 px-5 py-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-ink">{doc.name}</p>
-                        <p className="text-xs text-muted">
-                          {doc.type} {doc.uploadedAt ? `· uploaded ${formatDate(doc.uploadedAt)}` : ''}
-                        </p>
+            {modalTab === 'overview' ? (
+              <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Card>
+                    <CardHeader title="Professional details" subtitle="Clinical registration" />
+                    <CardBody className="space-y-3 text-sm">
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted">Qualification</span>
+                        <span className="font-semibold text-ink">{selected.qualification}</span>
                       </div>
-                      <StatusBadge status={doc.status} size="sm" />
-                    </div>
-                  ))}
-                </CardBody>
-              </Card>
-            ) : null}
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted">Experience</span>
+                        <span className="font-semibold tabular-nums text-ink">{selected.experienceYears} years</span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted">Care settings</span>
+                        <span className="text-right font-semibold text-ink">
+                          {selected.careSettings?.join(', ') || 'Home Care'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted">Availability</span>
+                        <span className="font-semibold text-ink">{selected.availabilityStatus}</span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted">Trust score</span>
+                        <span className="font-semibold tabular-nums text-primary-700">{selected.trustScore} / 100</span>
+                      </div>
+                    </CardBody>
+                  </Card>
 
-            <Card>
-              <CardHeader
-                title="Recent bookings"
-                subtitle="Latest shifts assigned to this caretaker"
-                action={
-                  <Button variant="link" size="sm" onClick={() => navigate('/admin/bookings')}>
-                    View all
-                  </Button>
-                }
-              />
-              <CardBody className="divide-y divide-line p-0">
-                {isLoadingDetails ? (
-                  <div className="p-6 text-center text-sm text-muted">Loading live shift history...</div>
-                ) : selectedBookings.length ? (
-                  selectedBookings.slice(0, 4).map((b) => (
-                    <div key={b.id} className="flex items-center gap-3 px-5 py-3 transition hover:bg-mint-50/60">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-ink">
-                          {b.id} · {b.service}
-                        </p>
-                        <p className="text-xs text-muted">
-                          {formatDate(b.date)} · {b.startTime} · {formatDuration(b.hours, { short: true })}
-                        </p>
+                  <Card>
+                    <CardHeader title="Services offered" subtitle={`${selected.services?.length || 0} care competencies`} />
+                    <CardBody className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {selected.services && selected.services.length ? (
+                          selected.services.map((svc) => (
+                            <span
+                              key={svc}
+                              className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
+                            >
+                              {svc}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted">No services listed</span>
+                        )}
                       </div>
-                      <span className="hidden text-sm font-semibold tabular-nums text-ink sm:block">
-                        {formatCurrency(b.total)}
-                      </span>
-                      <StatusBadge status={b.status} size="sm" />
-                    </div>
-                  ))
-                ) : (
-                  <EmptyState
-                    icon={Eye}
-                    title="No bookings yet"
-                    description="This caretaker has not been assigned a shift."
-                    className="py-8"
+                    </CardBody>
+                  </Card>
+
+                  <Card className="sm:col-span-2">
+                    <CardHeader
+                      title="Full Residential Address & Contact"
+                      subtitle="Doorstep location and direct contact details"
+                      icon={MapPin}
+                    />
+                    <CardBody className="grid gap-4 text-sm sm:grid-cols-2 md:grid-cols-4">
+                      <div>
+                        <span className="block text-xs font-semibold uppercase tracking-wider text-muted">House / Street</span>
+                        <span className="mt-1 block font-medium text-ink">
+                          {selected.street || selected.address?.street || 'Not specified'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-xs font-semibold uppercase tracking-wider text-muted">Locality / Area</span>
+                        <span className="mt-1 block font-medium text-ink">
+                          {selected.area || selected.address?.area || '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-xs font-semibold uppercase tracking-wider text-muted">City & District</span>
+                        <span className="mt-1 block font-medium text-ink">
+                          {selected.city || '—'}{selected.district ? `, ${selected.district}` : ''}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-xs font-semibold uppercase tracking-wider text-muted">State & PIN Code</span>
+                        <span className="mt-1 block font-medium text-ink">
+                          {selected.state || 'Kerala'} {selected.pincode ? `— ${selected.pincode}` : ''}
+                        </span>
+                      </div>
+                      {(selected.phone || selected.email) && (
+                        <div className="sm:col-span-2 md:col-span-4 flex flex-wrap items-center gap-5 pt-3 border-t border-line text-xs">
+                          {selected.phone && (
+                            <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                              <Phone className="h-3.5 w-3.5 text-primary-700" />
+                              Phone: <span className="font-mono text-ink font-semibold">{selected.phone}</span>
+                            </span>
+                          )}
+                          {selected.email && (
+                            <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                              <Mail className="h-3.5 w-3.5 text-primary-700" />
+                              Email: <span className="text-ink font-medium">{selected.email}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </CardBody>
+                  </Card>
+                </div>
+
+                {selectedVerification?.documents?.length ? (
+                  <Card>
+                    <CardHeader
+                      title="Verification documents"
+                      subtitle={`${selectedVerification.documents.length} credentials registered`}
+                      action={
+                        <Button variant="link" size="sm" onClick={() => navigate('/admin/verifications')}>
+                          View dossier
+                        </Button>
+                      }
+                    />
+                    <CardBody className="divide-y divide-line p-0">
+                      {selectedVerification.documents.map((doc) => (
+                        <div key={doc.id || doc.name} className="flex items-center justify-between gap-3 px-5 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-ink">{doc.name}</p>
+                            <p className="text-xs text-muted">
+                              {doc.type} {doc.uploadedAt ? `· uploaded ${formatDate(doc.uploadedAt)}` : ''}
+                            </p>
+                          </div>
+                          <StatusBadge status={doc.status} size="sm" />
+                        </div>
+                      ))}
+                    </CardBody>
+                  </Card>
+                ) : null}
+
+                <Card>
+                  <CardHeader
+                    title="Recent bookings"
+                    subtitle="Latest shifts assigned to this caretaker"
+                    action={
+                      <Button variant="link" size="sm" onClick={() => navigate('/admin/bookings')}>
+                        View all
+                      </Button>
+                    }
                   />
+                  <CardBody className="divide-y divide-line p-0">
+                    {isLoadingDetails ? (
+                      <div className="p-6 text-center text-sm text-muted">Loading live shift history...</div>
+                    ) : selectedBookings.length ? (
+                      selectedBookings.slice(0, 4).map((b) => (
+                        <div key={b.id} className="flex items-center gap-3 px-5 py-3 transition hover:bg-mint-50/60">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-ink">
+                              {b.id} · {b.service}
+                            </p>
+                            <p className="text-xs text-muted">
+                              {formatDate(b.date)} · {b.startTime} · {formatDuration(b.hours, { short: true })}
+                            </p>
+                          </div>
+                          <span className="hidden text-sm font-semibold tabular-nums text-ink sm:block">
+                            {formatCurrency(b.total)}
+                          </span>
+                          <StatusBadge status={b.status} size="sm" />
+                        </div>
+                      ))
+                    ) : (
+                      <EmptyState
+                        icon={Eye}
+                        title="No bookings yet"
+                        description="This caretaker has not been assigned a shift."
+                        className="py-8"
+                      />
+                    )}
+                  </CardBody>
+                </Card>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Amazon / Flipkart Style Rating & 5-Star Distribution Histogram */}
+                <RatingHistogram reviews={selectedReviews} totalRatings={selectedReviews.length} />
+
+                {/* Reviews List */}
+                {isLoadingReviews ? (
+                  <div className="space-y-3 py-8 text-center text-sm text-muted">
+                    <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+                    <p>Loading verified customer reviews…</p>
+                  </div>
+                ) : selectedReviews.length > 0 ? (
+                  <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
+                    {selectedReviews.map((r) => {
+                      const customerName = r.customerName || r.customer?.fullName || r.customer?.name || 'Verified Family'
+                      return (
+                        <div
+                          key={r._id || r.id}
+                          className="rounded-xl border border-line bg-white p-4 shadow-xs transition hover:border-primary-200"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="grid h-8 w-8 place-items-center rounded-full bg-primary-100 text-xs font-bold text-primary-800">
+                                {customerName.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-bold text-ink">{customerName}</p>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Verified Booking
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-faint">
+                                  {r.date || r.createdAt ? formatDate(r.date || r.createdAt, { long: true }) : 'Recent shift'}
+                                </p>
+                              </div>
+                            </div>
+                            <RatingStars value={Number(r.rating || 5)} size={13} showValue />
+                          </div>
+
+                          {r.comment ? (
+                            <p className="mt-2.5 text-sm leading-relaxed text-ink-soft">
+                              “{r.comment}”
+                            </p>
+                          ) : null}
+
+                          {r.criteria && typeof r.criteria === 'object' && Object.keys(r.criteria).length > 0 ? (
+                            <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
+                              {Object.entries(r.criteria).map(([criterion, score]) => (
+                                <span
+                                  key={criterion}
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 capitalize"
+                                >
+                                  {criterion.replace(/([A-Z])/g, ' $1')}: <span className="font-semibold text-ink">{score}/5</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {r.reply ? (
+                            <div className="mt-3 rounded-lg border border-mint-200 bg-mint-50/50 p-2.5 text-xs">
+                              <p className="font-semibold text-primary-800">Caretaker Response:</p>
+                              <p className="mt-0.5 text-muted">{r.reply}</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-line bg-slate-50/60 p-8 text-center">
+                    <ThumbsUp className="mx-auto h-8 w-8 text-primary-500/70" />
+                    <h4 className="mt-2 font-display text-sm font-bold text-ink">No customer reviews yet</h4>
+                    <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted">
+                      {selected.name} has not received any client reviews on Bystander yet. Completed shift reviews will appear here automatically.
+                    </p>
+                  </div>
                 )}
-              </CardBody>
-            </Card>
+              </div>
+            )}
           </div>
         ) : null}
       </Modal>

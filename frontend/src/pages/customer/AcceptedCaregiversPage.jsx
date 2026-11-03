@@ -89,7 +89,7 @@ export function AcceptedCaregiversPage() {
       const hours = Number(booking.hours || booking.totalHours || 2)
       ;(booking.applicants || []).forEach((applicant) => {
         const applicantId = applicant.caregiverId || applicant.id
-        const shiftTotal = applicant.totalAmount || Math.round((applicant.hourlyRate || 399) * hours)
+        const shiftTotal = applicant.totalAmount || Math.round((applicant.hourlyRate || 200) * hours)
         list.push({
           key: `${bookingId}_${applicantId}`,
           booking,
@@ -291,13 +291,12 @@ export function AcceptedCaregiversPage() {
                         className="group/rate inline-flex items-center gap-1.5 transition hover:opacity-80 cursor-pointer"
                         title="Click to view verified reviews"
                       >
-                        <RatingStars value={ratingValue} size={13} />
-                        <span className="text-xs font-bold text-ink underline decoration-dotted underline-offset-2">
-                          {ratingValue.toFixed(1)}
-                        </span>
-                        <span className="text-xs font-semibold text-primary-700 group-hover/rate:underline">
-                          ({reviewsCount} review{reviewsCount === 1 ? '' : 's'})
-                        </span>
+                        <RatingStars value={ratingValue} count={reviewsCount} size={13} showValue />
+                        {reviewsCount > 0 ? (
+                          <span className="text-xs font-semibold text-primary-700 group-hover/rate:underline">
+                            ({reviewsCount} {reviewsCount === 1 ? 'review' : 'reviews'})
+                          </span>
+                        ) : null}
                       </button>
                     </div>
                   </div>

@@ -201,7 +201,7 @@ const caregiverProfileSchema = new mongoose.Schema(
       min: [0, 'Hourly rate cannot be negative'],
       max: [50000, 'Hourly rate cannot exceed ₹50,000'],
       required: [true, 'Hourly rate is required'],
-      default: 499,
+      default: 200,
     },
     // Canonical reference to active Service catalog documents
     servicesOffered: [

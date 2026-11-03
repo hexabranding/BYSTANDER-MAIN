@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import {
   Ban,
   CalendarDays,
+  CheckCircle2,
   Eye,
   IndianRupee,
   Mail,
@@ -10,15 +11,20 @@ import {
   MessageSquare,
   Phone,
   SearchX,
+  ShieldCheck,
+  Sparkles,
+  Star,
   UserRound,
   Users,
 } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { formatDate, formatCurrency, maskEmail, maskPhone } from '@/utils/format'
 import { formatDuration } from '@/utils/duration'
 import { adminService } from '@/services/adminService'
 import { bookingService } from '@/services/bookingService'
+import { reviewService } from '@/services/reviewService'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -29,6 +35,8 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
 import { Button } from '@/components/common/Button'
 import { Avatar } from '@/components/common/Avatar'
+import { RatingStars } from '@/components/common/RatingStars'
+import { RatingHistogram } from '@/components/common/RatingHistogram'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/common/States'
 import { FormField, Input, Select, Textarea } from '@/components/forms/FormField'
@@ -120,12 +128,22 @@ export function CustomersPage() {
 
   const [selectedBookings, setSelectedBookings] = useState([])
   const [isLoadingBookings, setIsLoadingBookings] = useState(false)
+  const [modalTab, setModalTab] = useState('overview')
+  const [selectedReviews, setSelectedReviews] = useState([])
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false)
+  const [reviewFilter, setReviewFilter] = useState('all')
 
   useEffect(() => {
     if (!selected) {
       setSelectedBookings([])
+      setSelectedReviews([])
+      setModalTab('overview')
+      setReviewFilter('all')
       return
     }
+    setModalTab('overview')
+    setReviewFilter('all')
+
     let cancelled = false
     setIsLoadingBookings(true)
     bookingService
@@ -142,10 +160,39 @@ export function CustomersPage() {
       .finally(() => {
         if (!cancelled) setIsLoadingBookings(false)
       })
+
+    setIsLoadingReviews(true)
+    reviewService
+      .getCustomerReviews(selected.id, { limit: 50 })
+      .then((res) => {
+        if (!cancelled) {
+          setSelectedReviews(res.reviews || [])
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load customer reviews:', err)
+        if (!cancelled) setSelectedReviews([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingReviews(false)
+      })
+
     return () => {
       cancelled = true
     }
   }, [selected])
+
+  const customerRatingAvg = useMemo(() => {
+    if (!selectedReviews.length) return Number(selected?.rating?.average || 0)
+    const sum = selectedReviews.reduce((acc, r) => acc + Number(r.rating || 5), 0)
+    return Number((sum / selectedReviews.length).toFixed(1))
+  }, [selectedReviews, selected])
+
+  const filteredCustomerReviews = useMemo(() => {
+    if (reviewFilter === 'all') return selectedReviews
+    const targetStar = Number(reviewFilter)
+    return selectedReviews.filter((r) => Math.round(Number(r.rating || 5)) === targetStar)
+  }, [selectedReviews, reviewFilter])
 
   const selectedSpend =
     selected?.totalSpent ||
@@ -225,7 +272,18 @@ export function CustomersPage() {
           <Avatar src={c.avatar} name={c.name} size="sm" />
           <div className="min-w-0">
             <p className="truncate font-semibold text-ink">{c.name}</p>
-            <p className="truncate text-xs text-faint">{c.area || c.city}</p>
+            <div className="flex items-center gap-1.5 text-xs text-faint">
+              <span className="truncate">{c.area || c.city}</span>
+              {c.rating?.count > 0 ? (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-0.5 font-semibold text-amber-700">
+                    <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+                    {Number(c.rating.average).toFixed(1)}
+                  </span>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       ),
@@ -425,13 +483,35 @@ export function CustomersPage() {
         }
       >
         {selected ? (
-          <div className="space-y-5">
+          <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <Avatar src={selected.avatar} name={selected.name} size="xl" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-display text-lg font-bold text-ink">{selected.name}</p>
                   <StatusBadge status={selected.status} size="sm" />
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('reviews')}
+                    className="inline-flex items-center gap-1.5 transition hover:opacity-80 cursor-pointer"
+                    title="Click to view caretaker reviews"
+                  >
+                    <RatingStars
+                      value={customerRatingAvg}
+                      count={selectedReviews.length}
+                      size={13}
+                      showValue
+                    />
+                    {selectedReviews.length > 0 ? (
+                      <span className="text-xs font-semibold text-primary-700 underline decoration-primary-300 underline-offset-2">
+                        ({selectedReviews.length} {selectedReviews.length === 1 ? 'review' : 'reviews'})
+                      </span>
+                    ) : null}
+                  </button>
+                  <span className="text-muted">·</span>
+                  <span className="font-semibold tabular-nums text-ink">{selected.totalBookings} shifts booked</span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
                   <span className="inline-flex items-center gap-1.5">
@@ -464,92 +544,246 @@ export function CustomersPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Card>
-                <CardHeader title="Patient Information" subtitle="Family members on file" />
-                <CardBody className="space-y-3 text-sm">
-                  {selected.patients && selected.patients.length > 0 ? (
-                    selected.patients.map((pat, idx) => (
-                      <div key={pat._id || idx} className="rounded-lg border border-line p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-semibold text-ink">{pat.name}</span>
-                          <span className="text-xs text-muted">{pat.relation} · {pat.gender}</span>
-                        </div>
-                        {pat.age ? <p className="text-xs text-muted">Age: {pat.age} yrs</p> : null}
-                        {pat.condition ? <p className="mt-1 text-xs text-ink-soft">Condition: {pat.condition}</p> : null}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted">No patient records on file.</p>
+            {/* Sub-tab Navigation */}
+            <div className="flex border-b border-line">
+              <button
+                type="button"
+                onClick={() => setModalTab('overview')}
+                className={cn(
+                  'flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition cursor-pointer',
+                  modalTab === 'overview'
+                    ? 'border-primary-600 text-primary-700'
+                    : 'border-transparent text-muted hover:text-ink'
+                )}
+              >
+                <UserRound className="h-4 w-4" />
+                <span>Overview & Bookings</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('reviews')}
+                className={cn(
+                  'flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition cursor-pointer',
+                  modalTab === 'reviews'
+                    ? 'border-primary-600 text-primary-700'
+                    : 'border-transparent text-muted hover:text-ink'
+                )}
+              >
+                <Star className={cn('h-4 w-4', modalTab === 'reviews' ? 'text-amber-500 fill-amber-500' : 'text-muted')} />
+                <span>Caretaker Reviews</span>
+                <span
+                  className={cn(
+                    'ml-1 rounded-full px-2 py-0.5 text-xs font-bold',
+                    modalTab === 'reviews'
+                      ? 'bg-primary-100 text-primary-800'
+                      : 'bg-slate-100 text-slate-600'
                   )}
-                </CardBody>
-              </Card>
-
-              <Card>
-                <CardHeader title="Emergency Contact & Address" subtitle="Service details" />
-                <CardBody className="space-y-3 text-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Emergency contact</span>
-                    <span className="font-semibold text-ink">
-                      {selected.emergencyContact?.name ? `${selected.emergencyContact.name} (${selected.emergencyContact.relation || 'Contact'})` : '—'}
-                    </span>
-                  </div>
-                  {selected.emergencyContact?.phone ? (
-                    <div className="flex items-start justify-between gap-4">
-                      <span className="text-muted">Emergency phone</span>
-                      <span className="tabular-nums font-semibold text-ink">{maskPhone(selected.emergencyContact.phone)}</span>
-                    </div>
-                  ) : null}
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">City / Area</span>
-                    <span className="font-semibold text-ink">{selected.city} · {selected.area || '—'}</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted">Spend in context</span>
-                    <span className="font-semibold tabular-nums text-ink">{formatCurrency(selectedSpend)}</span>
-                  </div>
-                </CardBody>
-              </Card>
+                >
+                  {selectedReviews.length}
+                </span>
+              </button>
             </div>
 
-            <Card>
-              <CardHeader
-                title="Booking history"
-                subtitle={`${selectedBookings.length} booking${selectedBookings.length === 1 ? '' : 's'} on Bystander`}
-              />
-              <CardBody className="divide-y divide-line p-0">
-                {isLoadingBookings ? (
-                  <div className="p-6 text-center text-sm text-muted">Loading live booking history...</div>
-                ) : selectedBookings.length ? (
-                  selectedBookings.map((b) => (
-                    <div key={b.id} className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-mint-50/60">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
-                        <CalendarDays className="h-4.5 w-4.5" size={18} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-ink">
-                          {b.id} · {b.service}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {formatDate(b.date, { long: true })} · {b.startTime} · {formatDuration(b.hours, { short: true })}
-                        </p>
+            {modalTab === 'overview' ? (
+              <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Card>
+                    <CardHeader title="Patient Information" subtitle="Family members on file" />
+                    <CardBody className="space-y-3 text-sm">
+                      {selected.patients && selected.patients.length > 0 ? (
+                        selected.patients.map((pat, idx) => (
+                          <div key={pat._id || idx} className="rounded-lg border border-line p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="font-semibold text-ink">{pat.name}</span>
+                              <span className="text-xs text-muted">{pat.relation} · {pat.gender}</span>
+                            </div>
+                            {pat.age ? <p className="text-xs text-muted">Age: {pat.age} yrs</p> : null}
+                            {pat.condition ? <p className="mt-1 text-xs text-ink-soft">Condition: {pat.condition}</p> : null}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted">No patient records on file.</p>
+                      )}
+                    </CardBody>
+                  </Card>
+
+                  <Card>
+                    <CardHeader title="Emergency Contact & Address" subtitle="Service details" />
+                    <CardBody className="space-y-3 text-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted">Emergency contact</span>
+                        <span className="font-semibold text-ink">
+                          {selected.emergencyContact?.name ? `${selected.emergencyContact.name} (${selected.emergencyContact.relation || 'Contact'})` : '—'}
+                        </span>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold tabular-nums text-ink">{formatCurrency(b.total)}</p>
-                        <StatusBadge status={b.status} size="sm" />
+                      {selected.emergencyContact?.phone ? (
+                        <div className="flex items-start justify-between gap-4">
+                          <span className="text-muted">Emergency phone</span>
+                          <span className="tabular-nums font-semibold text-ink">{maskPhone(selected.emergencyContact.phone)}</span>
+                        </div>
+                      ) : null}
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted">City / Area</span>
+                        <span className="font-semibold text-ink">{selected.city} · {selected.area || '—'}</span>
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <EmptyState
-                    icon={CalendarDays}
-                    title="No bookings yet"
-                    description="This customer has not booked a caretaker on Bystander."
-                    className="py-8"
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="text-muted">Spend in context</span>
+                        <span className="font-semibold tabular-nums text-ink">{formatCurrency(selectedSpend)}</span>
+                      </div>
+                    </CardBody>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader
+                    title="Booking history"
+                    subtitle={`${selectedBookings.length} booking${selectedBookings.length === 1 ? '' : 's'} on Bystander`}
                   />
+                  <CardBody className="divide-y divide-line p-0">
+                    {isLoadingBookings ? (
+                      <div className="p-6 text-center text-sm text-muted">Loading live booking history...</div>
+                    ) : selectedBookings.length ? (
+                      selectedBookings.map((b) => (
+                        <div key={b.id} className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-mint-50/60">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-mint-100 text-primary-700">
+                            <CalendarDays className="h-4.5 w-4.5" size={18} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-ink">
+                              {b.id} · {b.service}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted">
+                              {formatDate(b.date, { long: true })} · {b.startTime} · {formatDuration(b.hours, { short: true })}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-sm font-semibold tabular-nums text-ink">{formatCurrency(b.total)}</p>
+                            <StatusBadge status={b.status} size="sm" />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <EmptyState
+                        icon={CalendarDays}
+                        title="No bookings yet"
+                        description="This customer has not booked a caretaker on Bystander."
+                        className="py-8"
+                      />
+                    )}
+                  </CardBody>
+                </Card>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Amazon & Flipkart Style Rating Histogram */}
+                <RatingHistogram
+                  reviews={selectedReviews}
+                  totalRatings={selectedReviews.length}
+                  subjectLabel="Customer"
+                />
+
+                {/* Rating Filter Pills */}
+                {selectedReviews.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-1.5 border-b border-line/60 pb-3 pt-1">
+                    <span className="mr-1 text-xs font-bold uppercase tracking-wider text-faint">Filter:</span>
+                    {['all', '5', '4', '3', '2', '1'].map((star) => {
+                      const count =
+                        star === 'all'
+                          ? selectedReviews.length
+                          : selectedReviews.filter((r) => Math.round(Number(r.rating || 5)) === Number(star)).length
+                      const active = reviewFilter === star
+                      return (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setReviewFilter(star)}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer',
+                            active
+                              ? 'bg-primary-700 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          )}
+                        >
+                          {star === 'all' ? 'All Reviews' : `${star} ★`}
+                          <span className={cn('ml-0.5 text-[10px]', active ? 'text-white/80' : 'text-slate-500')}>
+                            ({count})
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : null}
+
+                {/* Reviews List */}
+                {isLoadingReviews ? (
+                  <div className="space-y-3 py-8 text-center text-sm text-muted">
+                    <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+                    <p>Loading caretaker feedback…</p>
+                  </div>
+                ) : filteredCustomerReviews.length > 0 ? (
+                  <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
+                    {filteredCustomerReviews.map((r) => {
+                      const caregiverName =
+                        r.caregiverName ||
+                        r.caregiverUser?.fullName ||
+                        r.caregiverUser?.name ||
+                        r.caregiver?.name ||
+                        'Verified Caretaker'
+                      const serviceName =
+                        r.serviceName ||
+                        r.booking?.serviceName ||
+                        r.booking?.service ||
+                        'Care Shift'
+                      return (
+                        <div
+                          key={r._id || r.id}
+                          className="rounded-xl border border-line bg-white p-4 shadow-xs transition hover:border-primary-200"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="grid h-8 w-8 place-items-center rounded-full bg-mint-100 text-xs font-bold text-primary-800">
+                                {caregiverName.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-bold text-ink">Reviewed by Caretaker {caregiverName}</p>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Completed Shift
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-faint">
+                                  {serviceName} · {r.date || r.createdAt ? formatDate(r.date || r.createdAt, { long: true }) : 'Recent shift'}
+                                </p>
+                              </div>
+                            </div>
+                            <RatingStars value={Number(r.rating || 5)} size={13} showValue />
+                          </div>
+
+                          {r.comment ? (
+                            <p className="mt-2.5 text-sm leading-relaxed text-ink-soft">
+                              “{r.comment}”
+                            </p>
+                          ) : (
+                            <p className="mt-2 text-xs italic text-faint">No written feedback provided.</p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : selectedReviews.length > 0 ? (
+                  <div className="py-8 text-center text-sm text-muted">
+                    No {reviewFilter}-star reviews found for this customer.
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-line bg-slate-50/50 p-6 text-center">
+                    <p className="font-semibold text-ink">No Caretaker Feedback Yet</p>
+                    <p className="mt-1 text-xs text-muted max-w-sm mx-auto">
+                      When verified caretakers complete assigned shifts for this customer, their ratings on family cooperation, safety, and payment experience will appear here.
+                    </p>
+                  </div>
                 )}
-              </CardBody>
-            </Card>
+              </div>
+            )}
           </div>
         ) : null}
       </Modal>

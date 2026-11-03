@@ -12,6 +12,11 @@ const ALLOWED_CARE_SETTINGS = ['Home Care', 'Hospital Care'];
 
 // Explicit allowlist of fields caregivers are permitted to update on their profile
 export const PERMITTED_CAREGIVER_UPDATE_FIELDS = [
+  'name',
+  'fullName',
+  'phone',
+  'mobile',
+  'qualification',
   'bio',
   'experienceYears',
   'languages',
@@ -89,6 +94,29 @@ export const validateUpdateCaregiverProfile = (req, res, next) => {
   }
 
   // 1. Validation checks on permitted fields
+  const rawCaregiverName = sanitizedUpdates.name !== undefined ? sanitizedUpdates.name : sanitizedUpdates.fullName;
+  if (rawCaregiverName !== undefined) {
+    if (typeof rawCaregiverName !== 'string' || rawCaregiverName.trim().length < 2) {
+      errors.push('Name must be a string of at least 2 characters');
+    } else {
+      sanitizedUpdates.fullName = rawCaregiverName.trim();
+    }
+  }
+
+  const rawCaregiverPhone = sanitizedUpdates.phone !== undefined ? sanitizedUpdates.phone : sanitizedUpdates.mobile;
+  if (rawCaregiverPhone !== undefined) {
+    const cleanPhone = String(rawCaregiverPhone).trim().replace(/[\s-]/g, '');
+    if (cleanPhone && !/^\+?[1-9]\d{6,14}$/.test(cleanPhone)) {
+      errors.push('Phone must be a valid 10-digit mobile or international phone number');
+    } else {
+      sanitizedUpdates.phone = cleanPhone || null;
+    }
+  }
+
+  if (sanitizedUpdates.qualification !== undefined) {
+    sanitizedUpdates.qualification = String(sanitizedUpdates.qualification).trim();
+  }
+
   if (sanitizedUpdates.experienceYears !== undefined) {
     const exp = Number(sanitizedUpdates.experienceYears);
     if (isNaN(exp) || exp < 0 || exp > 50) {

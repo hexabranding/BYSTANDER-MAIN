@@ -27,6 +27,7 @@ import {
   LocateFixed,
   Navigation,
   ExternalLink,
+  Phone,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
@@ -42,7 +43,7 @@ import { FormField, Input, Select, Textarea } from '@/components/forms/FormField
 import { PriceBreakdown } from '@/components/common/TimelinePrice'
 import { RatingStars } from '@/components/common/RatingStars'
 import { CardSkeleton } from '@/components/common/States'
-import { bookingService, servicesService, caregiversService, financeService, isMongoObjectId, apiClient } from '@/services'
+import { bookingService, servicesService, caregiversService, financeService, profileService, isMongoObjectId, apiClient } from '@/services'
 import InteractiveLocationPicker from './InteractiveLocationPicker'
 
 const CARE_REQUIREMENTS = [
@@ -119,7 +120,7 @@ const getNextUpcomingTime = () => {
 export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user } = useAuth()
+  const { user, updateProfile } = useAuth()
   const { caregivers, createBooking } = useData()
 
   const [availableServices, setAvailableServices] = useState(SERVICES)
@@ -211,7 +212,14 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     instructions: '',
     extras: [],
     preferredCaregiverGender: 'Any',
+    contactPhone: user?.phone || '',
   }))
+
+  useEffect(() => {
+    if (user?.phone && !form.contactPhone) {
+      setForm((f) => ({ ...f, contactPhone: user.phone }))
+    }
+  }, [user?.phone, form.contactPhone])
 
   const toggleUrgentMode = () => {
     setIsUrgent((prev) => {
@@ -333,7 +341,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     form.service?.startingPrice ||
     matchedCaregiver?.hourlyRate ||
     availableServices[0]?.baseHourlyRate ||
-    499
+    199
   const hours = Number(form.hours) || 2
   const subtotal = rate * hours
   const platformFee = PLATFORM_FEE
@@ -344,8 +352,11 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     switch (stepId) {
       case 'service':
         return Boolean(form.service)
-      case 'patient':
-        return Boolean(form.patientName?.trim()) && Number(form.patientAge) > 0
+      case 'patient': {
+        const cleanPhone = String(form.contactPhone || user?.phone || '').trim().replace(/[\s-]/g, '')
+        const phoneValid = cleanPhone.length >= 10
+        return Boolean(form.patientName?.trim()) && Number(form.patientAge) > 0 && phoneValid
+      }
       case 'setting': {
         const settingValid =
           Boolean(form.careType) &&
@@ -823,6 +834,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           gender: 'Other',
           specialInstructions: [
             isUrgent ? 'URGENT DISPATCH PROTOCOL' : '',
+            form.contactPhone?.trim() ? `Emergency Contact Phone: ${form.contactPhone.trim()}` : '',
             form.instructions?.trim() ? `Instructions: ${form.instructions.trim()}` : '',
             form.extras?.length > 0 ? `Care Directives: ${form.extras.join(', ')}` : '',
             form.preferredCaregiverGender && form.preferredCaregiverGender !== 'Any'
@@ -832,6 +844,19 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
             .filter(Boolean)
             .join(' · ') || (isUrgent ? 'Urgent shift protocol' : 'Standard shift protocol'),
         },
+      }
+
+      const cleanPhone = String(form.contactPhone || user?.phone || '').trim()
+      if (cleanPhone && cleanPhone !== user?.phone) {
+        try {
+          await profileService.updateCustomerProfile({
+            phone: cleanPhone,
+            mobile: cleanPhone,
+          })
+          if (updateProfile) {
+            updateProfile({ phone: cleanPhone })
+          }
+        } catch (_) {}
       }
 
       if (isMongoObjectId(preselectedId)) {
@@ -1065,7 +1090,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                             <div className="flex items-center justify-between gap-2">
                               <h4 className="font-display text-sm font-bold text-ink">{svc.name}</h4>
                               <span className="font-mono text-xs font-semibold text-primary-700">
-                                {formatCurrency(svc.baseHourlyRate || svc.startingPrice || 499)}/hr
+                                {formatCurrency(svc.baseHourlyRate || svc.startingPrice || 199)}/hr
                               </span>
                             </div>
                             <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">{svc.description}</p>
@@ -1112,14 +1137,27 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                           ))}
                         </Select>
                       </FormField>
-                      <FormField label="Primary health condition / mobility">
+                      <FormField
+                        label="Contact mobile number"
+                        required
+                        hint={user?.phone ? 'Confirmed on file · caretakers call to coordinate arrival' : 'Required — used for arrival calls & SMS shift alerts'}
+                      >
                         <Input
-                          placeholder="e.g. Post-stroke recovery, bedbound"
-                          value={form.requirements}
-                          onChange={(e) => set({ requirements: e.target.value })}
+                          type="tel"
+                          placeholder="e.g. 98765 43210"
+                          value={form.contactPhone}
+                          onChange={(e) => set({ contactPhone: e.target.value })}
                         />
                       </FormField>
                     </div>
+
+                    <FormField label="Primary health condition / mobility">
+                      <Input
+                        placeholder="e.g. Post-stroke recovery, bedbound"
+                        value={form.requirements}
+                        onChange={(e) => set({ requirements: e.target.value })}
+                      />
+                    </FormField>
 
                     {/* Preferred Caretaker Gender Selection */}
                     <div className="pt-2">
@@ -1560,6 +1598,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     <SummaryGrid
                       items={[
                         { icon: UserRound, label: 'Patient', value: `${form.patientName} (${form.patientAge} yrs, ${form.relation})` },
+                        { icon: Phone, label: 'Contact Phone', value: form.contactPhone || user?.phone || 'On file' },
                         {
                           icon: UserRound,
                           label: 'Preferred Caretaker',

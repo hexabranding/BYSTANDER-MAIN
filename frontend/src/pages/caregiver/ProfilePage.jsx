@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { Eye, Home, MapPin, Save, ShieldCheck } from 'lucide-react'
+import { Eye, Home, Mail, MapPin, Phone, Save, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
@@ -49,10 +49,11 @@ export function ProfilePage() {
   } = useForm({
     defaultValues: {
       name: caregiver?.name || user?.name || '',
+      phone: caregiver?.phone || user?.phone || '',
       gender: caregiver?.gender || 'Female',
       qualification: caregiver?.qualification || QUALIFICATIONS[0],
       experienceYears: caregiver?.experienceYears ?? 0,
-      hourlyRate: caregiver?.hourlyRate ?? 0,
+      hourlyRate: caregiver?.hourlyRate ?? 200,
       languages: caregiver?.languages || [],
       careSettings: caregiver?.careSettings || ['Home Care'],
       bio: caregiver?.bio || '',
@@ -74,10 +75,11 @@ export function ProfilePage() {
         setRealProfile(data)
         reset({
           name: data.fullName || data.name || user?.name || '',
+          phone: data.phone || data.user?.phone || user?.phone || '',
           gender: data.gender || 'Female',
           qualification: data.qualification || QUALIFICATIONS[0],
           experienceYears: data.experienceYears ?? 0,
-          hourlyRate: data.hourlyRate ?? 0,
+          hourlyRate: data.hourlyRate ?? 200,
           languages: data.languages || [],
           careSettings: data.careSettings || ['Home Care'],
           bio: data.bio || '',
@@ -117,6 +119,11 @@ export function ProfilePage() {
     try {
       const resolvedCity = data.area?.trim() || data.district || 'Kerala'
       const sanitized = {
+        name: data.name?.trim() || '',
+        fullName: data.name?.trim() || '',
+        phone: data.phone?.trim() || '',
+        mobile: data.phone?.trim() || '',
+        qualification: data.qualification,
         gender: data.gender || 'Female',
         bio: data.bio.trim(),
         experienceYears: Number(data.experienceYears) || 0,
@@ -142,6 +149,7 @@ export function ProfilePage() {
       setRealProfile(updated)
       updateProfile({
         name: data.name,
+        phone: data.phone,
         qualification: data.qualification,
         ...sanitized,
       })
@@ -180,9 +188,19 @@ export function ProfilePage() {
                 <h2 className="font-display text-xl font-extrabold text-ink">{caregiver?.name}</h2>
                 <StatusBadge status={caregiver?.verificationStatus || 'Pending'} size="sm" />
               </div>
-              <p className="mt-1 text-sm text-muted">
-                {caregiver?.qualification} · Reg {caregiver?.regNo}
-              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted">
+                <span>{caregiver?.qualification} · Reg {caregiver?.regNo || 'VERIFIED'}</span>
+                <span className="text-faint">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <Phone className="h-3.5 w-3.5 text-faint" />
+                  {realProfile?.phone || caregiver?.phone || user?.phone || 'No mobile on file'}
+                </span>
+                <span className="text-faint">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <Mail className="h-3.5 w-3.5 text-faint" />
+                  {caregiver?.email || user?.email}
+                </span>
+              </div>
               <div className="mt-3 max-w-md">
                 <div className="mb-1.5 flex items-center justify-between text-xs">
                   <span className="font-semibold text-ink-soft">Profile completeness</span>
@@ -268,6 +286,30 @@ export function ProfilePage() {
                 <FormField label="Display name" htmlFor="pf-name" required error={errors.name?.message}>
                   <Input id="pf-name" error={errors.name} {...register('name', { required: 'Name is required' })} />
                 </FormField>
+                <FormField
+                  label="Mobile number"
+                  htmlFor="pf-phone"
+                  required
+                  error={errors.phone?.message}
+                  hint="Emergency shift calls & SMS notifications"
+                >
+                  <Input
+                    id="pf-phone"
+                    type="tel"
+                    placeholder="98765 43210"
+                    error={errors.phone}
+                    {...register('phone', {
+                      required: 'Mobile number is required',
+                      pattern: {
+                        value: /^(\+?[1-9]\d{6,14}|[6-9]\d{9})$/,
+                        message: 'Enter a valid 10-digit mobile number',
+                      },
+                    })}
+                  />
+                </FormField>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label="Qualification" htmlFor="pf-qualification" required>
                   <Select id="pf-qualification" {...register('qualification')}>
                     {QUALIFICATIONS.map((q) => (
@@ -275,6 +317,13 @@ export function ProfilePage() {
                         {q}
                       </option>
                     ))}
+                  </Select>
+                </FormField>
+                <FormField label="Gender" htmlFor="pf-gender" required error={errors.gender?.message}>
+                  <Select id="pf-gender" {...register('gender', { required: 'Gender is required' })}>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Other">Other</option>
                   </Select>
                 </FormField>
               </div>
@@ -359,14 +408,6 @@ export function ProfilePage() {
                     minLength: { value: 80, message: 'Write at least 80 characters so families get to know you' },
                   })}
                 />
-              </FormField>
-
-              <FormField label="Gender" htmlFor="pf-gender" required error={errors.gender?.message}>
-                <Select id="pf-gender" {...register('gender', { required: 'Gender is required' })}>
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Other">Other</option>
-                </Select>
               </FormField>
 
               <div className="pt-3 border-t border-slate-100">

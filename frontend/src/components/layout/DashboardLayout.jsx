@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useData } from '@/context/DataContext'
@@ -14,6 +14,7 @@ import { playBroadcastSound } from '@/utils/sound'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { SosButton } from '@/components/common/SosButton'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+import { PageLoader } from '@/components/common/States'
 import { Sidebar, MobileSidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 
@@ -175,7 +176,9 @@ export function DashboardLayout({ nav, variant = 'customer', sidebarFooter, topb
         />
         <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <ErrorBoundary>
-            <Outlet />
+            <Suspense fallback={<PageLoader />}>
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>

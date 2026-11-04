@@ -34,6 +34,17 @@ export function ErrorState({ title = 'Something went wrong', description, onRetr
   )
 }
 
+export function PageLoader({ message = 'Loading...' }) {
+  return (
+    <div className="flex min-h-[50vh] w-full items-center justify-center py-12">
+      <div className="flex flex-col items-center gap-3">
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-primary-700 border-t-transparent" />
+        <span className="text-xs font-semibold text-slate-500">{message}</span>
+      </div>
+    </div>
+  )
+}
+
 export function Skeleton({ className }) {
   return <div className={cn('animate-shimmer rounded-lg bg-slate-200', className)} />
 }

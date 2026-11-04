@@ -1,4 +1,6 @@
+import { Suspense } from 'react'
 import { Link, Outlet } from 'react-router-dom'
+import { PageLoader } from '@/components/common/States'
 import { ShieldCheck, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 
@@ -122,7 +124,9 @@ export function AuthLayout() {
       <div className="flex min-h-screen flex-col px-5 py-8 sm:px-10 lg:min-h-0 lg:px-14">
         <div className="flex flex-1 items-center justify-center py-8 lg:py-10">
           <div className="w-full max-w-md">
-            <Outlet />
+            <Suspense fallback={<PageLoader />}>
+              <Outlet />
+            </Suspense>
           </div>
         </div>
         <p className="text-center text-xs text-muted">

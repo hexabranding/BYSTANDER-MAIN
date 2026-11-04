@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react'
 import {
   Phone,
   Siren,
@@ -27,7 +27,8 @@ import { Button } from '@/components/common/Button'
 import { Input, Select } from '@/components/forms/FormField'
 import { CardSkeleton } from '@/components/common/States'
 import { fetchAmbulances, recordEmergencyCall } from '@/services/ambulanceService'
-import { AmbulanceMap } from './AmbulanceMap'
+
+const AmbulanceMap = lazy(() => import('./AmbulanceMap'))
 
 const AMBULANCE_TYPES = [
   'All',
@@ -47,6 +48,7 @@ export function AmbulanceDirectory({ userCity = 'All', title = 'Emergency Ambula
   const [city, setCity] = useState(userCity || 'All')
   const [type, setType] = useState('All')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [availableOnly, setAvailableOnly] = useState(false)
   const [radiusKm, setRadiusKm] = useState(30)
   const [viewMode, setViewMode] = useState('split') // 'split' | 'map' | 'cards'
@@ -54,6 +56,14 @@ export function AmbulanceDirectory({ userCity = 'All', title = 'Emergency Ambula
   const [locationStatus, setLocationStatus] = useState('detecting') // 'detecting' | 'detected' | 'denied'
   const [ambulances, setAmbulances] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // 300ms debounce on search input to prevent rapid typing API thrashing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   // 1. Detect device GPS coordinates for 20km proximity calculations
   useEffect(() => {
@@ -84,7 +94,7 @@ export function AmbulanceDirectory({ userCity = 'All', title = 'Emergency Ambula
       const data = await fetchAmbulances({
         city,
         ambulanceType: type,
-        search,
+        search: debouncedSearch,
         availableOnly,
         lat: userCoords?.latitude,
         lng: userCoords?.longitude,
@@ -98,10 +108,10 @@ export function AmbulanceDirectory({ userCity = 'All', title = 'Emergency Ambula
     }
   }
 
-  // Reload when filters or user coordinates change
+  // Reload when filters, debounced search, or user coordinates change
   useEffect(() => {
     loadData()
-  }, [city, type, availableOnly, radiusKm, userCoords])
+  }, [city, type, availableOnly, radiusKm, userCoords, debouncedSearch])
 
   // 3. Heartbeat auto-refresh every 60 seconds for live driver GPS tracking
   useEffect(() => {
@@ -109,7 +119,7 @@ export function AmbulanceDirectory({ userCity = 'All', title = 'Emergency Ambula
       loadData(true)
     }, 60000)
     return () => clearInterval(timer)
-  }, [city, type, availableOnly, radiusKm, userCoords])
+  }, [city, type, availableOnly, radiusKm, userCoords, debouncedSearch])
 
   const handleCall = async (amb) => {
     if (!amb.phone) return
@@ -213,12 +223,30 @@ export function AmbulanceDirectory({ userCity = 'All', title = 'Emergency Ambula
       {/* Interactive Map (Shown in Split & Map View) */}
       {(viewMode === 'split' || viewMode === 'map') && (
         <div className="space-y-2">
-          <AmbulanceMap
-            userCoords={userCoords}
-            ambulances={ambulancesWithinRadius}
-            radiusKm={radiusKm}
-            className={viewMode === 'map' ? 'h-[550px]' : 'h-[360px]'}
-          />
+          <Suspense
+            fallback={
+              <div
+                className={cn(
+                  'relative flex items-center justify-center overflow-hidden rounded-2xl border border-line bg-slate-50',
+                  viewMode === 'map' ? 'h-[550px]' : 'h-[360px]',
+                )}
+              >
+                <div className="flex flex-col items-center gap-2 text-muted">
+                  <span className="h-7 w-7 animate-spin rounded-full border-2 border-primary-700 border-t-transparent" />
+                  <span className="text-xs font-semibold text-slate-500">
+                    Loading emergency radar map...
+                  </span>
+                </div>
+              </div>
+            }
+          >
+            <AmbulanceMap
+              userCoords={userCoords}
+              ambulances={ambulancesWithinRadius}
+              radiusKm={radiusKm}
+              className={viewMode === 'map' ? 'h-[550px]' : 'h-[360px]'}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -284,7 +312,11 @@ export function AmbulanceDirectory({ userCity = 'All', title = 'Emergency Ambula
                 placeholder="e.g. MIMS, KL 11, Rajesh"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && loadData()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setDebouncedSearch(search)
+                  }
+                }}
               />
             </div>
 

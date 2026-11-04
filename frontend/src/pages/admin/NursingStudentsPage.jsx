@@ -88,12 +88,12 @@ export function NursingStudentsPage() {
     const pending = students.filter(
       (s) => s.verificationStatus === 'Pending' || s.verificationStatus === 'Under Review'
     ).length
-    const rated = students.filter((s) => Number(s.rating) > 0)
+    const rated = students.filter((s) => Number(s.ratingCount ?? s.reviewCount ?? 0) > 0)
     const avg = rated.length
       ? (rated.reduce((sum, s) => sum + Number(s.rating || 0), 0) / rated.length).toFixed(1)
-      : '5.0'
+      : '—'
 
-    return { total, verified, pending, avg }
+    return { total, verified, pending, avg, hasRatings: rated.length > 0 }
   }, [students])
 
   // Search and filter logic against real caregiver fields
@@ -215,12 +215,14 @@ export function NursingStudentsPage() {
     {
       key: 'rating',
       header: 'Rating',
-      render: (s) =>
-        Number(s.rating) > 0 ? (
-          <RatingStars value={Number(s.rating)} size={13} showValue />
-        ) : (
-          <span className="text-xs text-faint">Not rated</span>
-        ),
+      render: (s) => (
+        <RatingStars
+          value={Number(s.rating || 0)}
+          count={s.ratingCount ?? s.reviewCount ?? 0}
+          size={13}
+          showValue
+        />
+      ),
     },
     {
       key: 'verificationStatus',
@@ -306,10 +308,10 @@ export function NursingStudentsPage() {
         />
         <StatCard
           label="Average rating"
-          value={stats.avg}
+          value={stats.hasRatings ? `${stats.avg} / 5` : '—'}
           icon={Star}
           tone="accent"
-          hint="From customer bookings"
+          hint={stats.hasRatings ? 'From customer bookings' : 'No rated shifts yet'}
           delay={0.15}
         />
       </div>
@@ -476,11 +478,13 @@ export function NursingStudentsPage() {
                 </div>
                 <div className="h-8 w-px bg-line" />
                 <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Rating</p>
-                  <p className="font-display text-lg font-extrabold text-ink flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                    {Number(selected.rating || 5).toFixed(1)}
-                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted mb-1">Rating</p>
+                  <RatingStars
+                    value={Number(selected.rating || 0)}
+                    count={selected.ratingCount ?? selected.reviewCount ?? 0}
+                    size={14}
+                    showValue
+                  />
                 </div>
               </div>
             </div>

@@ -24,6 +24,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [facingMode, setFacingMode] = useState('user')
+  const [streamReady, setStreamReady] = useState(false)
   const [otp, setOtp] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [now, setNow] = useState(() => new Date().toISOString())
@@ -37,12 +38,57 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setStreamReady(false)
     setCameraActive(false)
   }, [])
+
+  const bindStreamToVideo = useCallback((videoEl, stream) => {
+    if (!videoEl || !stream) return
+    try {
+      if (videoEl.srcObject !== stream) {
+        videoEl.srcObject = stream
+      }
+      videoEl.muted = true
+      videoEl.playsInline = true
+      videoEl.setAttribute('playsinline', 'true')
+      videoEl.setAttribute('muted', 'true')
+
+      const tryPlay = () => {
+        const p = videoEl.play()
+        if (p && typeof p.then === 'function') {
+          p.then(() => {
+            setStreamReady(true)
+          }).catch((err) => {
+            console.warn('[CheckInOutModal] Autoplay was prevented:', err)
+          })
+        }
+      }
+
+      videoEl.onloadedmetadata = tryPlay
+      videoEl.oncanplay = tryPlay
+      tryPlay()
+    } catch (err) {
+      console.warn('[CheckInOutModal] bindStreamToVideo error:', err)
+    }
+  }, [])
+
+  const attachVideoRef = useCallback(
+    (videoEl) => {
+      videoRef.current = videoEl
+      if (videoEl && streamRef.current) {
+        bindStreamToVideo(videoEl, streamRef.current)
+      }
+    },
+    [bindStreamToVideo]
+  )
 
   const startCamera = async (overrideFacing) => {
     setCameraError('')
     setErrorMsg('')
+    setStreamReady(false)
     const targetFacing = overrideFacing || facingMode
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -55,14 +101,28 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
         streamRef.current.getTracks().forEach((track) => track.stop())
         streamRef.current = null
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: targetFacing, width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      })
+      let stream = null
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: targetFacing ? { ideal: targetFacing } : 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+          audio: false,
+        })
+      } catch (modeErr) {
+        console.warn('[CheckInOutModal] Facing constraint failed, trying basic video:', modeErr)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        })
+      }
+
       streamRef.current = stream
       setCameraActive(true)
       if (videoRef.current) {
-        videoRef.current.srcObject = stream
+        bindStreamToVideo(videoRef.current, stream)
       }
     } catch (err) {
       stopCamera()
@@ -79,16 +139,20 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     startCamera(nextFacing)
   }
 
-  // Ensure video element receives the stream when rendered
+  // Ensure video element receives the stream if cameraActive toggles
   useEffect(() => {
     if (cameraActive && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current
+      bindStreamToVideo(videoRef.current, streamRef.current)
     }
-  }, [cameraActive])
+  }, [cameraActive, bindStreamToVideo])
 
   const snapPhoto = () => {
     if (!videoRef.current) return
     const video = videoRef.current
+    if (!video.videoWidth || !video.videoHeight) {
+      setErrorMsg('Camera stream is still starting. Please wait a second and try again.')
+      return
+    }
     const canvas = document.createElement('canvas')
     const width = video.videoWidth || 640
     const height = video.videoHeight || 480
@@ -266,18 +330,36 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
           ) : cameraActive ? (
             /* State B: Live Camera Stream View */
             <div className="space-y-3 text-center">
-              <div className="relative overflow-hidden rounded-xl bg-black aspect-video flex items-center justify-center shadow-inner">
+              <div className="relative overflow-hidden rounded-xl bg-slate-950 aspect-video flex items-center justify-center shadow-inner">
                 <video
-                  ref={videoRef}
+                  ref={attachVideoRef}
                   autoPlay
                   playsInline
                   muted
+                  onLoadedMetadata={(e) => {
+                    e.currentTarget.play().catch(() => {})
+                    setStreamReady(true)
+                  }}
+                  onCanPlay={(e) => {
+                    e.currentTarget.play().catch(() => {})
+                    setStreamReady(true)
+                  }}
+                  onPlaying={() => setStreamReady(true)}
                   className={cn(
-                    'h-full w-full object-cover',
-                    facingMode === 'user' && '-scale-x-100'
+                    'h-full w-full object-cover transition-opacity duration-200',
+                    facingMode === 'user' && '-scale-x-100',
+                    streamReady ? 'opacity-100' : 'opacity-0'
                   )}
                 />
-                <div className="absolute top-2 left-2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white flex items-center gap-1.5 backdrop-blur-xs">
+
+                {!streamReady && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900 text-slate-300 text-xs">
+                    <RefreshCw className="h-6 w-6 animate-spin text-emerald-400" />
+                    <span>Connecting camera feed...</span>
+                  </div>
+                )}
+
+                <div className="absolute top-2 left-2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white flex items-center gap-1.5 backdrop-blur-xs z-10">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                   Live On-Site Camera
                 </div>
@@ -286,7 +368,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   type="button"
                   onClick={toggleFacing}
                   title="Switch camera (Front / Rear)"
-                  className="absolute top-2 right-2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80 transition-colors"
+                  className="absolute top-2 right-2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80 transition-colors z-10"
                 >
                   <SwitchCamera className="h-4 w-4" />
                 </button>
@@ -299,6 +381,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   size="sm"
                   onClick={snapPhoto}
                   icon={Camera}
+                  disabled={!streamReady}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold px-6"
                 >
                   Take Photo Now

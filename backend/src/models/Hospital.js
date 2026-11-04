@@ -90,14 +90,21 @@ const hospitalSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate hospital reference code if not provided (e.g. HS-101)
-hospitalSchema.pre('save', async function (next) {
+// Auto-generate hospital reference code if not provided (e.g. HS-106)
+hospitalSchema.pre('save', async function () {
   if (!this.code) {
-    const count = await mongoose.model('Hospital').countDocuments();
-    this.code = `HS-${String(count + 101).padStart(3, '0')}`;
+    const last = await mongoose.model('Hospital').findOne().sort({ code: -1 }).select('code');
+    let nextNum = 101;
+    if (last && last.code && last.code.startsWith('HS-')) {
+      const parsed = parseInt(last.code.replace('HS-', ''), 10);
+      if (!isNaN(parsed)) {
+        nextNum = parsed + 1;
+      }
+    }
+    this.code = `HS-${nextNum}`;
   }
-  next();
 });
 
 const Hospital = mongoose.model('Hospital', hospitalSchema);
 export default Hospital;
+

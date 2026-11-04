@@ -346,3 +346,4 @@ export default {
   updateHospital,
   deleteHospital,
 };
+

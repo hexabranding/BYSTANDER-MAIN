@@ -26,3 +26,4 @@ router.patch('/:id/contract-status', hospitalController.toggleHospitalContract);
 router.delete('/:id', hospitalController.deleteHospital);
 
 export default router;
+

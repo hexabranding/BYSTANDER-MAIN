@@ -35,7 +35,6 @@ const CustomerBookings = lazy(() => import('@/pages/customer/BookingsPage'))
 const CustomerBookingDetails = lazy(() => import('@/pages/customer/BookingDetailsPage'))
 const CustomerCaregivers = lazy(() => import('@/pages/customer/CaregiversPage'))
 const AcceptedCaregiversPage = lazy(() => import('@/pages/customer/AcceptedCaregiversPage'))
-const CustomerPayments = lazy(() => import('@/pages/customer/PaymentsPage'))
 const CustomerInvoices = lazy(() => import('@/pages/customer/InvoicesPage'))
 const CustomerMessages = lazy(() => import('@/pages/customer/MessagesPage'))
 const CustomerComplaints = lazy(() => import('@/pages/customer/ComplaintsPage'))
@@ -122,7 +121,7 @@ export function AppRoutes() {
           <Route path="bookings/:id" element={<CustomerBookingDetails />} />
           <Route path="accepted-caretakers" element={<AcceptedCaregiversPage />} />
           <Route path="caregivers" element={<AcceptedCaregiversPage />} />
-          <Route path="payments" element={<CustomerPayments />} />
+          <Route path="payments" element={<Navigate to="/customer/invoices" replace />} />
           <Route path="invoices" element={<CustomerInvoices />} />
           <Route path="messages" element={<CustomerMessages />} />
           <Route path="complaints" element={<CustomerComplaints />} />

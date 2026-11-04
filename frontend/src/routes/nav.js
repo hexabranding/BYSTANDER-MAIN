@@ -40,7 +40,6 @@ export const CUSTOMER_NAV = [
   {
     section: 'Payments',
     items: [
-      { label: 'Payments', to: '/customer/payments', icon: Wallet },
       { label: 'Invoices', to: '/customer/invoices', icon: Receipt },
     ],
   },

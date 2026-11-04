@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   ArrowRight,
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
   Clock,
-  IndianRupee,
   MessageSquare,
   Receipt,
   ShieldAlert,
@@ -31,7 +29,6 @@ import { ProgressBar } from '@/components/common/Tabs'
 import { EmptyState } from '@/components/common/States'
 import { RatingModal } from '@/components/booking/RatingModal'
 import { bookingService } from '@/services/bookingService'
-import { financeService } from '@/services/financeService'
 import { notificationService } from '@/services/notificationService'
 import { reviewService } from '@/services/reviewService'
 
@@ -60,7 +57,6 @@ export function DashboardPage() {
   useDocumentTitle('Dashboard')
   const { user } = useAuth()
   const [realBookings, setRealBookings] = useState([])
-  const [realPayments, setRealPayments] = useState(null)
   const [realNotifications, setRealNotifications] = useState([])
   const [rateTarget, setRateTarget] = useState(null)
 
@@ -71,17 +67,13 @@ export function DashboardPage() {
 
   const loadDashboard = useCallback(async () => {
     try {
-      const [bookingsRes, paymentsRes, notificationsRes] = await Promise.allSettled([
+      const [bookingsRes, notificationsRes] = await Promise.allSettled([
         bookingService.getBookings({ limit: 50 }),
-        financeService.getCustomerPayments({ limit: 50 }),
         notificationService.getNotifications({ limit: 10 }),
       ])
 
       if (bookingsRes.status === 'fulfilled') {
         setRealBookings(bookingsRes.value?.bookings || [])
-      }
-      if (paymentsRes.status === 'fulfilled') {
-        setRealPayments(paymentsRes.value || null)
       }
       if (notificationsRes.status === 'fulfilled') {
         setRealNotifications(notificationsRes.value?.notifications || [])
@@ -115,7 +107,7 @@ export function DashboardPage() {
     return null
   }, [])
 
-  const { myBookings, active, upcoming, previous, completedCount, totalSpent } = useMemo(() => {
+  const { myBookings, active, upcoming, previous, completedCount } = useMemo(() => {
     const list = realBookings || []
     const today = new Date().toISOString().slice(0, 10)
     const inProgress = list.find((b) => b.status === 'In Progress') || list.find((b) => b.status === 'Confirmed') || null
@@ -124,9 +116,6 @@ export function DashboardPage() {
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     const completed = list.filter((b) => b.status === 'Completed')
     const previousList = [...completed].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 3)
-    const spent = realPayments?.stats?.totalSpent ?? list
-      .filter((b) => b.status !== 'Cancelled')
-      .reduce((sum, b) => sum + (b.total || 0), 0)
 
     return {
       myBookings: list,
@@ -134,9 +123,8 @@ export function DashboardPage() {
       upcoming: upcomingList,
       previous: previousList,
       completedCount: completed.length,
-      totalSpent: spent,
     }
-  }, [realBookings, realPayments])
+  }, [realBookings])
 
   const pendingRequestsWithApplicants = useMemo(() => {
     return myBookings.filter(
@@ -147,44 +135,6 @@ export function DashboardPage() {
   const totalApplicantsCount = useMemo(() => {
     return pendingRequestsWithApplicants.reduce((sum, b) => sum + (b.applicants?.length || 0), 0)
   }, [pendingRequestsWithApplicants])
-
-  const spendChartData = useMemo(() => {
-    const months = []
-    const now = new Date()
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const monthKey = d.toISOString().slice(0, 7)
-      const label = d.toLocaleString('default', { month: 'short' })
-      months.push({ key: monthKey, month: label, spend: 0 })
-    }
-
-    const txs = realPayments?.transactions || []
-    if (txs.length > 0) {
-      txs.forEach((t) => {
-        if (t.status === 'refunded' || t.status === 'Refunded') return
-        const txDate = t.createdAt || t.date
-        if (!txDate) return
-        const key = new Date(txDate).toISOString().slice(0, 7)
-        const found = months.find((m) => m.key === key)
-        if (found) {
-          found.spend += Number(t.amount || 0)
-        }
-      })
-    } else {
-      myBookings.forEach((b) => {
-        if (b.status === 'Cancelled') return
-        const bDate = b.date || b.startDateTime || b.createdAt
-        if (!bDate) return
-        const key = new Date(bDate).toISOString().slice(0, 7)
-        const found = months.find((m) => m.key === key)
-        if (found) {
-          found.spend += Number(b.total || 0)
-        }
-      })
-    }
-
-    return months.map(({ month, spend }) => ({ month, spend }))
-  }, [realPayments, myBookings])
 
   const activity = useMemo(() => {
     return (realNotifications || []).slice(0, 6)
@@ -238,7 +188,7 @@ export function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="Active bookings"
           value={active ? 1 : 0}
@@ -263,15 +213,6 @@ export function DashboardPage() {
           trend={12}
           hint="Across all time"
           delay={0.1}
-        />
-        <StatCard
-          label="Total spending"
-          value={formatCurrency(totalSpent)}
-          icon={IndianRupee}
-          tone="info"
-          trend={8}
-          hint={`${myBookings.length} bookings lifetime`}
-          delay={0.15}
         />
       </div>
 
@@ -487,49 +428,7 @@ export function DashboardPage() {
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader
-              title="Your spending"
-              subtitle="Last 6 months across all services"
-              action={
-                <Button to="/customer/payments" variant="link" size="sm" iconRight={ArrowRight}>
-                  Payments
-                </Button>
-              }
-            />
-            <CardBody>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={spendChartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="customerSpendFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0F766E" stopOpacity={0.28} />
-                        <stop offset="100%" stopColor="#0F766E" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                    <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 12, fill: '#64748B' }}
-                      tickFormatter={(v) => `₹${v / 1000}k`}
-                    />
-                    <Tooltip
-                      formatter={(value) => [formatCurrency(value), 'Spend']}
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: '1px solid #E2E8F0',
-                        boxShadow: '0 10px 30px -18px rgba(23,43,58,0.35)',
-                        fontSize: 13,
-                      }}
-                    />
-                    <Area type="monotone" dataKey="spend" stroke="#0F766E" strokeWidth={2.5} fill="url(#customerSpendFill)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardBody>
-          </Card>
+
         </div>
 
         <div className="space-y-6">

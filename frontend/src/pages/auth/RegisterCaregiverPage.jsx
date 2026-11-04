@@ -14,11 +14,13 @@ import {
   EyeOff,
   FileCheck2,
   Home,
+  Info,
   Landmark,
   Loader2,
   LocateFixed,
   MapPin,
   PhoneCall,
+  Radio,
   UserRound,
 } from 'lucide-react'
 import apiClient from '@/services/apiClient'
@@ -759,7 +761,10 @@ export function RegisterCaregiverPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                     <div className="flex items-center gap-2">
                       <Home className="h-4 w-4 text-primary-700" />
-                      <h3 className="text-sm font-bold text-ink">Residential Address</h3>
+                      <h3 className="text-sm font-bold text-ink">Working Base / Residential Address</h3>
+                      <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-bold text-primary-800">
+                        30 km Job Zone
+                      </span>
                     </div>
 
                     <button
@@ -781,9 +786,21 @@ export function RegisterCaregiverPage() {
                       )}
                     </button>
                   </div>
-                  <p className="text-xs text-muted mb-3">
-                    Complete physical address required for verified registration and zone matching in Kerala.
-                  </p>
+
+                  {/* Informative Job Zone Guidance Card */}
+                  <div className="mb-3 mt-1.5 rounded-xl border border-primary-200/90 bg-primary-50/70 p-3 text-xs">
+                    <div className="flex items-start gap-2.5">
+                      <Radio className="h-4 w-4 shrink-0 text-primary-700 mt-0.5 animate-pulse" />
+                      <div>
+                        <p className="font-semibold text-primary-950">
+                          Where do you want to receive patient care shifts?
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-primary-800">
+                          Please enter the location where you are <strong>currently living or available to work</strong> (hostel, rental, or family home). Patient bookings and urgent dispatch alerts are broadcasted within a <strong>30 km radius</strong> of this address.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
                   {locationCaptured && (
                     <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs font-medium text-emerald-900">

@@ -560,6 +560,61 @@ export const inviteAdminMember = async (payload) => {
   return response?.data || response
 }
 
+/**
+ * Retrieves list of partner hospitals with stats.
+ * @param {Object} [query={}] - Optional filters (search, contractStatus, district, city)
+ * @returns {Promise<{ hospitals: Array, stats: Object }>}
+ */
+export const getHospitals = async (query = {}) => {
+  const response = await apiClient.get('/admin/hospitals', { params: query })
+  return {
+    hospitals: response?.data || [],
+    stats: response?.stats || { total: 0, active: 0, onHold: 0, beds: 0 },
+  }
+}
+
+/**
+ * Creates a new partner hospital.
+ * @param {Object} payload - Hospital creation fields
+ * @returns {Promise<Object>} Created hospital
+ */
+export const createHospital = async (payload) => {
+  const response = await apiClient.post('/admin/hospitals', payload)
+  return response?.data || response
+}
+
+/**
+ * Updates a partner hospital's contract status (Active / On Hold).
+ * @param {string} id - Hospital ObjectId
+ * @param {string} [status] - Optional status
+ * @returns {Promise<Object>} Updated hospital
+ */
+export const toggleHospitalContract = async (id, status) => {
+  const response = await apiClient.patch(`/admin/hospitals/${id}/contract-status`, { status })
+  return response?.data || response
+}
+
+/**
+ * Updates hospital details.
+ * @param {string} id - Hospital ObjectId
+ * @param {Object} payload - Updated fields
+ * @returns {Promise<Object>} Updated hospital
+ */
+export const updateHospital = async (id, payload) => {
+  const response = await apiClient.put(`/admin/hospitals/${id}`, payload)
+  return response?.data || response
+}
+
+/**
+ * Deletes a partner hospital.
+ * @param {string} id - Hospital ObjectId
+ * @returns {Promise<Object>}
+ */
+export const deleteHospital = async (id) => {
+  const response = await apiClient.delete(`/admin/hospitals/${id}`)
+  return response?.data || response
+}
+
 export const adminService = {
   getVerifications,
   getVerificationById,
@@ -593,6 +648,11 @@ export const adminService = {
   getAdminSettings,
   updateAdminSettings,
   inviteAdminMember,
+  getHospitals,
+  createHospital,
+  toggleHospitalContract,
+  updateHospital,
+  deleteHospital,
 }
 
 export default adminService

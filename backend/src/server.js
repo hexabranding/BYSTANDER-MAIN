@@ -33,6 +33,7 @@ import ambulanceRoutes from './routes/ambulanceRoutes.js';
 import testPaymentRoutes from './routes/testPaymentRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import geoRoutes from './routes/geoRoutes.js';
+import hospitalRoutes from './routes/hospitalRoutes.js';
 import { assertValidJwtSecret } from './utils/auth.js';
 import { assertValidOtpSecret } from './utils/otpUtils.js';
 
@@ -127,6 +128,8 @@ app.use('/api/admin/messages', adminModerationRoutes);
 app.use('/api/admin/complaints', adminComplaintRoutes);
 app.use('/api/admin/blacklist', adminBlacklistRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/admin/hospitals', hospitalRoutes);
+app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/admin/customers', (req, res, next) => {
   req.url = '/customers' + (req.url === '/' ? '' : req.url);
   adminUserRoutes(req, res, next);

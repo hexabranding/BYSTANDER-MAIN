@@ -200,7 +200,12 @@ export const getCaregivers = async (query = {}) => {
   }
 
   if (qualification && qualification !== 'All' && qualification.trim().length > 0) {
-    profileFilter.qualification = qualification.trim();
+    const qLower = qualification.trim().toLowerCase();
+    if (qLower === 'nursing_student' || qLower.includes('nursing student')) {
+      profileFilter.qualification = { $in: ['nursing_student', 'Nursing Student', 'Nursing Student (Final Year)'] };
+    } else {
+      profileFilter.qualification = qualification.trim();
+    }
   }
 
   // Handle user account status filter

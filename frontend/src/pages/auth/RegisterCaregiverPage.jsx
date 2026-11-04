@@ -242,11 +242,23 @@ export function RegisterCaregiverPage() {
           setLocationCaptured({
             lat: geo.latitude,
             lng: geo.longitude,
-            area: watchedArea || geo.displayName || '',
-            district: watchedDistrict || 'Kerala',
-            city: watchedArea || watchedDistrict,
+            area: geo.locality || watchedArea || geo.displayName || '',
+            district: geo.district || watchedDistrict || 'Kerala',
+            city: geo.city || watchedArea || watchedDistrict,
             isManual: true,
           })
+          // Smart PIN & Locality Auto-fill: auto-select district from authoritative postal data
+          if (geo.district) {
+            const matchedDistrict = KERALA_DISTRICTS.find(
+              (d) => d.toLowerCase() === String(geo.district).toLowerCase()
+            )
+            if (matchedDistrict && matchedDistrict !== watchedDistrict) {
+              setValue('district', matchedDistrict, { shouldValidate: true, shouldDirty: true })
+            }
+          }
+          if (!watchedArea?.trim() && geo.locality) {
+            setValue('area', geo.locality, { shouldValidate: true, shouldDirty: true })
+          }
         }
       } catch (_) {
         // Non-blocking fallback

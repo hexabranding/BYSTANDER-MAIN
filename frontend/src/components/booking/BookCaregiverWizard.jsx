@@ -457,19 +457,36 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         const geo = geoRes?.data || geoRes
         if (geo?.latitude && geo?.longitude) {
           lastResolvedRef.current = key
-          setForm((prev) => ({
-            ...prev,
-            coordinates: {
-              latitude: geo.latitude,
-              longitude: geo.longitude,
-            },
-          }))
+          setForm((prev) => {
+            const next = {
+              ...prev,
+              coordinates: {
+                latitude: geo.latitude,
+                longitude: geo.longitude,
+              },
+            }
+            // Smart PIN & Locality Auto-fill: auto-select or correct district from authoritative postal data
+            if (geo.district) {
+              const matchedDistrict = KERALA_DISTRICTS.find(
+                (d) => d.toLowerCase() === String(geo.district).toLowerCase()
+              )
+              if (matchedDistrict && matchedDistrict !== prev.district) {
+                next.district = matchedDistrict
+              }
+            }
+            // Auto-populate locality if empty and post office / town is resolved
+            if (!prev.area?.trim() && geo.locality) {
+              next.area = geo.locality
+            }
+            return next
+          })
           setLocationCaptured((prev) => ({
             ...(prev || {}),
             lat: geo.latitude,
             lng: geo.longitude,
-            area: form.area || prev?.area,
-            city: form.city || form.district,
+            area: geo.locality || form.area || prev?.area,
+            city: geo.city || geo.district || form.district,
+            district: geo.district || form.district,
             accuracy: 25,
             isManual: true,
           }))

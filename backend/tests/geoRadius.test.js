@@ -153,3 +153,17 @@ test('GeoForward 2: forwardGeocode resolves address and PIN code to valid coordi
   assert.ok(fullResult.longitude > 75.0 && fullResult.longitude < 76.0);
 });
 
+test('GeoForward 3: PIN code and locality priority accurately resolves border towns and official district', async () => {
+  const result = await forwardGeocode({
+    street: 'kinfra it park near Calicut University',
+    area: 'Thenhipalam',
+    district: 'Kozhikode', // user typed Kozhikode, but Thenhipalam is Malappuram
+    pincode: '673634',
+  });
+  assert.ok(result !== null);
+  assert.ok(Math.abs(result.latitude - 11.134) < 0.05 || Math.abs(result.latitude - 11.15) < 0.05);
+  assert.ok(Math.abs(result.longitude - 75.88) < 0.05);
+  assert.equal(result.district, 'Malappuram');
+  assert.equal(result.pincode, '673634');
+});
+

@@ -311,18 +311,58 @@ export const forwardGeocode = async (params) => {
     rawQuery = (params.q || params.query || '').trim();
   }
 
-  // 1. Build queries in descending order of specificity
-  const queries = [];
+  // 1. Authoritative India Post PIN Code Lookup (when 6-digit PIN is provided)
+  let officialDistrict = '';
+  let poName = '';
+  let poBlock = '';
+  if (pincode && pincode.length === 6) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2500);
+      const postRes = await fetch(`https://api.postalpincode.in/pincode/${pincode}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (postRes.ok) {
+        const postData = await postRes.json();
+        if (
+          postData[0]?.Status === 'Success' &&
+          Array.isArray(postData[0]?.PostOffice) &&
+          postData[0].PostOffice.length > 0
+        ) {
+          const po = postData[0].PostOffice[0];
+          officialDistrict = (po.District || '').replace(/\s+District$/i, '').trim();
+          poName = (po.Name || '').trim();
+          poBlock = (po.Block || '').trim();
+        }
+      }
+    } catch (_) {}
+  }
 
-  // Check if any known town from CITY_COORDINATES is mentioned in address or rawQuery
+  // Detect town from area/locality, poName, or city (never from raw address text to prevent false positives like "near Calicut University")
   let detectedTown = '';
-  const searchInText = `${address} ${rawQuery} ${area}`.toLowerCase();
+  const searchInLocality = `${area} ${poName} ${city} ${rawQuery}`.toLowerCase();
   for (const townName of Object.keys(CITY_COORDINATES)) {
-    if (townName.length >= 4 && new RegExp(`\\b${townName}\\b`, 'i').test(searchInText)) {
+    if (townName.length >= 4 && new RegExp(`\\b${townName}\\b`, 'i').test(searchInLocality)) {
       detectedTown = townName;
       break;
     }
   }
+
+  // If still no detected town, check address only if area and pincode are empty
+  if (!detectedTown && !area && !pincode && address) {
+    const searchInAddress = address.toLowerCase();
+    for (const townName of Object.keys(CITY_COORDINATES)) {
+      if (townName.length >= 4 && new RegExp(`\\b${townName}\\b`, 'i').test(searchInAddress)) {
+        detectedTown = townName;
+        break;
+      }
+    }
+  }
+
+  // 2. Build OpenStreetMap Nominatim queries in strict order of geographic specificity
+  const queries = [];
+  const targetDistrict = officialDistrict || district;
 
   if (rawQuery) {
     queries.push(rawQuery);
@@ -331,34 +371,46 @@ export const forwardGeocode = async (params) => {
     }
   }
 
-  // Query A: Full street + area/town + district + pincode + India
-  const resolvedArea = area || detectedTown;
-  const fullParts = [address, resolvedArea, district, state, pincode, 'India'].filter(Boolean);
-  if (fullParts.length > 2) {
-    queries.push(fullParts.join(', '));
+  // Query 1: Locality + Target District + State + India
+  if (area && targetDistrict) {
+    queries.push(`${area}, ${targetDistrict}, ${state}, India`);
   }
 
-  // Query B: Town / Locality + District + State + PIN
-  const townParts = [resolvedArea || city, district, state, pincode, 'India'].filter(Boolean);
-  if (townParts.length >= 2) {
-    queries.push(townParts.join(', '));
+  // Query 2: Locality alone in State (bypasses potential district mismatch)
+  if (area) {
+    queries.push(`${area}, ${state}, India`);
   }
 
-  // Query C: Detected Town + District + Kerala
-  if (detectedTown) {
-    queries.push(`${detectedTown}, ${district ? district + ', ' : ''}Kerala, India`);
+  // Query 3: Post Office Name from PIN + District
+  if (poName && targetDistrict) {
+    queries.push(`${poName}, ${targetDistrict}, ${state}, India`);
+  }
+  if (poName) {
+    queries.push(`${poName}, ${state}, India`);
   }
 
-  // Query D: PIN code + State + India
+  // Query 4: 6-digit PIN code (authoritative postal delivery area)
   if (pincode && pincode.length === 6) {
-    queries.push(`${pincode}, Kerala, India`);
+    queries.push(`${pincode}, ${state}, India`);
     queries.push(`${pincode}, India`);
+  }
+
+  // Query 5: Full address with resolved locality
+  const resolvedLocality = area || poName || detectedTown;
+  if (address && resolvedLocality) {
+    queries.push(`${address}, ${resolvedLocality}, ${targetDistrict ? targetDistrict + ', ' : ''}${state}, India`);
+  }
+
+  // Query 6: Detected Town + District
+  if (detectedTown) {
+    queries.push(`${detectedTown}, ${targetDistrict ? targetDistrict + ', ' : ''}${state}, India`);
+    queries.push(`${detectedTown}, ${state}, India`);
   }
 
   // Deduplicate queries
   const uniqueQueries = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
 
-  // Try OpenStreetMap Nominatim for each query
+  // Execute Nominatim search
   for (const query of uniqueQueries) {
     try {
       const controller = new AbortController();
@@ -385,6 +437,11 @@ export const forwardGeocode = async (params) => {
               longitude: Number(lng.toFixed(6)),
               displayName: first.display_name,
               source: 'nominatim',
+              district: officialDistrict || district,
+              city: poName || area || city || officialDistrict || district,
+              locality: area || poName,
+              pincode: pincode,
+              state: state,
             };
           }
         }
@@ -394,39 +451,29 @@ export const forwardGeocode = async (params) => {
     }
   }
 
-  // 2. India Post official API for PIN code
-  if (pincode && pincode.length === 6) {
-    try {
-      const postRes = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
-      if (postRes.ok) {
-        const postData = await postRes.json();
-        if (
-          postData[0]?.Status === 'Success' &&
-          Array.isArray(postData[0]?.PostOffice) &&
-          postData[0].PostOffice.length > 0
-        ) {
-          const po = postData[0].PostOffice[0];
-          const poName = po.Name;
-          const poDistrict = po.District;
-          const poCandidate = (poName || '').toLowerCase().trim();
-          if (CITY_COORDINATES[poCandidate]) {
-            return {
-              latitude: CITY_COORDINATES[poCandidate].latitude,
-              longitude: CITY_COORDINATES[poCandidate].longitude,
-              displayName: `${poName}, ${poDistrict}, ${pincode}`,
-              source: 'india_post_dictionary',
-            };
-          }
-        }
-      }
-    } catch (_) {}
+  // 3. Fallback: India Post Dictionary Match
+  if (poName && CITY_COORDINATES[poName.toLowerCase()]) {
+    const coords = CITY_COORDINATES[poName.toLowerCase()];
+    return {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      displayName: `${poName}, ${officialDistrict || district}, ${pincode}`,
+      source: 'india_post_dictionary',
+      district: officialDistrict || district,
+      city: poName,
+      locality: area || poName,
+      pincode: pincode,
+      state: state,
+    };
   }
 
-  // 3. Fallback: Local Kerala & National Metro Dictionary
+  // 4. Fallback: Local Kerala & National Metro Dictionary
   const candidates = [
     area,
+    poName,
+    detectedTown,
     city,
-    district,
+    targetDistrict,
     address,
     rawQuery,
   ]
@@ -440,6 +487,11 @@ export const forwardGeocode = async (params) => {
         longitude: CITY_COORDINATES[name].longitude,
         displayName: `${name}, Kerala`,
         source: 'local_dictionary',
+        district: officialDistrict || district,
+        city: poName || area || city,
+        locality: area || poName,
+        pincode: pincode,
+        state: state,
       };
     }
     const simplified = name.split(',')[0].trim();
@@ -449,6 +501,11 @@ export const forwardGeocode = async (params) => {
         longitude: CITY_COORDINATES[simplified].longitude,
         displayName: `${simplified}, Kerala`,
         source: 'local_dictionary',
+        district: officialDistrict || district,
+        city: poName || area || city,
+        locality: area || poName,
+        pincode: pincode,
+        state: state,
       };
     }
     for (const [townName, coords] of Object.entries(CITY_COORDINATES)) {
@@ -458,6 +515,11 @@ export const forwardGeocode = async (params) => {
           longitude: coords.longitude,
           displayName: `${townName}, Kerala`,
           source: 'local_dictionary_match',
+          district: officialDistrict || district,
+          city: poName || area || city,
+          locality: area || poName,
+          pincode: pincode,
+          state: state,
         };
       }
     }

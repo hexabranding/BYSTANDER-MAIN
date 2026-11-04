@@ -98,6 +98,7 @@ export const registerCaregiver = async (data) => {
     hourlyRate,
     services,
     careSettings,
+    coordinates,
   } = data;
 
   // 1. Check for duplicate account
@@ -162,6 +163,16 @@ export const registerCaregiver = async (data) => {
     const resolvedState = state || address?.state || 'Kerala';
     const resolvedPincode = pincode || address?.pincode || '';
 
+    const resolvedCoords = coordinates || address?.coordinates || data.coordinates || null;
+    let initialCoordinates = { latitude: null, longitude: null };
+    if (resolvedCoords && typeof resolvedCoords === 'object') {
+      const lat = parseFloat(resolvedCoords.latitude ?? resolvedCoords.lat);
+      const lng = parseFloat(resolvedCoords.longitude ?? resolvedCoords.lng);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        initialCoordinates = { latitude: lat, longitude: lng };
+      }
+    }
+
     profile = await CaregiverProfile.create({
       user: user._id,
       gender: gender && ['Male', 'Female', 'Other'].includes(gender) ? gender : 'Female',
@@ -176,6 +187,7 @@ export const registerCaregiver = async (data) => {
       district: resolvedDistrict,
       state: resolvedState,
       pincode: resolvedPincode,
+      coordinates: initialCoordinates,
       address: {
         street: resolvedStreet,
         area: resolvedArea,

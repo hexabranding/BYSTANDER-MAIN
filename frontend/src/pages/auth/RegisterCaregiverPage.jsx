@@ -15,10 +15,13 @@ import {
   FileCheck2,
   Home,
   Landmark,
+  Loader2,
+  LocateFixed,
   MapPin,
   PhoneCall,
   UserRound,
 } from 'lucide-react'
+import apiClient from '@/services/apiClient'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -173,6 +176,13 @@ export function RegisterCaregiverPage() {
     setValue('nursingRegNo', '')
   }, [qualification, setValue])
 
+  const watchedStreet = useWatch({ control, name: 'street' })
+  const watchedArea = useWatch({ control, name: 'area' })
+  const watchedDistrict = useWatch({ control, name: 'district' })
+  const watchedPincode = useWatch({ control, name: 'pincode' })
+  const isGpsDetectingRef = useRef(false)
+  const lastResolvedAddressRef = useRef('')
+
   useEffect(() => () => clearTimeout(redirectTimer.current), [])
 
   const setDoc = (name, file) => {
@@ -190,6 +200,254 @@ export function RegisterCaregiverPage() {
       ? careSettings.filter((s) => s !== value)
       : [...careSettings, value]
     setValue('careSettings', next, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+  }
+
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [locationCaptured, setLocationCaptured] = useState(null)
+
+  // Smart Forward Geocoding: when user manually types address or PIN code, resolve coordinates
+  useEffect(() => {
+    if (isGpsDetectingRef.current) return
+
+    const key = `${watchedStreet || ''}|${watchedArea || ''}|${watchedDistrict || ''}|${watchedPincode || ''}`
+    if (key === lastResolvedAddressRef.current) return
+
+    const hasMeaningfulLocation =
+      (watchedArea && watchedArea.trim().length >= 3) ||
+      (watchedPincode && /^[1-9][0-9]{5}$/.test(watchedPincode.trim())) ||
+      (watchedStreet && watchedStreet.trim().length >= 5)
+
+    if (!hasMeaningfulLocation) {
+      if (!watchedArea?.trim() && !watchedStreet?.trim() && !watchedPincode?.trim()) {
+        setLocationCaptured(null)
+      }
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const geoRes = await apiClient.get('/geo/forward', {
+          params: {
+            address: watchedStreet || '',
+            area: watchedArea || '',
+            district: watchedDistrict || '',
+            pincode: watchedPincode || '',
+          },
+        })
+        const geo = geoRes?.data || geoRes
+        if (geo?.latitude && geo?.longitude) {
+          lastResolvedAddressRef.current = key
+          setLocationCaptured({
+            lat: geo.latitude,
+            lng: geo.longitude,
+            area: watchedArea || geo.displayName || '',
+            district: watchedDistrict || 'Kerala',
+            city: watchedArea || watchedDistrict,
+            isManual: true,
+          })
+        }
+      } catch (_) {
+        // Non-blocking fallback
+      }
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [watchedStreet, watchedArea, watchedDistrict, watchedPincode])
+
+  const handleChooseCurrentLocation = async () => {
+    isGpsDetectingRef.current = true
+    setDetectingLocation(true)
+
+    // 1. High-accuracy browser GPS positioning
+    const getBrowserCoords = () =>
+      new Promise((resolve) => {
+        if (typeof navigator === 'undefined' || !navigator.geolocation) {
+          resolve(null)
+          return
+        }
+        const timer = setTimeout(() => resolve(null), 8000)
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            clearTimeout(timer)
+            resolve({
+              latitude: Number(pos.coords.latitude.toFixed(6)),
+              longitude: Number(pos.coords.longitude.toFixed(6)),
+            })
+          },
+          () => {
+            clearTimeout(timer)
+            resolve(null)
+          },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
+        )
+      })
+
+    // 2. IP Geolocation fallback if GPS hardware or permissions are blocked
+    const getIpCoords = async () => {
+      try {
+        const res = await fetch('https://ipwho.is/')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.latitude && data.longitude) {
+            return {
+              latitude: Number(Number(data.latitude).toFixed(6)),
+              longitude: Number(Number(data.longitude).toFixed(6)),
+              city: data.city || '',
+              region: data.region || '',
+              postal: data.postal || '',
+            }
+          }
+        }
+      } catch (_) {}
+
+      try {
+        const res2 = await fetch('https://ipapi.co/json/')
+        if (res2.ok) {
+          const d2 = await res2.json()
+          if (d2.latitude && d2.longitude) {
+            return {
+              latitude: Number(Number(d2.latitude).toFixed(6)),
+              longitude: Number(Number(d2.longitude).toFixed(6)),
+              city: d2.city || '',
+              region: d2.region || '',
+              postal: d2.postal || '',
+            }
+          }
+        }
+      } catch (_) {}
+
+      return null
+    }
+
+    try {
+      let coords = await getBrowserCoords()
+      let ipData = null
+
+      if (!coords) {
+        ipData = await getIpCoords()
+        if (ipData) {
+          coords = {
+            latitude: ipData.latitude,
+            longitude: ipData.longitude,
+          }
+        }
+      }
+
+      if (!coords) {
+        toast.error('Location detection unavailable', {
+          description: 'Please grant location permissions in your browser or enter your address manually.',
+        })
+        return
+      }
+
+      const { latitude: lat, longitude: lng } = coords
+      let detectedAddress = ''
+      let detectedArea = ''
+      let detectedCity = ''
+      let detectedDistrict = ''
+      let detectedState = ''
+      let detectedPincode = ''
+
+      // 3. Reverse Geocode via Bystander Geo Service
+      try {
+        const geoRes = await apiClient.get('/geo/reverse', {
+          params: { lat, lng },
+        })
+        const geo = geoRes?.data || geoRes
+        if (geo?.address || geo?.area || geo?.city) {
+          detectedAddress = geo.address || ''
+          detectedArea = geo.area || geo.city || ''
+          detectedCity = geo.city || ''
+          detectedDistrict = geo.district || ''
+          detectedState = geo.state || 'Kerala'
+          detectedPincode = geo.pincode || ''
+        }
+      } catch (geoErr) {
+        console.warn('[RegisterCaregiver] Server reverse-geocoding fallback:', geoErr?.message)
+      }
+
+      // 4. Client-side OSM Nominatim fallback if server had an error
+      if (!detectedAddress && !detectedArea) {
+        try {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), 4000)
+          const nomRes = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1`,
+            {
+              signal: controller.signal,
+              headers: { 'Accept-Language': 'en' },
+            },
+          )
+          clearTimeout(timer)
+          if (nomRes.ok) {
+            const data = await nomRes.json()
+            const addr = data.address || {}
+            detectedAddress = [addr.house_number ? `#${addr.house_number}` : '', addr.building, addr.road].filter(Boolean).join(', ')
+            detectedArea = addr.suburb || addr.neighbourhood || addr.village || addr.town || addr.city || ''
+            detectedCity = addr.city || addr.town || ''
+            detectedDistrict = (addr.state_district || addr.county || '').replace(/\s+District$/i, '').trim()
+            detectedState = addr.state || 'Kerala'
+            detectedPincode = addr.postcode ? String(addr.postcode).replace(/\D/g, '').slice(0, 6) : ''
+          }
+        } catch (_) {}
+      }
+
+      if (!detectedAddress && detectedArea) {
+        detectedAddress = detectedArea
+      }
+
+      // Populate react-hook-form fields
+      if (detectedAddress) {
+        setValue('street', detectedAddress, { shouldValidate: true, shouldDirty: true })
+      }
+      if (detectedArea) {
+        setValue('area', detectedArea, { shouldValidate: true, shouldDirty: true })
+      }
+      if (detectedDistrict) {
+        const matched = KERALA_DISTRICTS.find(
+          (d) => d.toLowerCase() === detectedDistrict.toLowerCase() ||
+                 detectedDistrict.toLowerCase().includes(d.toLowerCase()) ||
+                 d.toLowerCase().includes(detectedDistrict.toLowerCase())
+        )
+        if (matched) {
+          setValue('district', matched, { shouldValidate: true, shouldDirty: true })
+        }
+      }
+      if (detectedState) {
+        const matchedState = INDIAN_STATES.find(
+          (s) => s.toLowerCase() === detectedState.toLowerCase()
+        )
+        if (matchedState) {
+          setValue('state', matchedState, { shouldValidate: true, shouldDirty: true })
+        }
+      }
+      if (detectedPincode && /^[1-9][0-9]{5}$/.test(detectedPincode)) {
+        setValue('pincode', detectedPincode, { shouldValidate: true, shouldDirty: true })
+      }
+
+      lastResolvedAddressRef.current = `${detectedAddress}|${detectedArea}|${detectedDistrict}|${detectedPincode}`
+      setLocationCaptured({
+        lat,
+        lng,
+        area: detectedArea,
+        city: detectedCity || detectedDistrict,
+        district: detectedDistrict,
+        isManual: false,
+      })
+
+      toast.success('Current location detected!', {
+        description: `Filled address for ${detectedArea ? detectedArea + ', ' : ''}${detectedDistrict || 'Kerala'}.`,
+      })
+    } catch (err) {
+      toast.error('Failed to detect location', {
+        description: err.message || 'Please enter your address manually.',
+      })
+    } finally {
+      setDetectingLocation(false)
+      setTimeout(() => {
+        isGpsDetectingRef.current = false
+      }, 500)
+    }
   }
 
   const validateDocs = () => {
@@ -291,6 +549,10 @@ export function RegisterCaregiverPage() {
         district: values.district?.trim() || 'Ernakulam',
         state: values.state?.trim() || 'Kerala',
         pincode: values.pincode?.trim() || '',
+        coordinates: locationCaptured?.lat && locationCaptured?.lng ? {
+          latitude: locationCaptured.lat,
+          longitude: locationCaptured.lng,
+        } : undefined,
         address: {
           street: values.street?.trim() || '',
           area: values.area?.trim() || '',
@@ -298,6 +560,10 @@ export function RegisterCaregiverPage() {
           district: values.district?.trim() || 'Ernakulam',
           state: values.state?.trim() || 'Kerala',
           pincode: values.pincode?.trim() || '',
+          coordinates: locationCaptured?.lat && locationCaptured?.lng ? {
+            latitude: locationCaptured.lat,
+            longitude: locationCaptured.lng,
+          } : undefined,
         },
       password: values.password,
       qualification: values.qualification,
@@ -490,13 +756,52 @@ export function RegisterCaregiverPage() {
                 </FormField>
 
                 <div className="pt-3 border-t border-slate-100">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Home className="h-4 w-4 text-primary-700" />
-                    <h3 className="text-sm font-bold text-ink">Residential Address</h3>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <Home className="h-4 w-4 text-primary-700" />
+                      <h3 className="text-sm font-bold text-ink">Residential Address</h3>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleChooseCurrentLocation}
+                      disabled={detectingLocation}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-bold text-primary-800 transition hover:bg-primary-100 active:scale-95 disabled:opacity-60 cursor-pointer shadow-2xs"
+                    >
+                      {detectingLocation ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary-700" />
+                          <span>Detecting GPS...</span>
+                        </>
+                      ) : (
+                        <>
+                          <LocateFixed className="h-3.5 w-3.5 text-primary-700" />
+                          <span>{locationCaptured ? 'Re-detect Location' : 'Choose My Current Location'}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <p className="text-xs text-muted mb-4">
+                  <p className="text-xs text-muted mb-3">
                     Complete physical address required for verified registration and zone matching in Kerala.
                   </p>
+
+                  {locationCaptured && (
+                    <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs font-medium text-emerald-900">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>
+                          <strong className="font-bold">
+                            {locationCaptured.isManual ? '📍 Mapped to:' : 'Detected:'}
+                          </strong>{' '}
+                          {locationCaptured.area ? `${locationCaptured.area}, ` : ''}
+                          {locationCaptured.district || locationCaptured.city || 'Kerala'} ({locationCaptured.isManual ? 'Coordinates resolved from address' : 'GPS coordinates attached'})
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-emerald-700 font-mono">
+                        {locationCaptured.lat.toFixed(4)}, {locationCaptured.lng.toFixed(4)}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="space-y-4">
                     <FormField

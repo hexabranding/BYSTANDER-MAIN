@@ -426,8 +426,61 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [locationCaptured, setLocationCaptured] = useState(null)
+  const isGpsOrPinDragRef = useRef(false)
+  const lastResolvedRef = useRef('')
+
+  // Smart Forward Geocoding: when user manually types address or PIN code, resolve coordinates and update map
+  useEffect(() => {
+    if (isGpsOrPinDragRef.current) return
+
+    const key = `${form.address || ''}|${form.area || ''}|${form.district || ''}|${form.pincode || ''}`
+    if (key === lastResolvedRef.current) return
+
+    const hasMeaningfulLocation =
+      (form.area && form.area.trim().length >= 3) ||
+      (form.pincode && /^[1-9][0-9]{5}$/.test(form.pincode.trim())) ||
+      (form.address && form.address.trim().length >= 6)
+
+    if (!hasMeaningfulLocation) return
+
+    const timer = setTimeout(async () => {
+      try {
+        const geoRes = await apiClient.get('/geo/forward', {
+          params: {
+            address: form.address || '',
+            area: form.area || '',
+            district: form.district || '',
+            pincode: form.pincode || '',
+          },
+        })
+        const geo = geoRes?.data || geoRes
+        if (geo?.latitude && geo?.longitude) {
+          lastResolvedRef.current = key
+          setForm((prev) => ({
+            ...prev,
+            coordinates: {
+              latitude: geo.latitude,
+              longitude: geo.longitude,
+            },
+          }))
+          setLocationCaptured((prev) => ({
+            ...(prev || {}),
+            lat: geo.latitude,
+            lng: geo.longitude,
+            area: form.area || prev?.area,
+            city: form.city || form.district,
+            accuracy: 25,
+            isManual: true,
+          }))
+        }
+      } catch (_) {}
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [form.address, form.area, form.district, form.pincode])
 
   const handleChooseCurrentLocation = async () => {
+    isGpsOrPinDragRef.current = true
     setDetectingLocation(true)
 
     // High-accuracy browser GPS / Wi-Fi positioning (enableHighAccuracy forces GPS chip / Wi-Fi trilateration)
@@ -656,6 +709,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         },
       }))
 
+      lastResolvedRef.current = `${detectedAddress}|${detectedArea}|${detectedDistrict}|${detectedPincode}`
       setLocationCaptured({
         lat,
         lng,
@@ -663,6 +717,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         area: detectedArea,
         city: detectedCity,
         address: detectedAddress,
+        isManual: false,
       })
 
       toast.success('Location detected & entered!', {
@@ -674,14 +729,19 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       })
     } finally {
       setDetectingLocation(false)
+      setTimeout(() => {
+        isGpsOrPinDragRef.current = false
+      }, 600)
     }
   }
 
   const handlePinMoved = async (newLat, newLng) => {
+    isGpsOrPinDragRef.current = true
     setLocationCaptured((prev) => ({
       ...(prev || {}),
       lat: newLat,
       lng: newLng,
+      isManual: false,
     }))
 
     setForm((prev) => ({
@@ -699,6 +759,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       })
       const geo = geoRes?.data || geoRes
       if (geo) {
+        lastResolvedRef.current = `${prev.address || geo.address || ''}|${prev.area || geo.area || ''}|${prev.district || geo.district || ''}|${prev.pincode || geo.pincode || ''}`
         setForm((prev) => ({
           ...prev,
           // Preserve whatever user already typed; fill in if empty
@@ -719,6 +780,10 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       }
     } catch (_) {
       // Non-blocking background enrichment
+    } finally {
+      setTimeout(() => {
+        isGpsOrPinDragRef.current = false
+      }, 600)
     }
   }
 
@@ -1288,7 +1353,9 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                           </div>
                           <p className="mt-0.5 text-xs text-muted">
                             {locationCaptured
-                              ? `✓ Located: ${locationCaptured.area ? locationCaptured.area + ', ' : ''}${locationCaptured.city || ''} (±${locationCaptured.accuracy || 15}m)`
+                              ? locationCaptured.isManual
+                                ? `📍 Mapped to: ${locationCaptured.area ? locationCaptured.area + ', ' : ''}${locationCaptured.city || form.district || 'Kerala'} (via typed address)`
+                                : `✓ Located: ${locationCaptured.area ? locationCaptured.area + ', ' : ''}${locationCaptured.city || ''} (±${locationCaptured.accuracy || 15}m)`
                               : 'Instantly detect and fill your current city, locality, and street address.'}
                           </p>
                         </div>

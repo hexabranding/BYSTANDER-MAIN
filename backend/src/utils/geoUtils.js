@@ -34,25 +34,110 @@ export const CITY_COORDINATES = {
   'muvattupuzha, kl': { latitude: 9.9754, longitude: 76.5770 },
   'perumbavoor': { latitude: 10.1119, longitude: 76.4789 },
 
-  // Kerala Northern Region
+  // Kozhikode & Malabar Towns
+  'kozhikode': { latitude: 11.2588, longitude: 75.7804 },
+  'kozhikode, kl': { latitude: 11.2588, longitude: 75.7804 },
+  'calicut': { latitude: 11.2588, longitude: 75.7804 },
+  'koyilandy': { latitude: 11.4398, longitude: 75.6970 },
+  'koyilandi': { latitude: 11.4398, longitude: 75.6970 },
+  'vadakara': { latitude: 11.6080, longitude: 75.5910 },
+  'badagara': { latitude: 11.6080, longitude: 75.5910 },
+  'payyoli': { latitude: 11.5300, longitude: 75.6450 },
+  'feroke': { latitude: 11.1687, longitude: 75.8344 },
+  'ramanattukara': { latitude: 11.1786, longitude: 75.8647 },
+  'balussery': { latitude: 11.4480, longitude: 75.8230 },
+  'mukkam': { latitude: 11.3204, longitude: 75.9926 },
+  'koduvally': { latitude: 11.3575, longitude: 75.9126 },
+  'thamarassery': { latitude: 11.4174, longitude: 75.9333 },
+  'mavoor': { latitude: 11.2612, longitude: 75.9360 },
+  'beypore': { latitude: 11.1804, longitude: 75.8058 },
+  'olavanna': { latitude: 11.2185, longitude: 75.8258 },
+  'kallai': { latitude: 11.2330, longitude: 75.7950 },
+  'meenchanda': { latitude: 11.2175, longitude: 75.8085 },
+  'govindapuram': { latitude: 11.2508, longitude: 75.7981 },
+
+  // Kannur & North Malabar
+  'kannur': { latitude: 11.8745, longitude: 75.3704 },
+  'kannur, kl': { latitude: 11.8745, longitude: 75.3704 },
+  'thalassery': { latitude: 11.7491, longitude: 75.4890 },
+  'tellicherry': { latitude: 11.7491, longitude: 75.4890 },
+  'payyanur': { latitude: 12.1026, longitude: 75.2012 },
+  'taliparamba': { latitude: 12.0469, longitude: 75.3577 },
+  'mattannur': { latitude: 11.9287, longitude: 75.5756 },
+  'koothuparamba': { latitude: 11.8290, longitude: 75.5700 },
+
+  // Malappuram Towns
+  'malappuram': { latitude: 11.0732, longitude: 76.0740 },
+  'malappuram, kl': { latitude: 11.0732, longitude: 76.0740 },
+  'manjeri': { latitude: 11.1215, longitude: 76.1214 },
+  'tirur': { latitude: 10.9146, longitude: 75.9224 },
+  'perinthalmanna': { latitude: 10.9760, longitude: 76.2255 },
+  'kondotty': { latitude: 11.1448, longitude: 75.9647 },
+  'kottakkal': { latitude: 10.9996, longitude: 75.9967 },
+  'ponnani': { latitude: 10.7670, longitude: 75.9255 },
+  'nilambur': { latitude: 11.2778, longitude: 76.2289 },
+  'tirurangadi': { latitude: 11.0416, longitude: 75.9272 },
+  'tanur': { latitude: 10.9754, longitude: 75.8687 },
+
+  // Palakkad Towns
+  'palakkad': { latitude: 10.7867, longitude: 76.6548 },
+  'palakkad, kl': { latitude: 10.7867, longitude: 76.6548 },
+  'ottapalam': { latitude: 10.7712, longitude: 76.3776 },
+  'shornur': { latitude: 10.7627, longitude: 76.2736 },
+  'chittur': { latitude: 10.7029, longitude: 76.7177 },
+  'mannarkkad': { latitude: 10.9880, longitude: 76.4589 },
+  'alathur': { latitude: 10.6439, longitude: 76.5441 },
+
+  // Thrissur Towns
   'thrissur': { latitude: 10.5276, longitude: 76.2144 },
   'thrissur, kl': { latitude: 10.5276, longitude: 76.2144 },
   'chalakudy': { latitude: 10.3070, longitude: 76.3330 },
   'chalakudy, kl': { latitude: 10.3070, longitude: 76.3330 },
   'kodungallur': { latitude: 10.2247, longitude: 76.1964 },
   'kodungallur, kl': { latitude: 10.2247, longitude: 76.1964 },
-  'kozhikode': { latitude: 11.2588, longitude: 75.7804 },
-  'kozhikode, kl': { latitude: 11.2588, longitude: 75.7804 },
-  'kannur': { latitude: 11.8745, longitude: 75.3704 },
-  'kannur, kl': { latitude: 11.8745, longitude: 75.3704 },
-  'malappuram': { latitude: 11.0732, longitude: 76.0740 },
-  'malappuram, kl': { latitude: 11.0732, longitude: 76.0740 },
-  'palakkad': { latitude: 10.7867, longitude: 76.6548 },
-  'palakkad, kl': { latitude: 10.7867, longitude: 76.6548 },
+  'kunnamkulam': { latitude: 10.6517, longitude: 76.0717 },
+  'guruvayur': { latitude: 10.5947, longitude: 76.0396 },
+  'irinjalakuda': { latitude: 10.3444, longitude: 76.2081 },
+
+  // Wayanad Towns
   'wayanad': { latitude: 11.6050, longitude: 76.0828 },
   'wayanad (kalpetta), kl': { latitude: 11.6050, longitude: 76.0828 },
+  'kalpetta': { latitude: 11.6050, longitude: 76.0828 },
+  'sulthan bathery': { latitude: 11.6622, longitude: 76.2570 },
+  'mananthavady': { latitude: 11.8022, longitude: 76.0033 },
+
+  // Kasaragod Towns
   'kasaragod': { latitude: 12.5102, longitude: 74.9852 },
   'kasaragod, kl': { latitude: 12.5102, longitude: 74.9852 },
+  'kanhangad': { latitude: 12.3117, longitude: 75.0911 },
+
+  // Central & South Towns
+  'kalamassery': { latitude: 10.0543, longitude: 76.3197 },
+  'kothamangalam': { latitude: 10.0617, longitude: 76.6267 },
+  'piravom': { latitude: 9.8710, longitude: 76.4950 },
+  'north paravur': { latitude: 10.1472, longitude: 76.2307 },
+  'paravur': { latitude: 10.1472, longitude: 76.2307 },
+  'pala': { latitude: 9.7099, longitude: 76.6836 },
+  'changanassery': { latitude: 9.4447, longitude: 76.5417 },
+  'ettumanoor': { latitude: 9.6698, longitude: 76.5620 },
+  'kanjirappally': { latitude: 9.5599, longitude: 76.7869 },
+  'vaikom': { latitude: 9.7490, longitude: 76.3959 },
+  'kayamkulam': { latitude: 9.1724, longitude: 76.5013 },
+  'mavelikkara': { latitude: 9.2662, longitude: 76.5513 },
+  'chengannur': { latitude: 9.3174, longitude: 76.6111 },
+  'haripad': { latitude: 9.2833, longitude: 76.4583 },
+  'thiruvalla': { latitude: 9.3835, longitude: 76.5741 },
+  'adoor': { latitude: 9.1530, longitude: 76.7356 },
+  'ranni': { latitude: 9.3833, longitude: 76.7833 },
+  'karunagappally': { latitude: 9.0544, longitude: 76.5369 },
+  'punalur': { latitude: 9.0169, longitude: 76.9248 },
+  'kottarakkara': { latitude: 9.0003, longitude: 76.7725 },
+  'attingal': { latitude: 8.6958, longitude: 76.8143 },
+  'varkala': { latitude: 8.7379, longitude: 76.7163 },
+  'nedumangad': { latitude: 8.6015, longitude: 76.9993 },
+  'neyyattinkara': { latitude: 8.4009, longitude: 77.0874 },
+  'thodupuzha': { latitude: 9.8959, longitude: 76.7184 },
+  'kattappana': { latitude: 9.7505, longitude: 77.1147 },
 
   // Kerala Southern Region
   'thiruvananthapuram': { latitude: 8.5241, longitude: 76.9366 },
@@ -151,14 +236,18 @@ export const resolveCoordinates = (loc) => {
     }
   }
 
-  // 4. Fallback: match area, city, or district name against CITY_COORDINATES
+  // 4. Fallback: match area, city, district, or street name against CITY_COORDINATES
   const candidates = [
     typeof loc === 'string' ? loc : null,
     loc.area,
     loc.city,
-    loc.district,
     loc.address?.area,
     loc.address?.city,
+    loc.street,
+    loc.addressLine,
+    loc.address?.street,
+    loc.address?.addressLine,
+    loc.district,
     loc.address?.district,
   ]
     .filter(Boolean)
@@ -172,6 +261,12 @@ export const resolveCoordinates = (loc) => {
     const simplified = name.split(',')[0].trim();
     if (CITY_COORDINATES[simplified]) {
       return CITY_COORDINATES[simplified];
+    }
+    // Sub-word search for known towns inside full street strings (e.g. "east road koyilandy")
+    for (const [townName, coords] of Object.entries(CITY_COORDINATES)) {
+      if (townName.length >= 4 && new RegExp(`\\b${townName}\\b`, 'i').test(name)) {
+        return coords;
+      }
     }
   }
 

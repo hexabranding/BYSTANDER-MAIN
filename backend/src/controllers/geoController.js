@@ -17,3 +17,31 @@ export const reverseGeocode = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * GET /api/geo/forward
+ * Forward geocode a typed address, town, or pincode into coordinates.
+ */
+export const forwardGeocode = async (req, res, next) => {
+  try {
+    const { q, address, street, area, locality, city, district, state, pincode } = req.query;
+    const geoData = await geoService.forwardGeocode({
+      q,
+      address,
+      street,
+      area,
+      locality,
+      city,
+      district,
+      state,
+      pincode,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: geoData,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

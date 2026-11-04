@@ -1,3 +1,5 @@
+import { CITY_COORDINATES } from '../utils/geoUtils.js';
+
 /**
  * Geospatial, Reverse-Geocoding, and Address Enrichment Service
  *
@@ -275,6 +277,196 @@ export const reverseGeocode = async (lat, lng) => {
   };
 };
 
+/**
+ * Forward geocode a typed address, town, or pincode into latitude & longitude coordinates.
+ * Implements cascading fallback:
+ * 1. Full address (street + locality + district + state + pincode)
+ * 2. Town / Locality + District + pincode
+ * 3. 6-digit Indian PIN code lookup (India Post + Nominatim)
+ * 4. Local Kerala towns & districts dictionary (CITY_COORDINATES)
+ *
+ * @param {Object|string} params - Search query string or address parameters object
+ * @returns {Promise<{ latitude: number, longitude: number, displayName?: string, source: string } | null>}
+ */
+export const forwardGeocode = async (params) => {
+  if (!params) return null;
+
+  let address = '';
+  let area = '';
+  let city = '';
+  let district = '';
+  let state = 'Kerala';
+  let pincode = '';
+  let rawQuery = '';
+
+  if (typeof params === 'string') {
+    rawQuery = params.trim();
+  } else {
+    address = (params.address || params.street || '').trim();
+    area = (params.area || params.locality || '').trim();
+    city = (params.city || '').trim();
+    district = (params.district || '').trim();
+    state = (params.state || 'Kerala').trim();
+    pincode = (params.pincode || '').replace(/\D/g, '').slice(0, 6);
+    rawQuery = (params.q || params.query || '').trim();
+  }
+
+  // 1. Build queries in descending order of specificity
+  const queries = [];
+
+  // Check if any known town from CITY_COORDINATES is mentioned in address or rawQuery
+  let detectedTown = '';
+  const searchInText = `${address} ${rawQuery} ${area}`.toLowerCase();
+  for (const townName of Object.keys(CITY_COORDINATES)) {
+    if (townName.length >= 4 && new RegExp(`\\b${townName}\\b`, 'i').test(searchInText)) {
+      detectedTown = townName;
+      break;
+    }
+  }
+
+  if (rawQuery) {
+    queries.push(rawQuery);
+    if (!rawQuery.toLowerCase().includes('india')) {
+      queries.push(`${rawQuery}, India`);
+    }
+  }
+
+  // Query A: Full street + area/town + district + pincode + India
+  const resolvedArea = area || detectedTown;
+  const fullParts = [address, resolvedArea, district, state, pincode, 'India'].filter(Boolean);
+  if (fullParts.length > 2) {
+    queries.push(fullParts.join(', '));
+  }
+
+  // Query B: Town / Locality + District + State + PIN
+  const townParts = [resolvedArea || city, district, state, pincode, 'India'].filter(Boolean);
+  if (townParts.length >= 2) {
+    queries.push(townParts.join(', '));
+  }
+
+  // Query C: Detected Town + District + Kerala
+  if (detectedTown) {
+    queries.push(`${detectedTown}, ${district ? district + ', ' : ''}Kerala, India`);
+  }
+
+  // Query D: PIN code + State + India
+  if (pincode && pincode.length === 6) {
+    queries.push(`${pincode}, Kerala, India`);
+    queries.push(`${pincode}, India`);
+  }
+
+  // Deduplicate queries
+  const uniqueQueries = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
+
+  // Try OpenStreetMap Nominatim for each query
+  for (const query of uniqueQueries) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3500);
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&countrycodes=in&limit=1`;
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'BystanderCare/1.0 (healthcare booking geocoding)',
+          'Accept-Language': 'en',
+        },
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const first = data[0];
+          const lat = parseFloat(first.lat);
+          const lng = parseFloat(first.lon);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            return {
+              latitude: Number(lat.toFixed(6)),
+              longitude: Number(lng.toFixed(6)),
+              displayName: first.display_name,
+              source: 'nominatim',
+            };
+          }
+        }
+      }
+    } catch (_) {
+      // Continue to next fallback query
+    }
+  }
+
+  // 2. India Post official API for PIN code
+  if (pincode && pincode.length === 6) {
+    try {
+      const postRes = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+      if (postRes.ok) {
+        const postData = await postRes.json();
+        if (
+          postData[0]?.Status === 'Success' &&
+          Array.isArray(postData[0]?.PostOffice) &&
+          postData[0].PostOffice.length > 0
+        ) {
+          const po = postData[0].PostOffice[0];
+          const poName = po.Name;
+          const poDistrict = po.District;
+          const poCandidate = (poName || '').toLowerCase().trim();
+          if (CITY_COORDINATES[poCandidate]) {
+            return {
+              latitude: CITY_COORDINATES[poCandidate].latitude,
+              longitude: CITY_COORDINATES[poCandidate].longitude,
+              displayName: `${poName}, ${poDistrict}, ${pincode}`,
+              source: 'india_post_dictionary',
+            };
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Fallback: Local Kerala & National Metro Dictionary
+  const candidates = [
+    area,
+    city,
+    district,
+    address,
+    rawQuery,
+  ]
+    .filter(Boolean)
+    .map((s) => s.toLowerCase().trim());
+
+  for (const name of candidates) {
+    if (CITY_COORDINATES[name]) {
+      return {
+        latitude: CITY_COORDINATES[name].latitude,
+        longitude: CITY_COORDINATES[name].longitude,
+        displayName: `${name}, Kerala`,
+        source: 'local_dictionary',
+      };
+    }
+    const simplified = name.split(',')[0].trim();
+    if (CITY_COORDINATES[simplified]) {
+      return {
+        latitude: CITY_COORDINATES[simplified].latitude,
+        longitude: CITY_COORDINATES[simplified].longitude,
+        displayName: `${simplified}, Kerala`,
+        source: 'local_dictionary',
+      };
+    }
+    for (const [townName, coords] of Object.entries(CITY_COORDINATES)) {
+      if (townName.length >= 4 && new RegExp(`\\b${townName}\\b`, 'i').test(name)) {
+        return {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          displayName: `${townName}, Kerala`,
+          source: 'local_dictionary_match',
+        };
+      }
+    }
+  }
+
+  return null;
+};
+
 export default {
   reverseGeocode,
+  forwardGeocode,
 };

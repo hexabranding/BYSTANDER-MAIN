@@ -7,7 +7,7 @@ import {
   isWithinRadius,
   CITY_COORDINATES,
 } from '../src/utils/geoUtils.js';
-import { reverseGeocode } from '../src/services/geoService.js';
+import { reverseGeocode, forwardGeocode } from '../src/services/geoService.js';
 
 test('GeoRadius 1: DEFAULT_BROADCAST_RADIUS_KM is authoritatively set to 30 km', () => {
   assert.equal(DEFAULT_BROADCAST_RADIUS_KM, 30);
@@ -121,5 +121,35 @@ test('GeoReverse 2: reverseGeocode resolves valid coordinates into address with 
   assert.ok(result.lng === 75.79804);
   assert.ok(result.district.toLowerCase().includes('kozhikode') || result.city.toLowerCase().includes('kozhikode'));
   assert.equal(result.state, 'Kerala');
+});
+
+test('GeoForward 1: resolveCoordinates detects town inside street text (e.g. koyilandy)', () => {
+  const loc = {
+    street: 'saradh nivas east road koyilandy',
+    district: 'Kozhikode',
+  };
+  const resolved = resolveCoordinates(loc);
+  assert.ok(resolved !== null);
+  assert.ok(Math.abs(resolved.latitude - 11.4398) < 0.1);
+  assert.ok(Math.abs(resolved.longitude - 75.6970) < 0.1);
+});
+
+test('GeoForward 2: forwardGeocode resolves address and PIN code to valid coordinates', async () => {
+  // Direct town query
+  const townResult = await forwardGeocode({ area: 'Koyilandy', district: 'Kozhikode' });
+  assert.ok(townResult !== null);
+  assert.ok(Math.abs(townResult.latitude - 11.4398) < 0.15);
+  assert.ok(Math.abs(townResult.longitude - 75.6970) < 0.15);
+
+  // Full address query
+  const fullResult = await forwardGeocode({
+    street: 'East Road',
+    area: 'Koyilandy',
+    district: 'Kozhikode',
+    pincode: '673305',
+  });
+  assert.ok(fullResult !== null);
+  assert.ok(fullResult.latitude > 11.0 && fullResult.latitude < 12.0);
+  assert.ok(fullResult.longitude > 75.0 && fullResult.longitude < 76.0);
 });
 

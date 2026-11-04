@@ -515,6 +515,7 @@ export const registerCaregiver = async (payload) => {
       district: payload.district || payload.address?.district || undefined,
       state: payload.state || payload.address?.state || undefined,
       pincode: payload.pincode || payload.address?.pincode || undefined,
+      coordinates: payload.coordinates || payload.address?.coordinates || undefined,
       address: payload.address || undefined,
       languages: payload.languages || undefined,
       careSettings: normalizedCareSettings,

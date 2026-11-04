@@ -4,10 +4,10 @@ import {
   Camera,
   Check,
   Clock,
-  Image as ImageIcon,
   MapPin,
   QrCode,
   RefreshCw,
+  SwitchCamera,
   Video,
   X,
 } from 'lucide-react'
@@ -23,6 +23,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
   const [selfieAt, setSelfieAt] = useState(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraError, setCameraError] = useState('')
+  const [facingMode, setFacingMode] = useState('user')
   const [otp, setOtp] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [now, setNow] = useState(() => new Date().toISOString())
@@ -30,7 +31,6 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
 
   const videoRef = useRef(null)
   const streamRef = useRef(null)
-  const fileInputRef = useRef(null)
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -40,17 +40,23 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     setCameraActive(false)
   }, [])
 
-  const startCamera = async () => {
+  const startCamera = async (overrideFacing) => {
     setCameraError('')
     setErrorMsg('')
+    const targetFacing = overrideFacing || facingMode
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
         throw new Error(
-          'Live camera streaming is not supported on this browser or connection. Please use the device camera photo option below.'
+          'Live camera streaming is not supported on this browser or connection. Please use a modern browser with camera permissions enabled.'
         )
       }
+      // Stop any existing stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: targetFacing, width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       })
       streamRef.current = stream
@@ -62,9 +68,15 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
       stopCamera()
       setCameraError(
         err?.message ||
-          'Unable to access camera. Please allow camera permissions in your browser or snap a photo using the device camera option.'
+          'Unable to access camera. Please allow camera permissions in your browser to capture the live attendance selfie.'
       )
     }
+  }
+
+  const toggleFacing = () => {
+    const nextFacing = facingMode === 'user' ? 'environment' : 'user'
+    setFacingMode(nextFacing)
+    startCamera(nextFacing)
   }
 
   // Ensure video element receives the stream when rendered
@@ -86,9 +98,11 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     canvas.height = Math.round(height * scale)
 
     const ctx = canvas.getContext('2d')
-    // Mirror horizontally so selfie orientation is natural
-    ctx.translate(canvas.width, 0)
-    ctx.scale(-1, 1)
+    // Mirror horizontally if user/selfie camera so photo orientation is natural
+    if (facingMode === 'user') {
+      ctx.translate(canvas.width, 0)
+      ctx.scale(-1, 1)
+    }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
@@ -96,35 +110,6 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     setSelfieAt(new Date().toISOString())
     stopCamera()
     setErrorMsg('')
-  }
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setErrorMsg('Please select a valid image file.')
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const img = new Image()
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        const scale = Math.min(1, 640 / img.width)
-        canvas.width = Math.round(img.width * scale)
-        canvas.height = Math.round(img.height * scale)
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82)
-        setSelfieDataUrl(compressedDataUrl)
-        setSelfieAt(new Date().toISOString())
-        stopCamera()
-        setErrorMsg('')
-      }
-      img.src = event.target?.result
-    }
-    reader.readAsDataURL(file)
   }
 
   const retakeSelfie = () => {
@@ -142,10 +127,15 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     setSelfieAt(null)
     setCameraActive(false)
     setCameraError('')
+    setFacingMode('user')
     setOtp('')
     setErrorMsg('')
     setSubmitting(false)
     setNow(new Date().toISOString())
+
+    // Attempt to automatically start live camera for seamless instant verification
+    startCamera('user')
+
     const timer = setInterval(() => setNow(new Date().toISOString()), 1000)
     return () => {
       clearInterval(timer)
@@ -157,7 +147,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
 
   const handleSubmit = async () => {
     if (!selfieDataUrl && !selfieAt) {
-      setErrorMsg('Capture the verification selfie first.')
+      setErrorMsg('Capture the live attendance selfie first.')
       return
     }
     const cleanOtp = otp.trim()
@@ -282,12 +272,24 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   autoPlay
                   playsInline
                   muted
-                  className="h-full w-full object-cover -scale-x-100"
+                  className={cn(
+                    'h-full w-full object-cover',
+                    facingMode === 'user' && '-scale-x-100'
+                  )}
                 />
-                <div className="absolute top-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white flex items-center gap-1">
+                <div className="absolute top-2 left-2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white flex items-center gap-1.5 backdrop-blur-xs">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Camera
+                  Live On-Site Camera
                 </div>
+
+                <button
+                  type="button"
+                  onClick={toggleFacing}
+                  title="Switch camera (Front / Rear)"
+                  className="absolute top-2 right-2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80 transition-colors"
+                >
+                  <SwitchCamera className="h-4 w-4" />
+                </button>
               </div>
 
               <div className="flex items-center justify-center gap-3 pt-1">
@@ -297,9 +299,9 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   size="sm"
                   onClick={snapPhoto}
                   icon={Camera}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold px-5"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold px-6"
                 >
-                  Take Photo
+                  Take Photo Now
                 </Button>
                 <Button
                   type="button"
@@ -313,56 +315,37 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
               </div>
             </div>
           ) : (
-            /* State C: Initial state — prompt to take photo */
+            /* State C: Initial state — prompt to take live photo */
             <div className="py-2">
               <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-primary-700 shadow-card">
                 <Camera className="h-6 w-6" />
               </span>
               <p className="mt-3 text-sm font-bold text-ink">
-                Step 1 — Attendance Selfie Verification
+                Step 1 — Live Attendance Selfie Verification
               </p>
               <p className="mt-1 text-xs text-muted max-w-sm mx-auto">
-                Take a quick attendance selfie at the patient&apos;s location so admin and family can verify attendance.
+                Caretakers must capture a live photo on site right now. Gallery uploads and saved photos are disabled to prevent fraud.
               </p>
 
               {cameraError ? (
-                <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-left text-xs text-amber-800 flex items-start gap-1.5">
+                <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-left text-xs text-amber-800 flex items-start gap-1.5">
                   <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                   <span>{cameraError}</span>
                 </div>
               ) : null}
 
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <div className="mt-4 flex items-center justify-center gap-2">
                 <Button
                   type="button"
                   variant="primary"
                   size="sm"
-                  onClick={startCamera}
+                  onClick={() => startCamera()}
                   icon={Camera}
-                  className="font-semibold shadow-xs"
+                  className="font-semibold shadow-xs px-5"
                 >
-                  Open Camera
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  icon={ImageIcon}
-                >
-                  Snap / Select Photo
+                  Open Live Camera
                 </Button>
               </div>
-
-              {/* Hidden file input for mobile camera or photo upload */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="user"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
             </div>
           )}
         </div>

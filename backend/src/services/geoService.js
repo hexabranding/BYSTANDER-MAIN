@@ -318,7 +318,7 @@ export const forwardGeocode = async (params) => {
   if (pincode && pincode.length === 6) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 2500);
+      const timer = setTimeout(() => controller.abort(), 4500);
       const postRes = await fetch(`https://api.postalpincode.in/pincode/${pincode}`, {
         signal: controller.signal,
       });
@@ -388,15 +388,31 @@ export const forwardGeocode = async (params) => {
             const first = gData.results[0];
             const loc = first.geometry?.location;
             if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+              let gDistrict = '';
+              let gState = '';
+              let gCity = '';
+              if (Array.isArray(first.address_components)) {
+                for (const comp of first.address_components) {
+                  if (comp.types?.includes('administrative_area_level_2')) {
+                    gDistrict = comp.long_name.replace(/\s+District$/i, '').trim();
+                  }
+                  if (comp.types?.includes('administrative_area_level_1')) {
+                    gState = comp.long_name;
+                  }
+                  if (comp.types?.includes('locality') || comp.types?.includes('sublocality')) {
+                    gCity = comp.long_name;
+                  }
+                }
+              }
               return {
                 latitude: loc.lat,
                 longitude: loc.lng,
                 displayName: first.formatted_address,
-                district: targetDistrict || officialDistrict || 'Kozhikode',
-                city: poName || area || city || 'Kozhikode',
+                district: gDistrict || officialDistrict || targetDistrict || 'Kozhikode',
+                city: gCity || poName || area || city || 'Kozhikode',
                 locality: area || poName || detectedTown,
                 pincode: pincode,
-                state: state,
+                state: gState || state,
                 source: 'google',
               };
             }

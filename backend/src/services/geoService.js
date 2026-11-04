@@ -364,6 +364,50 @@ export const forwardGeocode = async (params) => {
   const queries = [];
   const targetDistrict = officialDistrict || district;
 
+  // 1b. Google Maps Geocoding API (High-precision forward geocoding when configured)
+  const googleApiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (
+    googleApiKey &&
+    typeof googleApiKey === 'string' &&
+    googleApiKey.trim().length > 10 &&
+    !googleApiKey.includes('your_')
+  ) {
+    const geoQuery =
+      rawQuery ||
+      [address, area, targetDistrict || city, state, pincode, 'India']
+        .filter(Boolean)
+        .join(', ');
+
+    if (geoQuery) {
+      try {
+        const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(geoQuery)}&key=${googleApiKey.trim()}`;
+        const gRes = await fetch(gUrl);
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          if (gData.status === 'OK' && Array.isArray(gData.results) && gData.results.length > 0) {
+            const first = gData.results[0];
+            const loc = first.geometry?.location;
+            if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+              return {
+                latitude: loc.lat,
+                longitude: loc.lng,
+                displayName: first.formatted_address,
+                district: targetDistrict || officialDistrict || 'Kozhikode',
+                city: poName || area || city || 'Kozhikode',
+                locality: area || poName || detectedTown,
+                pincode: pincode,
+                state: state,
+                source: 'google',
+              };
+            }
+          }
+        }
+      } catch (gErr) {
+        console.warn('[GeoService] Google forward-geocoding fallback:', gErr.message);
+      }
+    }
+  }
+
   if (rawQuery) {
     queries.push(rawQuery);
     if (!rawQuery.toLowerCase().includes('india')) {

@@ -1427,6 +1427,26 @@ export function BookingDetailsPage() {
                     {booking.applicants.length} verified caretaker{booking.applicants.length > 1 ? 's' : ''} accepted your request. Review their profiles on the left and select your preferred caretaker.
                   </p>
                 </div>
+              ) : isBroadcastExpired ? (
+                <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/60 p-4 text-center">
+                  <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                    <UserX className="h-4 w-4" />
+                  </div>
+                  <h4 className="mt-2 text-xs font-semibold text-ink">Search Window Elapsed</h4>
+                  <p className="mt-1 text-xs text-muted">
+                    No caretakers were available within the 1-hour broadcast window. Re-broadcast or browse caretakers directly.
+                  </p>
+                </div>
+              ) : booking.status === 'Cancelled' ? (
+                <div className="rounded-xl border border-dashed border-line p-4 text-center">
+                  <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                    <XCircle className="h-4 w-4 text-slate-400" />
+                  </div>
+                  <h4 className="mt-2 text-xs font-semibold text-ink">Booking Cancelled</h4>
+                  <p className="mt-1 text-xs text-muted">
+                    This booking has been cancelled. No caretaker is assigned.
+                  </p>
+                </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-line p-4 text-center">
                   <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500">

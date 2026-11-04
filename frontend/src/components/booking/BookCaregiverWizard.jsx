@@ -203,7 +203,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         : (user?.street || user?.address?.street || ''),
     city: user?.city && user?.city !== 'Mumbai, MH' && user?.city !== 'Mumbai' ? user.city : 'Kochi, KL',
     area: user?.area && user?.area !== 'Powai' ? user.area : '',
-    district: user?.district || 'Ernakulam',
+    district: user?.district || '',
     state: user?.state || 'Kerala',
     pincode: user?.pincode || '',
     date: '',
@@ -361,7 +361,8 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         const settingValid =
           Boolean(form.careType) &&
           Boolean(form.address?.trim()) &&
-          Boolean(form.area?.trim())
+          Boolean(form.area?.trim()) &&
+          Boolean(form.district?.trim())
         if (isUrgent) {
           return settingValid && terms && Number(form.hours || 2) >= 2
         }
@@ -699,7 +700,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         ...prev,
         city: detectedCity || prev.city,
         area: detectedArea || prev.area,
-        district: detectedDistrict || prev.district || 'Ernakulam',
+        district: detectedDistrict || prev.district || '',
         state: detectedState || prev.state || 'Kerala',
         pincode: detectedPincode || prev.pincode || '',
         address: detectedAddress,
@@ -882,7 +883,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           addressLine: form.address.trim(),
           city: (form.city || form.area || form.district || 'Kerala').trim(),
           area: form.area.trim(),
-          district: (form.district || 'Ernakulam').trim(),
+          district: (form.district || '').trim(),
           state: (form.state || 'Kerala').trim(),
           pincode: (form.pincode || '').trim(),
           careSetting: form.careType === 'Hospital Care' ? 'Hospital Care' : 'Home Care',
@@ -1408,7 +1409,8 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <FormField label="District" required>
-                        <Select value={form.district || 'Ernakulam'} onChange={(e) => set({ district: e.target.value })}>
+                        <Select value={form.district || ''} onChange={(e) => set({ district: e.target.value })}>
+                          <option value="" disabled>Choose District</option>
                           {KERALA_DISTRICTS.map((d) => (
                             <option key={d} value={d}>
                               {d}

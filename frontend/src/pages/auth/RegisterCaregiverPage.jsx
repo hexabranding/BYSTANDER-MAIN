@@ -136,7 +136,7 @@ export function RegisterCaregiverPage() {
       street: '',
       area: '',
       city: '',
-      district: 'Ernakulam',
+      district: '',
       state: 'Kerala',
       pincode: '',
       password: '',
@@ -548,7 +548,7 @@ export function RegisterCaregiverPage() {
         street: values.street?.trim() || '',
         area: values.area?.trim() || '',
         city: resolvedCity,
-        district: values.district?.trim() || 'Ernakulam',
+        district: values.district?.trim() || '',
         state: values.state?.trim() || 'Kerala',
         pincode: values.pincode?.trim() || '',
         coordinates: locationCaptured?.lat && locationCaptured?.lng ? {
@@ -559,7 +559,7 @@ export function RegisterCaregiverPage() {
           street: values.street?.trim() || '',
           area: values.area?.trim() || '',
           city: resolvedCity,
-          district: values.district?.trim() || 'Ernakulam',
+          district: values.district?.trim() || '',
           state: values.state?.trim() || 'Kerala',
           pincode: values.pincode?.trim() || '',
           coordinates: locationCaptured?.lat && locationCaptured?.lng ? {
@@ -866,8 +866,9 @@ export function RegisterCaregiverPage() {
                         <Select
                           id="g-district"
                           error={errors.district?.message}
-                          {...register('district', { required: 'Select your district' })}
+                          {...register('district', { required: 'Please select your district' })}
                         >
+                          <option value="" disabled>Choose District</option>
                           {KERALA_DISTRICTS.map((d) => (
                             <option key={d} value={d}>
                               {d}

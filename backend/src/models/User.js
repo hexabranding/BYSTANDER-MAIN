@@ -63,6 +63,11 @@ const userSchema = new mongoose.Schema(
       match: [/^\+?[1-9]\d{6,14}$/, 'Please enter a valid phone number'],
       default: null,
     },
+    avatar: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     passwordHash: {
       type: String,
       required: [true, 'Password hash is required'],

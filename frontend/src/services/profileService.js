@@ -20,6 +20,7 @@ export const PERMITTED_CUSTOMER_PROFILE_FIELDS = [
   'defaultAddress',
   'careNotes',
   'patients',
+  'avatar',
 ]
 
 export const PERMITTED_CAREGIVER_PROFILE_FIELDS = [

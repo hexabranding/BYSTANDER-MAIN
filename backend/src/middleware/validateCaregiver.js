@@ -162,6 +162,14 @@ export const validateUpdateCaregiverProfile = (req, res, next) => {
     }
   }
 
+  if (sanitizedUpdates.avatar !== undefined) {
+    if (typeof sanitizedUpdates.avatar !== 'string') {
+      errors.push('Avatar must be a valid image string or URL');
+    } else {
+      sanitizedUpdates.avatar = sanitizedUpdates.avatar.trim().slice(0, 5000000);
+    }
+  }
+
   if (sanitizedUpdates.gender !== undefined) {
     if (!['Male', 'Female', 'Other'].includes(sanitizedUpdates.gender)) {
       errors.push('Gender must be one of: Male, Female, Other');

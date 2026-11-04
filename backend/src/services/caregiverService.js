@@ -101,13 +101,16 @@ export const updateMyCaregiverProfile = async (userId, sanitizedUpdates) => {
     delete sanitizedUpdates.servicesOffered;
   }
 
-  // Update user fullName & phone if included
+  // Update user fullName, phone & avatar if included
   const caregiverUserUpdates = {};
   if (sanitizedUpdates.fullName) {
     caregiverUserUpdates.fullName = sanitizedUpdates.fullName;
   }
   if (sanitizedUpdates.phone !== undefined) {
     caregiverUserUpdates.phone = sanitizedUpdates.phone;
+  }
+  if (sanitizedUpdates.avatar !== undefined) {
+    caregiverUserUpdates.avatar = sanitizedUpdates.avatar;
   }
   if (Object.keys(caregiverUserUpdates).length > 0) {
     await User.findByIdAndUpdate(userId, caregiverUserUpdates, { runValidators: true });

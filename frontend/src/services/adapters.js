@@ -719,7 +719,8 @@ export const adaptCustomerProfile = (raw) => {
     name: user.fullName || raw.fullName || '',
     email: user.email || '',
     phone: user.phone || '',
-    avatar: user.avatar || '',
+    avatar: user.avatar || raw.avatar || '',
+    photo: user.avatar || raw.avatar || '',
     role: 'customer',
     rating: raw.rating || { average: 5.0, count: 0 },
     defaultAddress: raw.defaultAddress || {

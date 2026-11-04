@@ -42,6 +42,15 @@ export const validateUpdateCustomerProfile = (req, res, next) => {
     }
   }
 
+  // 1c. Avatar / Profile Photo
+  if (body.avatar !== undefined) {
+    if (typeof body.avatar !== 'string') {
+      errors.push('avatar must be a string');
+    } else {
+      sanitized.avatar = body.avatar.trim().slice(0, 5000000);
+    }
+  }
+
   // 2. Emergency Contact
   if (body.emergencyContact !== undefined) {
     if (!body.emergencyContact || typeof body.emergencyContact !== 'object' || Array.isArray(body.emergencyContact)) {

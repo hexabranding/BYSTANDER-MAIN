@@ -52,6 +52,11 @@ const customerProfileSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    avatar: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     emergencyContact: {
       name: { type: String, trim: true, default: '' },
       phone: { type: String, trim: true, default: '' },

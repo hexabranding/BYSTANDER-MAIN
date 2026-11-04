@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { Eye, Home, Mail, MapPin, Phone, Save, ShieldCheck } from 'lucide-react'
+import { Camera, Eye, Home, Mail, MapPin, Phone, Save, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { CITIES, LANGUAGES, QUALIFICATIONS, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { compressImage } from '@/utils/image'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -26,6 +27,7 @@ export function ProfilePage() {
   const { caregivers, verifications } = useData()
 
   const [realProfile, setRealProfile] = useState(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const myId = user?.caregiverId || 'cg-101'
   const caregiver = realProfile || caregivers.find((c) => c.id === myId) || caregivers[0]
   const verification = verifications.find((v) => v.caregiverId === myId)
@@ -165,6 +167,30 @@ export function ProfilePage() {
     toast.info('This is exactly what customers see')
   }
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    try {
+      const dataUrl = await compressImage(file)
+      const updated = await profileService.updateCaregiverProfile({ avatar: dataUrl })
+      setRealProfile((prev) => ({
+        ...(prev || caregiver || {}),
+        avatar: dataUrl,
+        photo: dataUrl,
+        ...(updated || {}),
+      }))
+      updateProfile({ avatar: dataUrl, photo: dataUrl })
+      toast.success('Profile photo updated successfully')
+    } catch (err) {
+      toast.error('Failed to update photo', {
+        description: err.message || 'Please choose a valid image file',
+      })
+    } finally {
+      setUploadingPhoto(false)
+      e.target.value = ''
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -182,7 +208,27 @@ export function ProfilePage() {
       <Card>
         <CardBody>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-            <Avatar src={caregiver?.photo} name={caregiver?.name} size="xl" verified={caregiver?.verified} />
+            <div className="flex flex-col items-center gap-2 sm:items-start shrink-0">
+              <Avatar
+                src={caregiver?.photo || caregiver?.avatar || user?.avatar}
+                name={caregiver?.name || user?.name}
+                size="xl"
+                verified={caregiver?.verified}
+              />
+              <label
+                className={`cursor-pointer inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-50 transition ${uploadingPhoto ? 'opacity-60 pointer-events-none' : ''}`}
+              >
+                <Camera className="h-3.5 w-3.5" />
+                <span>{uploadingPhoto ? 'Uploading...' : 'Change photo'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={uploadingPhoto}
+                  onChange={handlePhotoUpload}
+                />
+              </label>
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="font-display text-xl font-extrabold text-ink">{caregiver?.name}</h2>
@@ -221,7 +267,12 @@ export function ProfilePage() {
           <CardHeader title="Public profile preview" subtitle="Exactly what customers see on your listing" icon={Eye} />
           <CardBody className="space-y-5">
             <div className="flex items-center gap-4">
-              <Avatar src={caregiver?.photo} name={caregiver?.name} size="lg" verified={caregiver?.verified} />
+              <Avatar
+                src={caregiver?.photo || caregiver?.avatar || user?.avatar}
+                name={caregiver?.name || user?.name}
+                size="lg"
+                verified={caregiver?.verified}
+              />
               <div>
                 <p className="font-display text-lg font-bold text-ink">{caregiver?.name}</p>
                 <RatingStars value={caregiver?.rating ?? 0} count={caregiver?.reviewCount} showValue size={16} className="mt-1" />

@@ -8,6 +8,7 @@ import { useData } from '@/context/DataContext'
 import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatDate } from '@/utils/format'
+import { compressImage } from '@/utils/image'
 import { CARE_TYPES, CITIES, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
@@ -74,6 +75,7 @@ export function ProfilePage() {
   const [savingPersonal, setSavingPersonal] = useState(false)
   const [savingPatient, setSavingPatient] = useState(false)
   const [profileData, setProfileData] = useState(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   const [prefs, setPrefs] = useState(() => ({
     bookings: true,
@@ -262,6 +264,26 @@ export function ProfilePage() {
     navigate('/login')
   }
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    try {
+      const dataUrl = await compressImage(file)
+      await profileService.updateCustomerProfile({ avatar: dataUrl })
+      updateProfile({ avatar: dataUrl })
+      setProfileData((prev) => ({ ...(prev || {}), avatar: dataUrl, photo: dataUrl }))
+      toast.success('Profile photo updated successfully')
+    } catch (err) {
+      toast.error('Failed to update photo', {
+        description: err.message || 'Please choose a valid image file',
+      })
+    } finally {
+      setUploadingPhoto(false)
+      e.target.value = ''
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -276,26 +298,24 @@ export function ProfilePage() {
 
       <Card>
         <CardBody className="flex flex-col gap-5 sm:flex-row sm:items-center">
-          <div className="flex flex-col items-center gap-2 sm:items-start">
-            <Avatar src={user?.avatar} name={user?.name || user?.fullName || 'Bystander User'} size="xl" verified />
-            <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-50 transition">
+          <div className="flex flex-col items-center gap-2 sm:items-start shrink-0">
+            <Avatar
+              src={profileData?.avatar || user?.avatar}
+              name={user?.name || user?.fullName || 'Bystander User'}
+              size="xl"
+              verified
+            />
+            <label
+              className={`cursor-pointer inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-50 transition ${uploadingPhoto ? 'opacity-60 pointer-events-none' : ''}`}
+            >
               <Camera className="h-3.5 w-3.5" />
-              <span>Change photo</span>
+              <span>{uploadingPhoto ? 'Uploading...' : 'Change photo'}</span>
               <input
                 type="file"
                 accept="image/*"
                 className="sr-only"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    const reader = new FileReader()
-                    reader.onloadend = () => {
-                      updateProfile({ avatar: reader.result })
-                      toast.success('Profile photo updated')
-                    }
-                    reader.readAsDataURL(file)
-                  }
-                }}
+                disabled={uploadingPhoto}
+                onChange={handlePhotoUpload}
               />
             </label>
           </div>

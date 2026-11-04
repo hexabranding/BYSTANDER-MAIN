@@ -180,17 +180,43 @@ export function JobDetailsPage() {
     }
   }
 
-  const handleCheckConfirm = (payload) => {
+  const handleCheckConfirm = async (payload) => {
     if (!checkFlow) return
     const { mode } = checkFlow
-    advanceBooking(booking.id, mode === 'checkin' ? 'start' : 'complete', payload)
-    toast.success(
-      mode === 'checkin'
-        ? 'Checked in — the service is now in progress'
-        : 'Shift marked complete — payment releases after customer confirmation',
-      { description: `QR ${payload.qrCode} verified at ${formatDateTime(payload.capturedAt)}.` },
-    )
-    setCheckFlow(null)
+    const targetId = booking?.id || booking?._id || id
+    try {
+      if (isMongoObjectId(targetId)) {
+        const checkData = {
+          otp: payload.otp,
+          selfieUrl: payload.selfieUrl,
+          location: payload.location,
+          notes: payload.notes || '',
+        }
+        if (mode === 'checkin') {
+          const updated = await bookingService.verifyCheckIn(targetId, checkData)
+          setRealBooking(updated)
+        } else {
+          const updated = await bookingService.verifyCheckOut(targetId, checkData)
+          setRealBooking(updated)
+        }
+      }
+      if (advanceBooking) {
+        advanceBooking(booking?.id || id, mode === 'checkin' ? 'start' : 'complete', payload)
+      }
+      toast.success(
+        mode === 'checkin'
+          ? 'Checked in — the service is now in progress'
+          : 'Shift marked complete — payment releases after customer confirmation',
+        { description: `Verified at ${formatDateTime(payload.capturedAt)}.` },
+      )
+    } catch (err) {
+      toast.error('Verification failed', {
+        description: err?.message || 'Server rejected OTP or verification metadata.',
+      })
+      throw err
+    } finally {
+      setCheckFlow(null)
+    }
   }
 
   const handleRateCustomer = async ({ criteria, average, comment }) => {

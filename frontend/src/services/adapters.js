@@ -382,11 +382,15 @@ export const buildBookingTimeline = (raw, normalizedStatus) => {
       label: 'Service started',
       status: isInProgressOrLater ? 'completed' : 'upcoming',
       at: checkInAt,
+      selfieUrl: raw.checkIn?.selfieUrl || null,
+      location: raw.checkIn?.location || null,
     },
     {
       label: 'Service completed',
       status: isCompleted ? 'completed' : 'upcoming',
       at: checkOutAt,
+      selfieUrl: raw.checkOut?.selfieUrl || null,
+      location: raw.checkOut?.location || null,
     },
     {
       label: ['released', 'settled', 'paid'].includes(String(raw.paymentStatus || '').toLowerCase())

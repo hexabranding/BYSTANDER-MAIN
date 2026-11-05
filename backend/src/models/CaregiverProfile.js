@@ -203,6 +203,12 @@ const caregiverProfileSchema = new mongoose.Schema(
       required: [true, 'Hourly rate is required'],
       default: 200,
     },
+    bank: {
+      holderName: { type: String, trim: true, default: '' },
+      accountNumber: { type: String, trim: true, default: '' },
+      ifsc: { type: String, trim: true, default: '' },
+      upiId: { type: String, trim: true, default: '' },
+    },
     // Canonical reference to active Service catalog documents
     servicesOffered: [
       {

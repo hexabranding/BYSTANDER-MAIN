@@ -47,7 +47,7 @@ const STEP_FIELDS = [
   ['fullName', 'mobile', 'email', 'dob', 'gender', 'street', 'area', 'district', 'state', 'pincode', 'password'],
   ['qualification', 'experience', 'nursingRegNo', 'languages', 'careSettings'],
   [],
-  ['emergencyName', 'emergencyRelationship', 'emergencyPhone', 'bankHolder', 'accountNumber', 'ifsc', 'declaration'],
+  ['emergencyName', 'emergencyRelationship', 'emergencyPhone', 'bankHolder', 'accountNumber', 'ifsc', 'upiId', 'declaration'],
 ]
 
 const NURSING_QUALIFICATIONS = ['GNM Nursing', 'B.Sc Nursing', 'ANM Nursing', 'Nursing Student (Final Year)']
@@ -159,6 +159,7 @@ export function RegisterCaregiverPage() {
       bankHolder: '',
       accountNumber: '',
       ifsc: '',
+      upiId: '',
       declaration: false,
     },
   })
@@ -596,6 +597,7 @@ export function RegisterCaregiverPage() {
         holderName: values.bankHolder.trim(),
         accountNumber: values.accountNumber.trim(),
         ifsc: values.ifsc.trim().toUpperCase(),
+        upiId: values.upiId?.trim() || '',
       },
     }
     const result = await registerCaregiver(payload)
@@ -1267,6 +1269,26 @@ export function RegisterCaregiverPage() {
                           pattern: {
                             value: /^[A-Za-z]{4}0[A-Za-z0-9]{6}$/,
                             message: 'Enter a valid IFSC (4 letters, 0, then 6 characters)',
+                          },
+                        })}
+                      />
+                    </FormField>
+
+                    <FormField
+                      label="UPI ID / VPA (Optional)"
+                      htmlFor="g-upiId"
+                      error={errors.upiId?.message}
+                      hint="e.g. yourname@okhdfcbank or 9811100022@paytm for instant UPI payouts"
+                    >
+                      <Input
+                        id="g-upiId"
+                        placeholder="yourname@okhdfcbank"
+                        autoCapitalize="none"
+                        error={errors.upiId?.message}
+                        {...register('upiId', {
+                          pattern: {
+                            value: /^$|^[a-zA-Z0-9.\-_]{2,49}@[a-zA-Z]{2,49}$/,
+                            message: 'Enter a valid UPI ID (e.g. name@upi or mobile@paytm)',
                           },
                         })}
                       />

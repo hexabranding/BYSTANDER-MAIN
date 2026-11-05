@@ -4,6 +4,7 @@ import { Booking } from '../models/Booking.js';
 import { CaregiverProfile } from '../models/CaregiverProfile.js';
 import { CustomerProfile } from '../models/CustomerProfile.js';
 import { safeDispatchNotification } from './notificationService.js';
+import { getPlatformPricingSettings, calculateCaregiverHourlyRate } from './pricingService.js';
 
 // Per-caregiver FIFO serialization queue maintained for in-process compatibility
 const caregiverLocks = new Map();
@@ -149,17 +150,31 @@ export const recalculateCaregiverRating = async (caregiverId, options = {}) => {
   const count = stats.count;
   const average = count > 0 ? Number((stats.sum / count).toFixed(2)) : 5.0;
 
-  const updateOpts = options.session ? { session: options.session, new: true } : { new: true };
-  await CaregiverProfile.findByIdAndUpdate(
-    profileId,
-    {
-      'rating.average': average,
-      'rating.count': count,
-    },
-    updateOpts,
-  );
+  const updateFields = {
+    'rating.average': average,
+    'rating.count': count,
+  };
 
-  return { average, count };
+  try {
+    const pricing = await getPlatformPricingSettings();
+    if (pricing?.hourly?.dynamicPricingEnabled) {
+      const caregiverDoc = await CaregiverProfile.findById(profileId).select('hourlyRate').lean();
+      const tierResult = calculateCaregiverHourlyRate(
+        { hourlyRate: caregiverDoc?.hourlyRate, rating: { count, average } },
+        pricing,
+      );
+      if (tierResult?.rate) {
+        updateFields.hourlyRate = tierResult.rate;
+      }
+    }
+  } catch (rateErr) {
+    console.warn('[ReviewService] Dynamic rate recalculation note:', rateErr.message);
+  }
+
+  const updateOpts = options.session ? { session: options.session, new: true } : { new: true };
+  await CaregiverProfile.findByIdAndUpdate(profileId, updateFields, updateOpts);
+
+  return { average, count, hourlyRate: updateFields.hourlyRate };
 };
 
 /**

@@ -22,6 +22,7 @@ import {
   Ban,
   Settings,
   FileSpreadsheet,
+  Tag,
 } from 'lucide-react'
 
 export const CUSTOMER_NAV = [
@@ -124,6 +125,7 @@ export const ADMIN_NAV = [
       { label: 'Commissions', to: '/admin/commissions', icon: Percent },
       { label: 'Payouts', to: '/admin/payouts', icon: Banknote },
       { label: 'Invoices', to: '/admin/invoices', icon: Receipt },
+      { label: 'Pricing', to: '/admin/pricing', icon: Tag },
     ],
   },
   {

@@ -35,6 +35,7 @@ export const PERMITTED_CAREGIVER_UPDATE_FIELDS = [
   'careSettings',
   'availabilityStatus',
   'avatar',
+  'bank',
 ];
 
 /**

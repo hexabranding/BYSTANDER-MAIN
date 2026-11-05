@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { CheckCircle2, Clock, Download, IndianRupee, Printer, Receipt, RotateCcw, SearchX } from 'lucide-react'
+import { CheckCircle2, Clock, Download, IndianRupee, Printer, Receipt, RotateCcw, SearchX, XCircle } from 'lucide-react'
 import { useDocumentTitle, useDebouncedValue } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { GST_RATE, PLATFORM_FEE } from '@/utils/constants'
@@ -279,9 +279,21 @@ export function InvoicesPage() {
     return {
       total: invoices.reduce((s, b) => s + (b.total || b.totalAmount || 0), 0),
       paid: sum((b) => b.paymentStatus === 'Paid'),
-      refunded: sum((b) => b.paymentStatus === 'Refunded'),
-      outstanding: sum((b) => b.paymentStatus !== 'Paid' && b.paymentStatus !== 'Refunded'),
-      outstandingCount: invoices.filter((b) => b.paymentStatus !== 'Paid' && b.paymentStatus !== 'Refunded').length,
+      cancelled: sum((b) => b.paymentStatus === 'Cancelled' || b.status === 'Cancelled' || b.paymentStatus === 'Refunded'),
+      outstanding: sum(
+        (b) =>
+          b.paymentStatus !== 'Paid' &&
+          b.paymentStatus !== 'Cancelled' &&
+          b.paymentStatus !== 'Refunded' &&
+          b.status !== 'Cancelled',
+      ),
+      outstandingCount: invoices.filter(
+        (b) =>
+          b.paymentStatus !== 'Paid' &&
+          b.paymentStatus !== 'Cancelled' &&
+          b.paymentStatus !== 'Refunded' &&
+          b.status !== 'Cancelled',
+      ).length,
     }
   }, [invoices])
 
@@ -412,11 +424,11 @@ export function InvoicesPage() {
           delay={0.05}
         />
         <StatCard
-          label="Refunded"
-          value={formatCurrency(stats.refunded)}
-          icon={RotateCcw}
-          tone="warning"
-          hint="Returned to customers"
+          label="Cancelled"
+          value={formatCurrency(stats.cancelled)}
+          icon={XCircle}
+          tone="danger"
+          hint="Orders cancelled"
           delay={0.1}
         />
         <StatCard

@@ -61,4 +61,15 @@ router.patch(
   adminFinanceController.updatePayoutStatus,
 );
 
+/**
+ * @route   POST /api/admin/payouts/:id/create-disbursal-order
+ * @desc    Create Razorpay order for caretaker payout approval
+ * @access  Private (Admin only)
+ */
+router.post(
+  '/payouts/:id/create-disbursal-order',
+  validatePayoutIdParam,
+  adminFinanceController.createPayoutDisbursalOrder,
+);
+
 export default router;

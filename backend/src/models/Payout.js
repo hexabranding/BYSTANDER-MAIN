@@ -65,8 +65,34 @@ const payoutSchema = new mongoose.Schema(
     },
     disbursalMethod: {
       type: String,
-      default: 'HDFC •••• 4412',
+      default: 'Bank Transfer',
       trim: true,
+    },
+    gatewayPayoutId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    fundAccountId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    contactId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    utr: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    recipientDetails: {
+      name: { type: String, trim: true, default: '' },
+      accountNumber: { type: String, trim: true, default: '' },
+      ifsc: { type: String, trim: true, default: '' },
+      upiId: { type: String, trim: true, default: '' },
     },
     status: {
       type: String,

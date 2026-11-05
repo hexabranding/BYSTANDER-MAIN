@@ -4,7 +4,7 @@ import { generateNumericOtp, hashOtp, verifyOtpHash } from '../utils/otpUtils.js
 import { recordBookingTransaction } from './adminFinanceService.js';
 import { safeDispatchNotification } from './notificationService.js';
 
-const OTP_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
+const OTP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours (generous window for caregiver arrival)
 const OTP_COOLDOWN_MS = 60 * 1000;    // 60 seconds
 
 /**

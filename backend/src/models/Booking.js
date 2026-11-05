@@ -104,6 +104,21 @@ const bookingSchema = new mongoose.Schema(
     },
 
     // Financial snapshot (calculated server-side, never trusted from client)
+    bookingType: {
+      type: String,
+      enum: ['hourly', 'daily', 'monthly'],
+      default: 'hourly',
+    },
+    days: {
+      type: Number,
+      default: 1,
+      min: [1, 'Booking days must be at least 1'],
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Discount amount cannot be negative'],
+    },
     hourlyRate: {
       type: Number,
       required: [true, 'Hourly rate snapshot is required'],
@@ -254,7 +269,7 @@ const bookingSchema = new mongoose.Schema(
     // Payment Gateway Tracking (Razorpay Escrow)
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'pending', 'escrow_held', 'released', 'settled', 'refunded'],
+      enum: ['unpaid', 'pending', 'escrow_held', 'released', 'settled', 'refunded', 'cancelled'],
       default: 'unpaid',
       index: true,
     },

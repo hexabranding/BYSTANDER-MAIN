@@ -767,8 +767,17 @@ export function BookingDetailsPage() {
             <StatusBadge status={booking.status} />
             <StatusBadge status={booking.paymentStatus} />
             {booking.preferredGender && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
-                {booking.preferredGender === 'Female' ? '👩 Female Caretaker Preferred' : booking.preferredGender === 'Male' ? '👨 Male Caretaker Preferred' : '🤝 Any Caretaker'}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
+                {booking.preferredGender === 'Any' ? (
+                  <Users className="h-3 w-3 text-slate-500" />
+                ) : (
+                  <UserRound className="h-3 w-3 text-slate-500" />
+                )}
+                {booking.preferredGender === 'Female'
+                  ? 'Female Caretaker Preferred'
+                  : booking.preferredGender === 'Male'
+                    ? 'Male Caretaker Preferred'
+                    : 'Any Caretaker'}
               </span>
             )}
             <span className="inline-flex items-center gap-1.5 text-xs text-muted">
@@ -920,7 +929,8 @@ export function BookingDetailsPage() {
                   action={
                     booking.preferredGender && booking.preferredGender !== 'Any' ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-800">
-                        {booking.preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                        <UserRound className="h-3.5 w-3.5" />
+                        {booking.preferredGender === 'Female' ? 'Female Preferred' : 'Male Preferred'}
                       </span>
                     ) : null
                   }
@@ -1100,8 +1110,9 @@ export function BookingDetailsPage() {
                             Searching for Available Caretakers...
                           </h4>
                           {booking.preferredGender && booking.preferredGender !== 'Any' ? (
-                            <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-bold text-primary-800">
-                              {booking.preferredGender === 'Female' ? '👩 Female Preferred' : '👨 Male Preferred'}
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-bold text-primary-800">
+                              <UserRound className="h-3 w-3" />
+                              {booking.preferredGender === 'Female' ? 'Female Preferred' : 'Male Preferred'}
                             </span>
                           ) : null}
                         </div>

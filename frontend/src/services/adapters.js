@@ -616,10 +616,10 @@ export const adaptBooking = (raw) => {
             ? 'Paid'
             : String(raw.paymentStatus).toLowerCase() === 'escrow_held'
               ? 'Escrow Held'
-              : String(raw.paymentStatus).toLowerCase() === 'refunded'
-                ? 'Refunded'
+              : ['refunded', 'cancelled'].includes(String(raw.paymentStatus).toLowerCase()) || normalizedStatus === 'Cancelled'
+                ? 'Cancelled'
                 : 'Pending')
-        : (normalizedStatus === 'Completed' ? 'Pending' : 'Pending'),
+        : (normalizedStatus === 'Cancelled' ? 'Cancelled' : 'Pending'),
     isPaymentDue:
       normalizedStatus === 'Completed' &&
       !['released', 'settled', 'paid', 'escrow_held'].includes(String(raw.paymentStatus || '').toLowerCase()),
@@ -1437,6 +1437,7 @@ export const normalizePaymentStatus = (status) => {
   if (norm === 'escrow_held' || norm === 'escrow held') return 'Escrow Held'
   if (norm === 'released') return 'Released'
   if (norm === 'refunded') return 'Refunded'
+  if (norm === 'cancelled') return 'Cancelled'
   if (norm === 'disputed') return 'Disputed'
   if (norm === 'pending') return 'Pending'
   if (norm === 'paid') return 'Paid'
@@ -1481,8 +1482,14 @@ export const adaptTransaction = (raw) => {
 
   const service = bookingObj?.serviceName || raw.serviceName || raw.service || 'Healthcare Caretaking'
   const amount = Number(raw.amount || 0)
-  const commission = Number(raw.breakdown?.commission ?? raw.commission ?? Math.round(amount * 0.12))
-  const payout = Number(raw.breakdown?.caregiverPayout ?? raw.payout ?? Math.max(0, amount - commission))
+
+  const isCancelled =
+    String(raw.status).toLowerCase() === 'cancelled' ||
+    bookingObj?.status === 'cancelled' ||
+    (String(raw.status).toLowerCase() === 'refunded' && !bookingObj?.paidAt && !raw.gatewayPaymentId)
+
+  const commission = isCancelled ? 0 : Number(raw.breakdown?.commission ?? raw.commission ?? Math.round(amount * 0.12))
+  const payout = isCancelled ? 0 : Number(raw.breakdown?.caregiverPayout ?? raw.payout ?? Math.max(0, amount - commission))
 
   return {
     ...raw,
@@ -1499,8 +1506,8 @@ export const adaptTransaction = (raw) => {
     commission,
     payout,
     method: raw.paymentMethod || raw.method || 'UPI · HDFC',
-    status: normalizePaymentStatus(raw.status),
-    type: raw.type === 'refund' ? 'Refund' : (raw.type || 'Booking Payment'),
+    status: isCancelled ? 'Cancelled' : normalizePaymentStatus(raw.status),
+    type: isCancelled ? 'Cancellation' : (raw.type === 'refund' ? 'Refund' : (raw.type || 'Booking Payment')),
     breakdown: raw.breakdown || {
       baseAmount: Math.max(0, amount - commission),
       platformFee: 49,
@@ -1543,6 +1550,10 @@ export const adaptPayout = (raw) => {
     status: normalizePayoutStatus(raw.status),
     method,
     bank: method,
+    utr: raw.utr || null,
+    gatewayPayoutId: raw.gatewayPayoutId || null,
+    fundAccountId: raw.fundAccountId || null,
+    recipientDetails: raw.recipientDetails || raw.caregiver?.bank || null,
     requestedOn,
     settledAt: raw.settledAt || null,
     notes: raw.notes || '',

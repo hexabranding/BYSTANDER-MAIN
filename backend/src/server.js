@@ -22,6 +22,8 @@ import adminAnalyticsRoutes from './routes/adminAnalyticsRoutes.js';
 import adminFinanceRoutes from './routes/adminFinanceRoutes.js';
 import adminBlacklistRoutes from './routes/adminBlacklistRoutes.js';
 import adminSettingsRoutes from './routes/adminSettingsRoutes.js';
+import adminPricingRoutes from './routes/adminPricingRoutes.js';
+import { getPublicBookingQuote, getPublicPricingConfig } from './controllers/adminPricingController.js';
 import caregiverSelfRoutes from './routes/caregiverSelfRoutes.js';
 import caregiverPublicRoutes from './routes/caregiverPublicRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
@@ -128,6 +130,9 @@ app.use('/api/admin/messages', adminModerationRoutes);
 app.use('/api/admin/complaints', adminComplaintRoutes);
 app.use('/api/admin/blacklist', adminBlacklistRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/admin/pricing', adminPricingRoutes);
+app.get('/api/pricing/config', getPublicPricingConfig);
+app.post('/api/pricing/quote', getPublicBookingQuote);
 app.use('/api/admin/hospitals', hospitalRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/admin/customers', (req, res, next) => {

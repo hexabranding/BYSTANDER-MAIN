@@ -238,7 +238,8 @@ export function CaregiverProfileModal({
                         : 'bg-pink-50 text-pink-700 border-pink-200'
                     )}
                   >
-                    {gender === 'Male' ? '👨 Male Caretaker' : '👩 Female Caretaker'}
+                    <User className="h-3 w-3" />
+                    {gender === 'Male' ? 'Male Caretaker' : 'Female Caretaker'}
                   </span>
                   {badges.map((badge) => (
                     <span

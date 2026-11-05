@@ -71,6 +71,7 @@ const BlacklistPage = lazy(() => import('@/pages/admin/BlacklistPage'))
 const RatingsPage = lazy(() => import('@/pages/admin/RatingsPage'))
 const ReportsPage = lazy(() => import('@/pages/admin/ReportsPage'))
 const SettingsPage = lazy(() => import('@/pages/admin/SettingsPage'))
+const AdminPricingPage = lazy(() => import('@/pages/admin/PricingPage'))
 const AdminAmbulancesPage = lazy(() => import('@/pages/admin/AmbulancesPage'))
 
 // Ambulance Pages (Code-split lazy chunks)
@@ -225,6 +226,7 @@ export function AppRoutes() {
           <Route path="commissions" element={<CommissionsPage />} />
           <Route path="payouts" element={<PayoutsPage />} />
           <Route path="invoices" element={<AdminInvoices />} />
+          <Route path="pricing" element={<AdminPricingPage />} />
           <Route path="complaints" element={<AdminComplaints />} />
           <Route path="complaints/:id" element={<AdminComplaints />} />
           <Route path="sos-alerts" element={<Navigate to="/admin/dashboard" replace />} />

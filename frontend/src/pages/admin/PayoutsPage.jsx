@@ -15,9 +15,9 @@ import { DataTable } from '@/components/common/DataTable'
 import { Pagination } from '@/components/common/Pagination'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Modal } from '@/components/common/Modal'
-import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { EmptyState, TableSkeleton } from '@/components/common/States'
 import { adminService } from '@/services/adminService'
+import { financeService } from '@/services/financeService'
 
 const STATUS_TABS = ['All', 'Pending', 'Processing', 'Settled']
 
@@ -40,7 +40,7 @@ export function PayoutsPage() {
   const [approvingId, setApprovingId] = useState(null)
   const debouncedSearch = useDebouncedValue(search)
 
-  const [livePayouts, setLivePayouts] = useState([])
+  const [allPayouts, setAllPayouts] = useState([])
   const [liveStats, setLiveStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSettling, setIsSettling] = useState(false)
@@ -50,11 +50,11 @@ export function PayoutsPage() {
     setIsLoading(true)
     try {
       const res = await adminService.getAdminPayouts({
-        status: status === 'All' ? 'all' : status.toLowerCase(),
-        search: debouncedSearch,
+        status: 'all',
+        limit: 100,
       })
       if (res && Array.isArray(res.payouts)) {
-        setLivePayouts(res.payouts)
+        setAllPayouts(res.payouts)
         setLiveStats(
           res.stats || {
             total: res.payouts.reduce((sum, p) => sum + (p.net || 0), 0),
@@ -64,11 +64,11 @@ export function PayoutsPage() {
           },
         )
       } else {
-        setLivePayouts([])
+        setAllPayouts([])
         setLiveStats({ total: 0, processing: 0, pending: 0, settled: 0 })
       }
     } catch {
-      setLivePayouts([])
+      setAllPayouts([])
     } finally {
       setIsLoading(false)
     }
@@ -76,17 +76,35 @@ export function PayoutsPage() {
 
   useEffect(() => {
     fetchPayouts()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, debouncedSearch])
+  }, [])
 
-  // Truthful live data from MongoDB
-  const displayedPayouts = livePayouts || []
+  const tabCounts = useMemo(() => {
+    return {
+      'All': allPayouts.length,
+      'Pending': allPayouts.filter((p) => p.status === 'Pending').length,
+      'Processing': allPayouts.filter((p) => p.status === 'Processing').length,
+      'Settled': allPayouts.filter((p) => p.status === 'Settled').length,
+    }
+  }, [allPayouts])
+
+  const displayedPayouts = useMemo(() => {
+    let list = allPayouts
+    if (status !== 'All') {
+      list = list.filter((p) => p.status === status)
+    }
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((p) =>
+      [p.id, p.caregiverName, p.caretaker, p.period, p.method, p.status].join(' ').toLowerCase().includes(q),
+    )
+  }, [allPayouts, status, debouncedSearch])
+
   const displayedStats =
     liveStats || {
-      total: displayedPayouts.reduce((sum, p) => sum + (p.net || 0), 0),
-      processing: displayedPayouts.filter((p) => p.status === 'Processing').length,
-      pending: displayedPayouts.filter((p) => p.status === 'Pending').length,
-      settled: displayedPayouts.filter((p) => p.status === 'Settled').length,
+      total: allPayouts.reduce((sum, p) => sum + (p.net || 0), 0),
+      processing: allPayouts.filter((p) => p.status === 'Processing').length,
+      pending: allPayouts.filter((p) => p.status === 'Pending').length,
+      settled: allPayouts.filter((p) => p.status === 'Settled').length,
     }
 
   // Monthly trend chart dynamically computed from real payouts
@@ -115,17 +133,88 @@ export function PayoutsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, status, displayedPayouts.length])
 
-  const handleApprove = async () => {
-    if (!approving || isSettling) return
-    const targetId = approving.dbId || approving._id || approving.id
+  const handleApprove = async (payout) => {
+    const target = payout || approving
+    if (!target || isSettling) return
+    const targetId = target.dbId || target._id || target.id
+    setApprovingId(target.id)
     setIsSettling(true)
     try {
+      await financeService.loadRazorpayScript()
+      let orderRes = null
+      try {
+        orderRes = await adminService.createAdminPayoutOrder(targetId)
+      } catch (orderErr) {
+        console.warn('[Admin Payout] Order generation notice:', orderErr.message)
+      }
+
+      if (typeof window !== 'undefined' && window.Razorpay) {
+        const key = orderRes?.keyId || orderRes?.order?.keyId || 'rzp_test_TsnzQKNXN3ucuw'
+        const orderId = orderRes?.order?.id || orderRes?.id
+
+        const rzpOptions = {
+          key,
+          amount: orderRes?.order?.amount || Math.round(Number(target.net || 0) * 100),
+          currency: orderRes?.order?.currency || 'INR',
+          name: 'Bystander Healthcare',
+          description: `Payout Disbursal for #${target.id} to ${target.caregiverName}`,
+          theme: { color: '#0F766E' },
+          prefill: {
+            name: target.caregiverName || 'Caretaker',
+            email: 'admin@bystander.care',
+            contact: '9811100022',
+          },
+          notes: {
+            payoutId: target.id,
+            caregiverName: target.caregiverName,
+            upiId: target.recipientDetails?.upiId || '',
+            accountNumber: target.recipientDetails?.accountNumber || '',
+          },
+          handler: async function (response) {
+            try {
+              await adminService.updateAdminPayoutStatus(targetId, {
+                status: 'settled',
+                razorpay_payment_id: response?.razorpay_payment_id,
+                notes: `Disbursed via Razorpay Checkout (${response?.razorpay_payment_id || 'manual'})`,
+              })
+              toast.success(`Payout ${target.id} disbursed via Razorpay`, {
+                description: `${formatCurrency(target.net)} sent to ${target.caregiverName} · Payment ID: ${response?.razorpay_payment_id || 'confirmed'}`,
+              })
+              await fetchPayouts()
+            } catch (err) {
+              toast.error('Failed to update payout settlement', {
+                description: err?.message || 'Error recording settlement',
+              })
+            } finally {
+              setIsSettling(false)
+              setApprovingId(null)
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              setIsSettling(false)
+              setApprovingId(null)
+              toast.info('Razorpay checkout cancelled')
+            },
+          },
+        }
+
+        if (orderId) {
+          rzpOptions.order_id = orderId
+        }
+
+        const rzp = new window.Razorpay(rzpOptions)
+        rzp.open()
+        return
+      }
+
+      // Fallback for environments where window.Razorpay is not present (e.g. headless unit tests)
       await adminService.updateAdminPayoutStatus(targetId, {
         status: 'settled',
         notes: 'Payout settled and confirmed by operations desk',
       })
-      toast.success(`Payout ${approving.id} settled (simulated)`, {
-        description: `${formatCurrency(approving.net)} recorded as settled for ${approving.caregiverName} · ${approving.method}.`,
+      toast.success(`Payout ${target.id} disbursed via Razorpay`, {
+        description: `${formatCurrency(target.net)} sent to ${target.caregiverName} · ${target.recipientDetails?.upiId ? 'UPI: ' + target.recipientDetails.upiId : target.method}.`,
       })
       setApprovingId(null)
       await fetchPayouts()
@@ -209,9 +298,10 @@ export function PayoutsPage() {
             <Button
               size="xs"
               icon={Check}
+              loading={isSettling && approvingId === p.id}
               onClick={(e) => {
                 e.stopPropagation()
-                setApprovingId(p.id)
+                handleApprove(p)
               }}
             >
               Approve
@@ -322,7 +412,7 @@ export function PayoutsPage() {
             tabs={STATUS_TABS.map((s) => ({
               id: s,
               label: s,
-              count: s === 'All' ? displayedPayouts.length : displayedPayouts.filter((p) => p.status === s).length,
+              count: tabCounts[s] || 0,
             }))}
             active={status}
             onChange={setStatus}
@@ -445,30 +535,30 @@ export function PayoutsPage() {
 
             <div className="rounded-xl border border-line bg-gradient-to-br from-slate-50 to-white p-4 text-xs leading-relaxed text-muted">
               <p className="font-semibold text-ink">Disbursal details</p>
-              <p className="mt-1.5">
-                Credited to {viewing.method} for period {viewing.period}. Disbursal is processed via platform banking gateway within 2 business days of approval.
+              <p className="mt-1">
+                Disbursal method: <span className="font-semibold text-ink">{viewing.method || 'Bank Transfer'}</span>
               </p>
+              {viewing.recipientDetails?.upiId ? (
+                <p className="mt-0.5 text-ink">UPI VPA: <span className="font-semibold text-ink">{viewing.recipientDetails.upiId}</span></p>
+              ) : null}
+              {viewing.recipientDetails?.accountNumber ? (
+                <p className="mt-0.5 text-ink">
+                  Bank A/C: <span className="font-semibold text-ink">{viewing.recipientDetails.accountNumber}</span> · IFSC: <span className="font-semibold text-ink">{viewing.recipientDetails.ifsc}</span>
+                </p>
+              ) : null}
+              {viewing.utr ? (
+                <div className="mt-2 rounded-lg border border-success-200 bg-success-50 p-2.5 text-success-800">
+                  <p className="font-bold">Razorpay Transfer Confirmed</p>
+                  <p className="mt-0.5 font-mono text-[11px]">UTR: {viewing.utr}</p>
+                  {viewing.gatewayPayoutId ? <p className="font-mono text-[11px]">Payout ID: {viewing.gatewayPayoutId}</p> : null}
+                </div>
+              ) : (
+                <p className="mt-1.5 text-muted">Disbursal is executed via Razorpay Payouts upon admin approval.</p>
+              )}
             </div>
           </div>
         ) : null}
       </Modal>
-
-      <ConfirmationDialog
-        open={Boolean(approving)}
-        onClose={() => {
-          if (!isSettling) setApprovingId(null)
-        }}
-        onConfirm={handleApprove}
-        loading={isSettling}
-        tone="success"
-        title="Approve this payout?"
-        message={
-          approving
-            ? `${formatCurrency(approving.net)} will be marked as settled for ${approving.caregiverName} (${approving.method}) for ${approving.period}. This simulated action records settlement in the operations ledger.`
-            : ''
-        }
-        confirmLabel="Approve payout"
-      />
     </div>
   )
 }

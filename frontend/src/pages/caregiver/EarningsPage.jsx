@@ -106,6 +106,8 @@ export function EarningsPage() {
   const [isSubmittingPayout, setIsSubmittingPayout] = useState(false)
   const [loading, setLoading] = useState(true)
   const [earnings, setEarnings] = useState([])
+  const [payouts, setPayouts] = useState([])
+  const [bank, setBank] = useState(null)
   const [stats, setStats] = useState({
     totalNet: 0,
     totalGross: 0,
@@ -124,6 +126,8 @@ export function EarningsPage() {
       const res = await financeService.getCaregiverEarnings()
       const list = res?.earnings || []
       setEarnings(list)
+      setPayouts(res?.payouts || [])
+      setBank(res?.bank || null)
       if (res?.stats) {
         setStats(res.stats)
       } else {
@@ -177,6 +181,10 @@ export function EarningsPage() {
     return computeMonthlyTrend(earnings)
   }, [backendMonthly, earnings])
 
+  const activePayout = useMemo(() => {
+    return (payouts || []).find((p) => ['pending', 'processing'].includes(String(p?.status || '').toLowerCase()))
+  }, [payouts])
+
   const availableToWithdraw = useMemo(() => {
     if (stats?.availableBalance != null) {
       return stats.availableBalance
@@ -190,14 +198,21 @@ export function EarningsPage() {
     () => ({
       all: earnings.length,
       pending: earnings.filter((e) => e.status === 'Pending').length,
+      processing: earnings.filter((e) => e.status === 'Processing').length,
       released: earnings.filter((e) => e.status === 'Released').length,
       paid: earnings.filter((e) => e.status === 'Paid').length,
+      cancelled: earnings.filter((e) => e.status === 'Cancelled' || e.status === 'Refunded').length,
     }),
     [earnings],
   )
 
   const filtered = useMemo(() => {
-    const list = tab === 'all' ? earnings : earnings.filter((e) => e.status.toLowerCase() === tab)
+    const list =
+      tab === 'all'
+        ? earnings
+        : tab === 'cancelled'
+          ? earnings.filter((e) => e.status === 'Cancelled' || e.status === 'Refunded')
+          : earnings.filter((e) => e.status.toLowerCase() === tab)
     const q = query.trim().toLowerCase()
     if (!q) return list
     return list.filter((e) => [e.id, e.bookingId, e.service, e.status].join(' ').toLowerCase().includes(q))
@@ -378,14 +393,39 @@ export function EarningsPage() {
               <p className="mt-1.5 font-display text-3xl font-extrabold tabular-nums text-ink">{formatCurrency(availableToWithdraw)}</p>
               <p className="mt-1 text-xs text-muted">Settles to your registered bank in 2 working days</p>
             </div>
+            {activePayout ? (
+              <div className="rounded-xl border border-warning-200 bg-warning-50/70 p-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-warning-800">
+                    Payout request pending
+                  </span>
+                  <StatusBadge status={activePayout.status === 'processing' ? 'Processing' : 'Pending'} size="sm" />
+                </div>
+                <p className="mt-1 font-display text-xl font-extrabold text-ink">{formatCurrency(activePayout.net)}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Ref: <span className="font-semibold text-ink">{activePayout.payoutNumber}</span> · Awaiting admin disbursal
+                </p>
+              </div>
+            ) : null}
             <div className="rounded-xl border border-line px-4 py-3 text-sm">
-              <p className="text-muted">Linked bank account</p>
-              <p className="mt-0.5 font-semibold text-ink">Registered Bank Account</p>
+              <p className="text-muted">Linked payout destination</p>
+              {bank?.upiId ? (
+                <p className="mt-0.5 font-semibold text-ink">UPI: {bank.upiId}</p>
+              ) : null}
+              {bank?.accountNumber ? (
+                <p className="mt-0.5 text-xs text-muted">
+                  Bank A/C: •••• {bank.accountNumber.slice(-4)} · IFSC: {bank.ifsc}
+                </p>
+              ) : !bank?.upiId ? (
+                <p className="mt-0.5 font-semibold text-ink">Registered Bank Account</p>
+              ) : null}
             </div>
             <Button variant="primary" icon={HandCoins} className="w-full" disabled={availableToWithdraw <= 0} onClick={() => setPayoutDialogOpen(true)}>
               Request payout
             </Button>
-            {availableToWithdraw <= 0 ? <p className="text-center text-xs text-muted">No released balance available right now.</p> : null}
+            {availableToWithdraw <= 0 && !activePayout ? (
+              <p className="text-center text-xs text-muted">No released balance available right now.</p>
+            ) : null}
           </CardBody>
         </Card>
       </div>
@@ -405,9 +445,11 @@ export function EarningsPage() {
         <Tabs
           tabs={[
             { id: 'all', label: 'All', count: counts.all },
-            { id: 'pending', label: 'Pending', count: counts.pending },
-            { id: 'released', label: 'Released', count: counts.released },
+            ...(counts.pending > 0 ? [{ id: 'pending', label: 'In Escrow', count: counts.pending }] : []),
+            ...(counts.processing > 0 ? [{ id: 'processing', label: 'Processing', count: counts.processing }] : []),
+            ...(counts.released > 0 ? [{ id: 'released', label: 'Released', count: counts.released }] : []),
             ...(counts.paid > 0 ? [{ id: 'paid', label: 'Paid', count: counts.paid }] : []),
+            ...(counts.cancelled > 0 ? [{ id: 'cancelled', label: 'Cancelled', count: counts.cancelled }] : []),
           ]}
           active={tab}
           onChange={setTab}

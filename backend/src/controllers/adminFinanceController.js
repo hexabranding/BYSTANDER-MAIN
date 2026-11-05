@@ -80,6 +80,20 @@ export const updatePayoutStatus = async (req, res, next) => {
   }
 };
 
+export const createPayoutDisbursalOrder = async (req, res, next) => {
+  try {
+    const result = await adminFinanceService.createPayoutDisbursalOrder(req.params.id);
+    res.status(200).json({
+      success: true,
+      order: result.order,
+      keyId: result.keyId,
+      payout: result.payout,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getCustomerPayments = async (req, res, next) => {
   try {
     const result = await adminFinanceService.getCustomerPayments(req.user._id, req.query);

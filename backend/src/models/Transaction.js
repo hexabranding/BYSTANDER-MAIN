@@ -91,14 +91,14 @@ const transactionSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['escrow_held', 'released', 'refunded', 'disputed'],
+      enum: ['escrow_held', 'released', 'refunded', 'disputed', 'cancelled'],
       default: 'escrow_held',
       required: true,
       index: true,
     },
     type: {
       type: String,
-      enum: ['booking_payment', 'refund', 'adjustment'],
+      enum: ['booking_payment', 'refund', 'adjustment', 'cancellation'],
       default: 'booking_payment',
       required: true,
     },
@@ -111,6 +111,10 @@ const transactionSchema = new mongoose.Schema(
       default: null,
     },
     refundedAt: {
+      type: Date,
+      default: null,
+    },
+    cancelledAt: {
       type: Date,
       default: null,
     },

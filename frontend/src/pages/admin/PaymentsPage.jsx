@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Download, IndianRupee, Lock, Percent, RotateCcw, SearchX, TrendingUp } from 'lucide-react'
+import { Download, IndianRupee, Lock, Percent, RotateCcw, SearchX, TrendingUp, XCircle } from 'lucide-react'
 import { useDebouncedValue, useDocumentTitle } from '@/hooks/useUi'
 import { usePagination } from '@/hooks/usePagination'
 import { downloadText, formatCurrency, formatDate, toCSV } from '@/utils/format'
@@ -35,7 +35,7 @@ const RANGES = [
   { id: '90', label: 'Last 90 days' },
 ]
 
-const STATUS_TABS = ['All', 'Escrow Held', 'Released', 'Refunded']
+const STATUS_TABS = ['All', 'Escrow Held', 'Released', 'Cancelled']
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -64,7 +64,7 @@ export function PaymentsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const debouncedSearch = useDebouncedValue(search)
 
-  const [liveTransactions, setLiveTransactions] = useState([])
+  const [rangeTransactions, setRangeTransactions] = useState([])
   const [liveStats, setLiveStats] = useState(null)
   const [revenueSplit, setRevenueSplit] = useState([])
 
@@ -85,17 +85,17 @@ export function PaymentsPage() {
     setIsLoading(true)
     adminService
       .getAdminPayments({
-        status: status === 'All' ? 'all' : status,
+        status: 'all',
         range,
-        search: debouncedSearch,
+        limit: 100,
       })
       .then((res) => {
         if (!mounted) return
-        setLiveTransactions(res?.transactions || [])
+        setRangeTransactions(res?.transactions || [])
         if (res?.stats) setLiveStats(res.stats)
       })
       .catch(() => {
-        if (mounted) setLiveTransactions([])
+        if (mounted) setRangeTransactions([])
       })
       .finally(() => {
         if (mounted) setIsLoading(false)
@@ -104,18 +104,41 @@ export function PaymentsPage() {
     return () => {
       mounted = false
     }
-  }, [status, range, debouncedSearch])
+  }, [range])
 
-  const displayedTransactions = liveTransactions || []
+  const tabCounts = useMemo(() => {
+    return {
+      'All': rangeTransactions.length,
+      'Escrow Held': rangeTransactions.filter((t) => t.status === 'Escrow Held').length,
+      'Released': rangeTransactions.filter((t) => t.status === 'Released').length,
+      'Cancelled': rangeTransactions.filter((t) => t.status === 'Cancelled').length,
+    }
+  }, [rangeTransactions])
+
+  const displayedTransactions = useMemo(() => {
+    let list = rangeTransactions
+    if (status !== 'All') {
+      list = list.filter((t) => t.status === status)
+    }
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((t) =>
+      [t.id, t.bookingId, t.customerName, t.caregiverName, t.service, t.method]
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    )
+  }, [rangeTransactions, status, debouncedSearch])
+
   const displayedStats = useMemo(() => {
     if (liveStats) return liveStats
     return {
-      gross: displayedTransactions.filter((t) => t.status !== 'Refunded').reduce((s, t) => s + (t.amount || 0), 0),
-      commission: displayedTransactions.reduce((s, t) => s + (t.commission || 0), 0),
-      refunded: displayedTransactions.filter((t) => t.status === 'Refunded').reduce((s, t) => s + (t.amount || 0), 0),
-      escrow: displayedTransactions.filter((t) => t.status === 'Escrow Held').reduce((s, t) => s + (t.amount || 0), 0),
+      gross: rangeTransactions.filter((t) => t.status !== 'Cancelled').reduce((s, t) => s + (t.amount || 0), 0),
+      commission: rangeTransactions.filter((t) => t.status !== 'Cancelled').reduce((s, t) => s + (t.commission || 0), 0),
+      cancelled: rangeTransactions.filter((t) => t.status === 'Cancelled').reduce((s, t) => s + (t.amount || 0), 0),
+      escrow: rangeTransactions.filter((t) => t.status === 'Escrow Held').reduce((s, t) => s + (t.amount || 0), 0),
     }
-  }, [liveStats, displayedTransactions])
+  }, [liveStats, rangeTransactions])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(displayedTransactions, 8)
   useEffect(() => {
@@ -222,11 +245,11 @@ export function PaymentsPage() {
           delay={0.05}
         />
         <StatCard
-          label="Refunded amount"
-          value={formatCurrency(displayedStats.refunded)}
-          icon={RotateCcw}
-          tone="warning"
-          hint="Returned to customers"
+          label="Cancelled orders"
+          value={formatCurrency(displayedStats.cancelled || 0)}
+          icon={XCircle}
+          tone="danger"
+          hint="Orders cancelled before payment"
           delay={0.1}
         />
         <StatCard
@@ -349,7 +372,7 @@ export function PaymentsPage() {
             tabs={STATUS_TABS.map((s) => ({
               id: s,
               label: s,
-              count: s === 'All' ? displayedTransactions.length : displayedTransactions.filter((t) => t.status === s).length,
+              count: tabCounts[s] || 0,
             }))}
             active={status}
             onChange={setStatus}
@@ -417,7 +440,9 @@ export function PaymentsPage() {
                 {selected.method}
               </span>
               <span className="rounded-full border border-line-strong bg-slate-50 px-3 py-1 text-xs font-semibold text-muted">
-                Paid on {formatDate(selected.date, { long: true })}
+                {selected.status === 'Cancelled'
+                  ? `Cancelled on ${formatDate(selected.date, { long: true })}`
+                  : `Paid on ${formatDate(selected.date, { long: true })}`}
               </span>
             </div>
 

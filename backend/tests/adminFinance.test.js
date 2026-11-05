@@ -1718,3 +1718,61 @@ test('Step 14 - 32: replica set integration: payout state machine transitions, n
     await replSet.stop();
   }
 });
+
+// Test 33: createPayoutDisbursalOrder initiates Razorpay disbursal order for pending payouts
+test('Step 14 - 33: createPayoutDisbursalOrder creates a Razorpay order and returns keyId for modal checkout', async () => {
+  const replSet = await setupEphemeralReplicaSet();
+  if (!replSet.supported) {
+    console.log(`[SKIPPED] Ephemeral replica set not supported: ${replSet.reason}`);
+    return;
+  }
+
+  if (mongoose.connection?.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+  await mongoose.connect(replSet.uri);
+
+  try {
+    const cgId = new mongoose.Types.ObjectId();
+    const pendingPayout = await Payout.create({
+      payoutNumber: 'PO-20261105-RZPORD',
+      caregiver: cgId,
+      caregiverUser: cgId,
+      period: 'Nov 1 – Nov 5, 2026',
+      gross: 398,
+      commission: 48,
+      net: 350,
+      currency: 'INR',
+      status: 'pending',
+      disbursalMethod: 'bank_transfer',
+      periodStart: new Date(),
+      periodEnd: new Date(),
+    });
+
+    const disbursal = await adminFinanceService.createPayoutDisbursalOrder(pendingPayout._id.toString());
+    assert.ok(disbursal);
+    assert.ok(disbursal.order);
+    assert.ok(disbursal.order.id);
+    assert.equal(disbursal.order.amount, 35000); // 350 INR * 100 paise
+    assert.ok(disbursal.keyId);
+    assert.equal(disbursal.payout.id, 'PO-20261105-RZPORD');
+
+    // Reject creating disbursal order on already settled payout
+    await Payout.updateOne({ _id: pendingPayout._id }, { status: 'settled', settledAt: new Date() });
+    await assert.rejects(
+      async () => {
+        await adminFinanceService.createPayoutDisbursalOrder(pendingPayout._id.toString());
+      },
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        assert.match(err.message, /already settled/i);
+        return true;
+      },
+    );
+  } finally {
+    if (mongoose.connection?.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+    await replSet.stop();
+  }
+});

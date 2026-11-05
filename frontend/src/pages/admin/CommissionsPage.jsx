@@ -20,7 +20,7 @@ import { ConfirmationDialog } from '@/components/common/ConfirmationDialog'
 import { EmptyState, TableSkeleton } from '@/components/common/States'
 import { adminService } from '@/services/adminService'
 
-const STATUS_TABS = ['All', 'Accrued', 'Settled']
+const STATUS_TABS = ['All', 'Accrued', 'Settled', 'Cancelled']
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -39,7 +39,7 @@ export function CommissionsPage() {
   const [status, setStatus] = useState('All')
   const [selected, setSelected] = useState(null)
   const [reconcileOpen, setReconcileOpen] = useState(false)
-  const [liveCommissions, setLiveCommissions] = useState([])
+  const [allCommissions, setAllCommissions] = useState([])
   const [liveStats, setLiveStats] = useState(null)
   const [revenueSplit, setRevenueSplit] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -62,13 +62,13 @@ export function CommissionsPage() {
     setIsLoading(true)
     try {
       const res = await adminService.getAdminCommissions({
-        status: status === 'All' ? 'all' : status,
-        search: debouncedSearch,
+        status: 'all',
+        limit: 100,
       })
-      setLiveCommissions(res?.commissions || [])
+      setAllCommissions(res?.commissions || [])
       if (res?.stats) setLiveStats(res.stats)
     } catch {
-      setLiveCommissions([])
+      setAllCommissions([])
     } finally {
       setIsLoading(false)
     }
@@ -76,10 +76,29 @@ export function CommissionsPage() {
 
   useEffect(() => {
     fetchCommissions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, debouncedSearch])
+  }, [])
 
-  const displayedCommissions = liveCommissions || []
+  const tabCounts = useMemo(() => {
+    return {
+      'All': allCommissions.length,
+      'Accrued': allCommissions.filter((c) => c.status === 'Accrued').length,
+      'Settled': allCommissions.filter((c) => c.status === 'Settled').length,
+      'Cancelled': allCommissions.filter((c) => c.status === 'Cancelled').length,
+    }
+  }, [allCommissions])
+
+  const displayedCommissions = useMemo(() => {
+    let list = allCommissions
+    if (status !== 'All') {
+      list = list.filter((c) => c.status === status)
+    }
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((c) =>
+      [c.id, c.bookingId, c.caregiverName, c.status].join(' ').toLowerCase().includes(q),
+    )
+  }, [allCommissions, status, debouncedSearch])
+
   const displayedStats = useMemo(() => {
     if (liveStats) {
       return {
@@ -90,18 +109,18 @@ export function CommissionsPage() {
         effective: liveStats.effectiveRate || 12,
       }
     }
-    const total = displayedCommissions.reduce((s, c) => s + (c.amount || 0), 0)
-    const accrued = displayedCommissions.filter((c) => c.status === 'Accrued').reduce((s, c) => s + (c.amount || 0), 0)
-    const settled = displayedCommissions.filter((c) => c.status === 'Settled').reduce((s, c) => s + (c.amount || 0), 0)
-    const base = displayedCommissions.reduce((s, c) => s + (c.base || 0), 0)
+    const total = allCommissions.reduce((s, c) => s + (c.amount || 0), 0)
+    const accrued = allCommissions.filter((c) => c.status === 'Accrued').reduce((s, c) => s + (c.amount || 0), 0)
+    const settled = allCommissions.filter((c) => c.status === 'Settled').reduce((s, c) => s + (c.amount || 0), 0)
+    const base = allCommissions.reduce((s, c) => s + (c.base || 0), 0)
     return {
       total,
       accrued,
       settled,
-      accruedCount: displayedCommissions.filter((c) => c.status === 'Accrued').length,
+      accruedCount: allCommissions.filter((c) => c.status === 'Accrued').length,
       effective: base ? Math.round((total / base) * 1000) / 10 : Math.round(PLATFORM_COMMISSION * 100),
     }
-  }, [liveStats, displayedCommissions])
+  }, [liveStats, allCommissions])
 
   const { page, totalPages, totalItems, pageItems, goto } = usePagination(displayedCommissions, 8)
   useEffect(() => {
@@ -281,7 +300,7 @@ export function CommissionsPage() {
             tabs={STATUS_TABS.map((s) => ({
               id: s,
               label: s,
-              count: s === 'All' ? displayedCommissions.length : displayedCommissions.filter((c) => c.status === s).length,
+              count: tabCounts[s] || 0,
             }))}
             active={status}
             onChange={setStatus}

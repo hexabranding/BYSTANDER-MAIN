@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 import { User, CustomerProfile, CaregiverProfile, Document, Service, Blacklist, Ambulance } from '../models/index.js';
+import { getPlatformPricingSettings } from './pricingService.js';
 import { hashPassword, comparePassword, generateToken, sanitizeUser, formatAccountStatusMessage } from '../utils/auth.js';
 import { generateNumericOtp } from '../utils/otpUtils.js';
 import { sendOtpEmail } from './emailService.js';
@@ -196,7 +197,13 @@ export const registerCaregiver = async (data) => {
         state: resolvedState,
         pincode: resolvedPincode,
       },
-      hourlyRate: hourlyRate !== undefined ? hourlyRate : 200,
+      hourlyRate: hourlyRate !== undefined ? Number(hourlyRate) : ((await getPlatformPricingSettings())?.hourly?.initialRate || 200),
+      bank: {
+        holderName: data.bank?.holderName || data.bankHolder || data.holderName || '',
+        accountNumber: data.bank?.accountNumber || data.accountNumber || '',
+        ifsc: (data.bank?.ifsc || data.ifsc || '').toUpperCase(),
+        upiId: data.bank?.upiId || data.upiId || '',
+      },
       servicesOffered: initialServicesOffered,
       services: initialServices,
       careSettings:

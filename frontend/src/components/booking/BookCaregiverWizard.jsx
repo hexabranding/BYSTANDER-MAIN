@@ -8,18 +8,23 @@ import {
   Bandage,
   Building2,
   CalendarDays,
+  CalendarRange,
   Check,
   CheckCircle2,
   Clock,
+  HeartHandshake,
   Home,
   MapPin,
+  Mars,
   Moon,
   Pill,
   Plus,
   ShieldCheck,
   Sparkles,
   UserRound,
+  Users,
   Utensils,
+  Venus,
   X,
   LogIn,
   Zap,
@@ -34,7 +39,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { SERVICES } from '@/data/services'
 import { CITIES, GST_RATE, PLATFORM_FEE, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
-import { formatCurrency, formatDate } from '@/utils/format'
+import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import { DURATION_GROUPS, durationBasis, formatDuration } from '@/utils/duration'
 import { cn } from '@/utils/cn'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
@@ -126,6 +131,28 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   const [availableServices, setAvailableServices] = useState(SERVICES)
   const [availableCaregivers, setAvailableCaregivers] = useState([])
   const [loadingCaregivers, setLoadingCaregivers] = useState(true)
+  const [pricingConfig, setPricingConfig] = useState({
+    serviceBaseRate: 199,
+    hourly: { initialRate: 200, maxCap: 500, dynamicPricingEnabled: true, tiers: [] },
+    daily: { baseDailyRate: 1500, extraDayDiscount: 250 },
+    monthly: { useFormula: true, fixedPackageRate: 37500 },
+  })
+
+  useEffect(() => {
+    let isMounted = true
+    bookingService
+      .getPublicPricingConfig()
+      .then((res) => {
+        if (isMounted && res?.pricing) {
+          setPricingConfig(res.pricing)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -209,6 +236,8 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     date: '',
     startTime: '08:00',
     hours: 2,
+    bookingType: 'hourly',
+    days: 1,
     instructions: '',
     extras: [],
     preferredCaregiverGender: 'Any',
@@ -340,10 +369,42 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     form.service?.baseHourlyRate ||
     form.service?.startingPrice ||
     matchedCaregiver?.hourlyRate ||
+    pricingConfig?.hourly?.initialRate ||
     availableServices[0]?.baseHourlyRate ||
     199
+
+  const bookingType = form.bookingType || 'hourly'
+  const days = Math.max(1, Number(form.days) || 1)
   const hours = Number(form.hours) || 2
-  const subtotal = rate * hours
+
+  const baseDaily = Number(pricingConfig?.daily?.baseDailyRate || 1500)
+  const extraDiscount = Number(pricingConfig?.daily?.extraDayDiscount || 250)
+  const monthlyFormula = pricingConfig?.monthly?.useFormula !== false
+  const monthlyFixed = Number(pricingConfig?.monthly?.fixedPackageRate || 37500)
+
+  let subtotal = 0
+  let discountAmount = 0
+  let grossShiftAmount = 0
+
+  if (bookingType === 'daily') {
+    grossShiftAmount = days * baseDaily
+    discountAmount = Math.max(0, (days - 1) * extraDiscount)
+    subtotal = Math.max(0, grossShiftAmount - discountAmount)
+  } else if (bookingType === 'monthly') {
+    grossShiftAmount = 30 * baseDaily
+    if (monthlyFormula) {
+      discountAmount = 29 * extraDiscount
+      subtotal = Math.max(0, grossShiftAmount - discountAmount)
+    } else {
+      subtotal = monthlyFixed
+      discountAmount = Math.max(0, grossShiftAmount - subtotal)
+    }
+  } else {
+    subtotal = rate * hours
+    grossShiftAmount = subtotal
+    discountAmount = 0
+  }
+
   const platformFee = PLATFORM_FEE
   const tax = Math.round((subtotal + platformFee) * GST_RATE)
   const total = subtotal + platformFee + tax
@@ -884,13 +945,22 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
         localStartDate = new Date(uY, uMo - 1, uD, uH, uM, 0)
       }
 
-      const hoursNum = Math.max(2, Math.min(24, Number(form.hours) || 2))
-      const localEndDate = new Date(localStartDate.getTime() + hoursNum * 60 * 60 * 1000)
+      const isDailyBooking = form.bookingType === 'daily'
+      const isMonthlyBooking = form.bookingType === 'monthly'
+      const totalShiftHours = isMonthlyBooking
+        ? 30 * 24
+        : isDailyBooking
+          ? Math.max(1, Number(form.days) || 1) * 24
+          : Math.max(2, Math.min(24, Number(form.hours) || 2))
+      const localEndDate = new Date(localStartDate.getTime() + totalShiftHours * 60 * 60 * 1000)
 
       // Broadcast payload: No caregiverId required. Broadcasts to all active caretakers!
       const payload = {
         serviceId,
         isUrgent: Boolean(isUrgent),
+        bookingType: form.bookingType || 'hourly',
+        days: isMonthlyBooking ? 30 : isDailyBooking ? Math.max(1, Number(form.days) || 1) : 1,
+        discountAmount,
         startDateTime: localStartDate.toISOString(),
         endDateTime: localEndDate.toISOString(),
         timezone: 'Asia/Kolkata',
@@ -1253,22 +1323,33 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                             id: 'Female',
                             label: 'Female Caretaker',
                             hint: 'Recommended for female patients & personal hygiene care',
-                            icon: '👩',
+                            icon: UserRound,
+                            subIcon: Venus,
+                            iconBg: 'bg-rose-50 text-rose-600 border border-rose-200/80',
+                            subBadgeBg: 'bg-rose-600 text-white',
                           },
                           {
                             id: 'Male',
                             label: 'Male Caretaker',
                             hint: 'Recommended for physical lifting & mobility assistance',
-                            icon: '👨',
+                            icon: UserRound,
+                            subIcon: Mars,
+                            iconBg: 'bg-sky-50 text-sky-600 border border-sky-200/80',
+                            subBadgeBg: 'bg-sky-600 text-white',
                           },
                           {
                             id: 'Any',
                             label: 'Any / No Preference',
                             hint: 'Fastest responses from all nearby verified caretakers',
-                            icon: '🤝',
+                            icon: Users,
+                            subIcon: HeartHandshake,
+                            iconBg: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
+                            subBadgeBg: 'bg-emerald-600 text-white',
                           },
                         ].map((g) => {
                           const active = (form.preferredCaregiverGender || 'Any') === g.id
+                          const Icon = g.icon
+                          const SubIcon = g.subIcon
                           return (
                             <button
                               key={g.id}
@@ -1282,18 +1363,21 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                               )}
                             >
                               <div className="flex w-full items-center justify-between">
-                                <span className="text-xl" role="img" aria-label={g.label}>
-                                  {g.icon}
+                                <span className={cn('relative grid h-10 w-10 place-items-center rounded-xl shadow-xs', g.iconBg)}>
+                                  <Icon className="h-5 w-5" />
+                                  <span className={cn('absolute -bottom-1 -right-1 grid h-4 w-4 place-items-center rounded-full shadow-xs', g.subBadgeBg)}>
+                                    <SubIcon className="h-2.5 w-2.5" />
+                                  </span>
                                 </span>
                                 {active ? (
-                                  <span className="grid h-5 w-5 place-items-center rounded-full bg-primary-600 text-white">
+                                  <span className="grid h-5 w-5 place-items-center rounded-full bg-primary-600 text-white shadow-xs">
                                     <Check className="h-3 w-3" />
                                   </span>
                                 ) : (
                                   <span className="h-5 w-5 rounded-full border border-line bg-surface" />
                                 )}
                               </div>
-                              <p className="mt-2 text-sm font-bold text-ink">{g.label}</p>
+                              <p className="mt-2.5 text-sm font-bold text-ink">{g.label}</p>
                               <p className="mt-0.5 text-xs leading-relaxed text-muted">{g.hint}</p>
                             </button>
                           )
@@ -1489,10 +1573,76 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
               {/* Step 4: Schedule */}
               {currentStepId === 'schedule' ? (
                 <Card>
-                  <CardHeader title="When do you need the caretaker?" subtitle="Pick the starting date, time, and shift duration." />
-                  <CardBody className="space-y-5">
+                  <CardHeader title="When do you need the caretaker?" subtitle="Choose between flexible hourly shifts, multi-day care with discounts, or a monthly schedule." />
+                  <CardBody className="space-y-6">
+                    {/* Booking Mode Selector */}
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-2">
+                        Select Booking Mode
+                      </label>
+                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                        {[
+                          {
+                            id: 'hourly',
+                            label: 'Hourly Shifts',
+                            desc: 'Flexible 2 to 24 hrs care',
+                            icon: Clock,
+                            iconColor: 'text-amber-600',
+                            iconBg: 'bg-amber-50',
+                          },
+                          {
+                            id: 'daily',
+                            label: 'Daily (1, 2, 3+ Days)',
+                            desc: 'Multi-day with progressive discounts',
+                            icon: CalendarDays,
+                            iconColor: 'text-primary-700',
+                            iconBg: 'bg-mint-50',
+                          },
+                          {
+                            id: 'monthly',
+                            label: 'Monthly Package',
+                            desc: '30-day comprehensive care plan',
+                            icon: CalendarRange,
+                            iconColor: 'text-indigo-600',
+                            iconBg: 'bg-indigo-50',
+                          },
+                        ].map((m) => {
+                          const active = (form.bookingType || 'hourly') === m.id
+                          const ModeIcon = m.icon
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => set({ bookingType: m.id })}
+                              className={cn(
+                                'flex flex-col items-start rounded-xl border p-3.5 text-left transition-all',
+                                active
+                                  ? 'border-primary-700 bg-primary-50/70 ring-2 ring-primary-600/20 shadow-xs'
+                                  : 'border-line bg-white hover:border-slate-300 hover:bg-slate-50',
+                              )}
+                            >
+                              <div className="flex w-full items-center justify-between">
+                                <span className={cn('grid h-7 w-7 place-items-center rounded-lg border border-line/60', m.iconBg, m.iconColor)}>
+                                  <ModeIcon className="h-3.5 w-3.5" />
+                                </span>
+                                {active ? (
+                                  <span className="grid h-4 w-4 place-items-center rounded-full bg-primary-700 text-white shadow-xs">
+                                    <Check className="h-2.5 w-2.5" />
+                                  </span>
+                                ) : null}
+                              </div>
+                              <span className={cn('mt-2 text-xs font-bold', active ? 'text-primary-900' : 'text-ink')}>
+                                {m.label}
+                              </span>
+                              <span className="mt-0.5 text-[11px] text-muted">{m.desc}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <FormField label="Service date" required>
+                      <FormField label="Starting date" required>
                         <Input
                           type="date"
                           min={todayISO()}
@@ -1511,51 +1661,161 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                       </FormField>
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                          Shift duration (hours) · Min 2 hrs
-                        </label>
-                        <span className="text-xs font-semibold text-primary-700">
-                          {form.hours || 2} hours selected
-                        </span>
+                    {/* Mode A: Hourly Duration */}
+                    {(form.bookingType || 'hourly') === 'hourly' ? (
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                            Shift duration (hours) · Min 2 hrs
+                          </label>
+                          <span className="text-xs font-semibold text-primary-700">
+                            {form.hours || 2} hours selected
+                          </span>
+                        </div>
+                        <div className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-7">
+                          {[2, 4, 6, 8, 10, 12, 24].map((h) => {
+                            const selected = Number(form.hours) === h
+                            return (
+                              <button
+                                key={h}
+                                type="button"
+                                onClick={() => set({ hours: h })}
+                                className={cn(
+                                  'rounded-xl border py-2.5 text-xs font-bold transition',
+                                  selected
+                                    ? 'border-primary-700 bg-primary-700 text-white shadow-sm'
+                                    : 'border-line bg-white text-ink hover:border-primary-300 hover:bg-slate-50',
+                                )}
+                              >
+                                {h} hrs
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className="text-xs text-muted">Custom duration:</span>
+                          <input
+                            type="number"
+                            min={2}
+                            max={24}
+                            value={form.hours || 2}
+                            onChange={(e) => {
+                              const val = Math.max(2, Math.min(24, Number(e.target.value) || 2))
+                              set({ hours: val })
+                            }}
+                            className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-primary-600 focus:outline-none"
+                          />
+                          <span className="text-xs text-muted">hours (open freely, min 2 hrs)</span>
+                        </div>
                       </div>
-                      <div className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-7">
-                        {[2, 4, 6, 8, 10, 12, 24].map((h) => {
-                          const selected = Number(form.hours) === h
-                          return (
-                            <button
-                              key={h}
-                              type="button"
-                              onClick={() => set({ hours: h })}
-                              className={cn(
-                                'rounded-xl border py-2.5 text-xs font-bold transition',
-                                selected
-                                  ? 'border-primary-700 bg-primary-700 text-white shadow-sm'
-                                  : 'border-line bg-white text-ink hover:border-primary-300 hover:bg-slate-50',
-                              )}
-                            >
-                              {h} hrs
-                            </button>
-                          )
-                        })}
+                    ) : null}
+
+                    {/* Mode B: Daily Multi-Day Duration */}
+                    {form.bookingType === 'daily' ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-bold uppercase tracking-wider text-muted">
+                            Number of Days · Progressive Multi-Day Discount
+                          </label>
+                          <span className="text-xs font-semibold text-primary-700">
+                            {days} {days === 1 ? 'day' : 'days'} selected
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+                          {[1, 2, 3, 4, 5, 7].map((d) => {
+                            const pGross = d * baseDaily
+                            const pSave = Math.max(0, (d - 1) * extraDiscount)
+                            const pPrice = Math.max(0, pGross - pSave)
+                            const selected = days === d
+                            return (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => set({ days: d })}
+                                className={cn(
+                                  'flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition',
+                                  selected
+                                    ? 'border-primary-700 bg-primary-700 text-white shadow-sm'
+                                    : 'border-line bg-white hover:border-primary-300 hover:bg-slate-50 text-ink',
+                                )}
+                              >
+                                <span className="text-xs font-bold">
+                                  {d} {d === 1 ? 'Day' : 'Days'}
+                                </span>
+                                <span className={cn('text-[11px] font-semibold', selected ? 'text-primary-100' : 'text-primary-800')}>
+                                  ₹{formatNumber(pPrice)}
+                                </span>
+                                {pSave > 0 ? (
+                                  <span
+                                    className={cn(
+                                      'mt-1 rounded-full px-1.5 py-0.2 text-[9px] font-extrabold',
+                                      selected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800',
+                                    )}
+                                  >
+                                    Save ₹{formatNumber(pSave)}
+                                  </span>
+                                ) : null}
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <span className="text-xs text-muted">Custom days:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={60}
+                            value={days}
+                            onChange={(e) => {
+                              const val = Math.max(1, Math.min(60, Number(e.target.value) || 1))
+                              set({ days: val })
+                            }}
+                            className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-primary-600 focus:outline-none"
+                          />
+                          <span className="text-xs text-muted">
+                            days ({formatCurrency(baseDaily)}/day base with -{formatCurrency(extraDiscount)} per extra day)
+                          </span>
+                        </div>
+
+                        {discountAmount > 0 ? (
+                          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-900">
+                            <Sparkles className="h-4 w-4 shrink-0 text-emerald-700" />
+                            <span>
+                              <strong>Multi-Day Discount Applied:</strong> You are saving{' '}
+                              <strong>{formatCurrency(discountAmount)}</strong> on this {days}-day booking!
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <span className="text-xs text-muted">Custom duration:</span>
-                        <input
-                          type="number"
-                          min={2}
-                          max={24}
-                          value={form.hours || 2}
-                          onChange={(e) => {
-                            const val = Math.max(2, Math.min(24, Number(e.target.value) || 2))
-                            set({ hours: val })
-                          }}
-                          className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-primary-600 focus:outline-none"
-                        />
-                        <span className="text-xs text-muted">hours (open freely, min 2 hrs)</span>
+                    ) : null}
+
+                    {/* Mode C: Monthly Package */}
+                    {form.bookingType === 'monthly' ? (
+                      <div className="rounded-xl border border-primary-200 bg-gradient-to-br from-mint-50/80 via-white to-slate-50 p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-primary-900 text-sm">
+                            30-Day Comprehensive Bedside Care Package
+                          </span>
+                          <span className="rounded-full bg-primary-700 px-3 py-1 text-xs font-bold text-white shadow-xs">
+                            {formatCurrency(subtotal)} / Month
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted leading-relaxed">
+                          Includes dedicated daily bystander coverage for 30 consecutive days from{' '}
+                          <strong className="text-ink">{form.date || 'your selected start date'}</strong>.{' '}
+                          {discountAmount > 0 ? (
+                            <>
+                              Maximum family savings of{' '}
+                              <strong className="text-emerald-700">{formatCurrency(discountAmount)}</strong> compared to standard single-day rates (~{formatCurrency(Math.round(subtotal / 30))}/day effective).
+                            </>
+                          ) : (
+                            <>Dedicated monthly package rate (~{formatCurrency(Math.round(subtotal / 30))}/day effective).</>
+                          )}
+                        </p>
                       </div>
-                    </div>
+                    ) : null}
                   </CardBody>
                 </Card>
               ) : null}
@@ -1654,6 +1914,24 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                     <CardHeader title="Pricing transparency" subtitle="All fees are clearly broken down. Payment is held in secure escrow." />
                     <CardBody className="space-y-4">
                       <PriceBreakdown
+                        items={
+                          discountAmount > 0
+                            ? [
+                                {
+                                  label:
+                                    form.bookingType === 'daily'
+                                      ? `${days} Days Shift (${formatCurrency(baseDaily)}/day base)`
+                                      : '30-Day Monthly Care Package',
+                                  amount: grossShiftAmount,
+                                },
+                                {
+                                  label: 'Multi-Day Progressive Discount',
+                                  amount: -discountAmount,
+                                  meta: 'Special multi-day booking discount applied',
+                                },
+                              ]
+                            : []
+                        }
                         baseRate={rate}
                         hours={hours}
                         subtotal={subtotal}
@@ -1799,13 +2077,39 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
               <CardBody className="space-y-3">
                 {isUrgent ? (
                   <Row label="Booking mode" value="Urgent 2-Step (Immediate)" />
-                ) : null}
+                ) : (
+                  <Row
+                    label="Booking mode"
+                    value={
+                      form.bookingType === 'daily'
+                        ? `Daily (${days} ${days === 1 ? 'day' : 'days'})`
+                        : form.bookingType === 'monthly'
+                          ? 'Monthly Package (30 days)'
+                          : 'Hourly Shift'
+                    }
+                  />
+                )}
                 <Row label="Service" value={isUrgent ? 'On-Demand Caretaker Dispatch' : (form.service?.name || 'Not selected')} />
-                <Row
-                  label="Caretaker rate"
-                  value={form.service || isUrgent ? `${formatCurrency(rate)} / hour` : '—'}
-                />
-                <Row label="Duration" value={isUrgent ? 'Initial dispatch (2 hrs)' : `${form.hours || 2} hours`} />
+                {form.bookingType === 'hourly' || isUrgent ? (
+                  <>
+                    <Row
+                      label="Caretaker rate"
+                      value={form.service || isUrgent ? `${formatCurrency(rate)} / hour` : '—'}
+                    />
+                    <Row label="Duration" value={isUrgent ? 'Initial dispatch (2 hrs)' : `${form.hours || 2} hours`} />
+                  </>
+                ) : (
+                  <>
+                    <Row label="Gross shift charges" value={formatCurrency(grossShiftAmount)} />
+                    {discountAmount > 0 ? (
+                      <div className="flex items-center justify-between gap-3 text-sm font-semibold text-emerald-700">
+                        <span>Multi-day discount</span>
+                        <span className="tabular-nums">− {formatCurrency(discountAmount)}</span>
+                      </div>
+                    ) : null}
+                    <Row label="Net shift charges" value={formatCurrency(subtotal)} />
+                  </>
+                )}
                 <Row label="Care setting" value={form.careType || '—'} />
                 <Row label="Date" value={form.date ? `${formatDate(form.date)}${isUrgent ? ' (Immediate)' : ''}` : (isUrgent ? 'Today' : '—')} />
                 {form.extras?.length ? (

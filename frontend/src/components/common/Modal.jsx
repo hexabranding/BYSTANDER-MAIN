@@ -23,7 +23,7 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
   }, [open, onClose])
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div

@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { Transaction, Payout, Booking, CaregiverProfile, User } from '../models/index.js';
+import { executeRazorpayPayout } from './razorpayPayoutService.js';
+import { createRazorpayOrder, getPublicRazorpayKey } from '../utils/paymentGateway.js';
 
 const PLATFORM_FEE = 49;
 const GST_RATE = 0.18;
@@ -89,9 +91,43 @@ export const recordBookingTransaction = async (
   const existingTx = await query;
 
   if (existingTx) {
+    let hasChanges = false;
+
+    // 1. Sync assigned caregiver and caregiverUser from booking if available
+    const cgUserId = booking.caregiverUser?._id || booking.caregiverUser;
+    const cgId = booking.caregiver?._id || booking.caregiver;
+    if (cgUserId && (!existingTx.caregiverUser || String(existingTx.caregiverUser) !== String(cgUserId))) {
+      existingTx.caregiverUser = cgUserId;
+      hasChanges = true;
+    }
+    if (cgId && (!existingTx.caregiver || String(existingTx.caregiver) !== String(cgId))) {
+      existingTx.caregiver = cgId;
+      hasChanges = true;
+    }
+
+    // 2. Sync breakdown if booking has updated rates or hours
+    if (booking.hourlyRate && booking.totalHours) {
+      const split = calculateFeeSplit(booking.hourlyRate, booking.totalHours);
+      if (booking.totalAmount && existingTx.amount !== booking.totalAmount) {
+        existingTx.amount = booking.totalAmount;
+        hasChanges = true;
+      }
+      if (!existingTx.breakdown?.caregiverPayout) {
+        existingTx.breakdown = {
+          baseAmount: split.baseAmount,
+          platformFee: split.platformFee,
+          tax: split.tax,
+          commission: split.commission,
+          caregiverPayout: split.caregiverPayout,
+        };
+        hasChanges = true;
+      }
+    }
+
     if (customStatus && existingTx.status !== customStatus) {
       // Idempotency: Never revert a released transaction back to escrow
       if (existingTx.status === 'released' && customStatus === 'escrow_held') {
+        if (hasChanges) await existingTx.save(session ? { session } : undefined);
         return existingTx;
       }
       existingTx.status = customStatus;
@@ -101,6 +137,13 @@ export const recordBookingTransaction = async (
       if (customStatus === 'refunded' && !existingTx.refundedAt) {
         existingTx.refundedAt = new Date();
       }
+      if (customStatus === 'cancelled' && !existingTx.cancelledAt) {
+        existingTx.cancelledAt = new Date();
+      }
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
       await existingTx.save(session ? { session } : undefined);
     }
     return existingTx;
@@ -194,7 +237,10 @@ export const getAdminPayments = async (query = {}) => {
   const filter = {};
 
   if (query.status && query.status !== 'all') {
-    filter.status = query.status;
+    const norm = String(query.status).trim().toLowerCase().replace(/\s+/g, '_');
+    if (norm !== 'all') {
+      filter.status = norm;
+    }
   }
 
   if (query.range && query.range !== 'all') {
@@ -231,15 +277,22 @@ export const getAdminPayments = async (query = {}) => {
           _id: null,
           gross: {
             $sum: {
-              $cond: [{ $ne: ['$status', 'refunded'] }, '$amount', 0],
+              $cond: [{ $not: [{ $in: ['$status', ['refunded', 'cancelled']] }] }, '$amount', 0],
             },
           },
           commission: {
-            $sum: '$breakdown.commission',
+            $sum: {
+              $cond: [{ $not: [{ $in: ['$status', ['refunded', 'cancelled']] }] }, '$breakdown.commission', 0],
+            },
           },
           refunded: {
             $sum: {
               $cond: [{ $eq: ['$status', 'refunded'] }, '$amount', 0],
+            },
+          },
+          cancelled: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'cancelled'] }, '$amount', 0],
             },
           },
           escrow: {
@@ -252,11 +305,12 @@ export const getAdminPayments = async (query = {}) => {
     ]),
   ]);
 
-  const rawStats = statsResult[0] || { gross: 0, commission: 0, refunded: 0, escrow: 0 };
+  const rawStats = statsResult[0] || { gross: 0, commission: 0, refunded: 0, cancelled: 0, escrow: 0 };
   const stats = {
     gross: rawStats.gross || 0,
     commission: rawStats.commission || 0,
     refunded: rawStats.refunded || 0,
+    cancelled: rawStats.cancelled || 0,
     escrow: rawStats.escrow || 0,
   };
 
@@ -316,6 +370,8 @@ export const getAdminCommissions = async (query = {}) => {
       filter.status = { $in: ['escrow_held', 'disputed'] };
     } else if (norm === 'settled') {
       filter.status = 'released';
+    } else if (norm === 'cancelled' || norm === 'refunded') {
+      filter.status = { $in: ['refunded', 'cancelled'] };
     }
   }
 
@@ -340,8 +396,16 @@ export const getAdminCommissions = async (query = {}) => {
       {
         $group: {
           _id: null,
-          total: { $sum: '$breakdown.commission' },
-          baseTotal: { $sum: '$breakdown.baseAmount' },
+          total: {
+            $sum: {
+              $cond: [{ $ne: ['$status', 'refunded'] }, '$breakdown.commission', 0],
+            },
+          },
+          baseTotal: {
+            $sum: {
+              $cond: [{ $ne: ['$status', 'refunded'] }, '$breakdown.baseAmount', 0],
+            },
+          },
           accrued: {
             $sum: {
               $cond: [{ $in: ['$status', ['escrow_held', 'disputed']] }, '$breakdown.commission', 0],
@@ -367,6 +431,7 @@ export const getAdminCommissions = async (query = {}) => {
 
   const commissions = transactions.map((t) => {
     const isSettled = t.status === 'released';
+    const isCancelled = t.status === 'refunded' || t.status === 'cancelled' || t.booking?.status === 'cancelled';
     return {
       id: `CM-${t.transactionNumber.slice(-6)}`,
       transactionId: t._id,
@@ -374,9 +439,9 @@ export const getAdminCommissions = async (query = {}) => {
       caregiverName: t.caregiverUser?.fullName || 'Caregiver',
       base: t.breakdown?.baseAmount || 0,
       rate: '12%',
-      amount: t.breakdown?.commission || 0,
+      amount: isCancelled ? 0 : (t.breakdown?.commission || 0),
       date: t.createdAt ? new Date(t.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-      status: isSettled ? 'Settled' : 'Accrued',
+      status: isCancelled ? 'Cancelled' : isSettled ? 'Settled' : 'Accrued',
     };
   });
 
@@ -435,7 +500,10 @@ export const getAdminPayouts = async (query = {}) => {
   const filter = {};
 
   if (query.status && query.status !== 'all') {
-    filter.status = query.status;
+    const norm = String(query.status).trim().toLowerCase().replace(/\s+/g, '_');
+    if (norm !== 'all') {
+      filter.status = norm;
+    }
   }
 
   if (query.search && typeof query.search === 'string') {
@@ -450,6 +518,7 @@ export const getAdminPayouts = async (query = {}) => {
   const [payouts, total, statsResult] = await Promise.all([
     Payout.find(filter)
       .populate('caregiverUser', 'fullName email phone')
+      .populate('caregiver', 'bank')
       .populate('processedBy', 'fullName email')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -514,7 +583,7 @@ export const ALLOWED_PAYOUT_TRANSITIONS = Object.freeze({
  * strict state-machine transition enforcement, settled immutability,
  * mandatory failure notes, and optimistic concurrency protection.
  */
-export const updatePayoutStatus = async (id, { status, notes } = {}, adminUser = null) => {
+export const updatePayoutStatus = async (id, { status, notes, razorpay_payment_id } = {}, adminUser = null) => {
   if (!id) {
     const err = new Error('Payout identifier is required');
     err.statusCode = 400;
@@ -603,6 +672,38 @@ export const updatePayoutStatus = async (id, { status, notes } = {}, adminUser =
 
   if (targetStatus === 'settled') {
     updateFields.settledAt = new Date();
+
+    if (razorpay_payment_id) {
+      updateFields.gatewayPayoutId = razorpay_payment_id;
+      updateFields.utr = `UTR-${String(razorpay_payment_id).replace(/^pay_/, 'RZP')}`;
+    }
+
+    // Execute real Razorpay Payout using caretaker's bank/UPI details
+    try {
+      if (mongoose.connection?.readyState !== 0 && typeof CaregiverProfile?.findById === 'function') {
+        const profile = await CaregiverProfile.findById(payout.caregiver).populate('user');
+        if (profile) {
+          const disbursal = await executeRazorpayPayout({
+            caregiverUser: profile.user,
+            caregiverProfile: profile,
+            amount: payout.net,
+            payoutNumber: payout.payoutNumber,
+            notes: trimmedNotes,
+          });
+
+          if (disbursal?.success) {
+            updateFields.gatewayPayoutId = updateFields.gatewayPayoutId || disbursal.gatewayPayoutId;
+            updateFields.fundAccountId = disbursal.fundAccountId;
+            updateFields.contactId = disbursal.contactId;
+            updateFields.utr = updateFields.utr || disbursal.utr;
+            updateFields.disbursalMethod = disbursal.disbursalMethod;
+            updateFields.recipientDetails = disbursal.recipientDetails;
+          }
+        }
+      }
+    } catch (payErr) {
+      console.warn('[Admin Finance] Razorpay disbursal notice:', payErr.message);
+    }
   }
 
   // 4. Concurrency protection: Atomic conditional update on real database connection
@@ -633,6 +734,9 @@ export const updatePayoutStatus = async (id, { status, notes } = {}, adminUser =
   payout.processedBy = adminUser?._id || null;
   if (targetStatus === 'settled') {
     payout.settledAt = updateFields.settledAt || new Date();
+    if (updateFields.gatewayPayoutId) payout.gatewayPayoutId = updateFields.gatewayPayoutId;
+    if (updateFields.utr) payout.utr = updateFields.utr;
+    if (updateFields.disbursalMethod) payout.disbursalMethod = updateFields.disbursalMethod;
   }
 
   if (typeof payout.save === 'function') {
@@ -640,6 +744,59 @@ export const updatePayoutStatus = async (id, { status, notes } = {}, adminUser =
   }
 
   return payout;
+};
+
+/**
+ * Creates a Razorpay payment order for caretaker payout disbursal approval
+ * @param {string} id - Payout ObjectId or PO- reference
+ * @returns {Promise<Object>} { order, keyId, payout }
+ */
+export const createPayoutDisbursalOrder = async (id) => {
+  if (!id) {
+    const err = new Error('Payout identifier is required');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  const isObjectId = mongoose.Types.ObjectId.isValid(id) && id.length === 24;
+  const filter = isObjectId ? { _id: id } : { payoutNumber: id };
+
+  const payout = await Payout.findOne(filter);
+  if (!payout) {
+    const err = new Error('Payout record not found');
+    err.statusCode = 404;
+    err.name = 'NotFoundError';
+    throw err;
+  }
+
+  if (payout.status === 'settled') {
+    const err = new Error('Payout is already settled');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  const order = await createRazorpayOrder({
+    amount: payout.net,
+    currency: payout.currency || 'INR',
+    receipt: String(payout.payoutNumber).slice(0, 40),
+    notes: {
+      payoutId: payout.payoutNumber,
+      caregiverId: String(payout.caregiver),
+      type: 'caretaker_payout_disbursal',
+    },
+  });
+
+  return {
+    order,
+    keyId: getPublicRazorpayKey(),
+    payout: {
+      id: payout.payoutNumber,
+      net: payout.net,
+      status: payout.status,
+    },
+  };
 };
 
 /**
@@ -655,7 +812,10 @@ export const getCustomerPayments = async (customerId, query = {}) => {
   const filter = { customer: customerId };
 
   if (query.status && query.status !== 'all') {
-    filter.status = query.status;
+    const norm = String(query.status).trim().toLowerCase().replace(/\s+/g, '_');
+    if (norm !== 'all') {
+      filter.status = norm;
+    }
   }
 
   const transactions = await Transaction.find(filter)
@@ -727,6 +887,28 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
     .sort({ createdAt: -1 })
     .lean();
 
+  // Look up caregiver's payout requests to accurately reflect pending disbursals
+  let payouts = [];
+  let caregiverBank = null;
+  try {
+    if (mongoose.connection?.readyState !== 0 && typeof Payout?.find === 'function') {
+      payouts = await Payout.find({ caregiverUser: caregiverUserId })
+        .sort({ createdAt: -1 })
+        .lean();
+    }
+    if (mongoose.connection?.readyState !== 0 && typeof CaregiverProfile?.findOne === 'function') {
+      const prof = await CaregiverProfile.findOne({ user: caregiverUserId }).select('bank').lean();
+      caregiverBank = prof?.bank || null;
+    }
+  } catch (_) {
+    payouts = [];
+  }
+
+  const payoutMap = new Map();
+  (payouts || []).forEach((p) => {
+    if (p && p._id) payoutMap.set(String(p._id), p);
+  });
+
   const now = new Date();
   const currentMonthPrefix = now.toISOString().slice(0, 7);
 
@@ -770,32 +952,50 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
     const gross = t.breakdown?.baseAmount || t.amount || 0;
     const commission = t.breakdown?.commission || 0;
     const net = t.breakdown?.caregiverPayout || gross - commission;
-    const isPending = t.status === 'escrow_held';
+    const isEscrowPending = t.status === 'escrow_held';
+    const isRefunded = t.status === 'refunded' || t.type === 'refund' || t.booking?.status === 'cancelled';
     const dateStr = t.createdAt ? new Date(t.createdAt).toISOString().slice(0, 10) : '';
     const monthKey = dateStr.slice(0, 7);
 
-    totalGross += gross;
-    totalCommission += commission;
-    totalNet += net;
+    const linkedPayout = t.payout ? payoutMap.get(String(t.payout)) : null;
+    const isPayoutPending = Boolean(linkedPayout && ['pending', 'processing'].includes(linkedPayout.status));
+    const isSettledPaid = Boolean(linkedPayout && linkedPayout.status === 'settled');
 
-    if (isPending) {
-      pendingPayout += net;
-    } else if (!t.payout) {
-      availableBalance += net;
+    if (!isRefunded) {
+      totalGross += gross;
+      totalCommission += commission;
+      totalNet += net;
+
+      if (isEscrowPending || isPayoutPending) {
+        pendingPayout += net;
+      } else if (!t.payout && t.status === 'released') {
+        availableBalance += net;
+      }
+
+      if (dateStr.startsWith(currentMonthPrefix)) {
+        thisMonth += net;
+      }
+
+      // Released, Processing and Paid earnings contribute to the weekly & monthly trends
+      if (!isEscrowPending) {
+        if (weeklyEarningsMap.has(dateStr)) {
+          weeklyEarningsMap.get(dateStr).earnings += net;
+        }
+        if (monthlyEarningsMap.has(monthKey)) {
+          monthlyEarningsMap.get(monthKey).earnings += net;
+        }
+      }
     }
 
-    if (dateStr.startsWith(currentMonthPrefix)) {
-      thisMonth += net;
-    }
-
-    // Released and Paid earnings contribute to the weekly & monthly trends
-    if (!isPending) {
-      if (weeklyEarningsMap.has(dateStr)) {
-        weeklyEarningsMap.get(dateStr).earnings += net;
-      }
-      if (monthlyEarningsMap.has(monthKey)) {
-        monthlyEarningsMap.get(monthKey).earnings += net;
-      }
+    let status = 'Released';
+    if (isRefunded) {
+      status = 'Cancelled';
+    } else if (isEscrowPending) {
+      status = 'Pending';
+    } else if (isPayoutPending) {
+      status = 'Processing';
+    } else if (isSettledPaid || t.payout) {
+      status = 'Paid';
     }
 
     return {
@@ -806,14 +1006,29 @@ export const getCaregiverEarnings = async (caregiverUserId) => {
       service: t.serviceName || 'Bedside Care',
       gross,
       commission,
-      net,
-      status: isPending ? 'Pending' : (t.payout ? 'Paid' : 'Released'),
+      net: isRefunded ? 0 : net,
+      status,
       payoutId: t.payout ? String(t.payout) : null,
+      payoutNumber: linkedPayout?.payoutNumber || null,
+      payoutStatus: linkedPayout?.status || null,
     };
   });
 
   return {
     earnings: earningsList,
+    bank: caregiverBank,
+    payouts: (payouts || []).map((p) => ({
+      id: p.payoutNumber,
+      payoutNumber: p.payoutNumber,
+      gross: p.gross,
+      commission: p.commission,
+      net: p.net,
+      status: p.status,
+      disbursalMethod: p.disbursalMethod || 'Bank Transfer',
+      requestedOn: p.requestedOn || p.createdAt,
+      settledAt: p.settledAt,
+      notes: p.notes,
+    })),
     stats: {
       totalNet,
       totalGross,

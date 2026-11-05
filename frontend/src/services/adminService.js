@@ -380,9 +380,10 @@ export const getAdminPayments = async (query = {}) => {
   }
 
   const stats = response?.stats || {
-    gross: transactions.reduce((acc, t) => acc + (t.status !== 'Refunded' ? t.amount : 0), 0),
+    gross: transactions.reduce((acc, t) => acc + (t.status !== 'Refunded' && t.status !== 'Cancelled' ? t.amount : 0), 0),
     commission: transactions.reduce((acc, t) => acc + (t.commission || 0), 0),
     refunded: transactions.reduce((acc, t) => acc + (t.status === 'Refunded' ? t.amount : 0), 0),
+    cancelled: transactions.reduce((acc, t) => acc + (t.status === 'Cancelled' ? t.amount : 0), 0),
     escrow: transactions.reduce((acc, t) => acc + (t.status === 'Escrow Held' ? t.amount : 0), 0),
   }
 
@@ -487,6 +488,19 @@ export const updateAdminPayoutStatus = async (id, payload) => {
 }
 
 /**
+ * Creates a Razorpay disbursal order for caretaker payout approval
+ * @param {string} id - Payout ObjectId or PO- reference
+ * @returns {Promise<Object>}
+ */
+export const createAdminPayoutOrder = async (id) => {
+  if (!id) {
+    throw new Error('A payout identifier is required')
+  }
+  const response = await apiClient.post(`/admin/payouts/${id}/create-disbursal-order`)
+  return response?.data || response
+}
+
+/**
  * Retrieves paginated list of blacklist records with live summary statistics.
  * @param {Object} [query={}] - Optional filters (search, type, page, limit)
  * @returns {Promise<{ entries: Array, stats: Object, pagination: Object }>}
@@ -557,6 +571,35 @@ export const updateAdminSettings = async (payload) => {
  */
 export const inviteAdminMember = async (payload) => {
   const response = await apiClient.post('/admin/settings/team/invite', payload)
+  return response?.data || response
+}
+
+/**
+ * Retrieves the global pricing rules, review tiers, daily discounts, and service catalog rates.
+ * @returns {Promise<{ pricing: Object, services: Array }>}
+ */
+export const getAdminPricing = async () => {
+  const response = await apiClient.get('/admin/pricing')
+  return response?.data || response
+}
+
+/**
+ * Updates platform pricing rules, review tiers, daily discounts, and service catalog rates.
+ * @param {Object} payload - { pricing: Object, serviceRates?: Array }
+ * @returns {Promise<Object>}
+ */
+export const updateAdminPricing = async (payload) => {
+  const response = await apiClient.put('/admin/pricing', payload)
+  return response?.data || response
+}
+
+/**
+ * Simulates a quote based on given parameters for admin verification.
+ * @param {Object} payload - { bookingType, hours, days, caregiverReviews, caregiverRating, serviceRate }
+ * @returns {Promise<{ quote: Object }>}
+ */
+export const simulateAdminPricingQuote = async (payload) => {
+  const response = await apiClient.post('/admin/pricing/simulate', payload)
   return response?.data || response
 }
 
@@ -641,6 +684,7 @@ export const adminService = {
   reconcileCommissions,
   getAdminPayouts,
   updateAdminPayoutStatus,
+  createAdminPayoutOrder,
   getAdminBlacklist,
   addToBlacklist,
   removeFromBlacklist,
@@ -648,6 +692,9 @@ export const adminService = {
   getAdminSettings,
   updateAdminSettings,
   inviteAdminMember,
+  getAdminPricing,
+  updateAdminPricing,
+  simulateAdminPricingQuote,
   getHospitals,
   createHospital,
   toggleHospitalContract,

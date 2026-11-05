@@ -1,6 +1,15 @@
 import mongoose from 'mongoose';
 
-const ALLOWED_PAYMENT_STATUSES = ['all', 'escrow_held', 'released', 'refunded', 'disputed'];
+const ALLOWED_PAYMENT_STATUSES = [
+  'all',
+  'escrow_held',
+  'released',
+  'refunded',
+  'disputed',
+  'cancelled',
+  'accrued',
+  'settled',
+];
 const ALLOWED_PAYOUT_STATUSES = ['all', 'pending', 'processing', 'settled', 'failed'];
 
 /**
@@ -44,17 +53,22 @@ export const validatePaymentQuery = (req, res, next) => {
     req.query.limit = 10;
   }
 
+  let norm = 'all';
   if (query.status) {
-    const norm = normalizeFinanceStatus(query.status);
+    norm = normalizeFinanceStatus(query.status);
     if (!ALLOWED_PAYMENT_STATUSES.includes(norm)) {
       return res.status(400).json({
         success: false,
         message: `Invalid payment status filter. Allowed values: ${ALLOWED_PAYMENT_STATUSES.join(', ')}`,
       });
     }
+  }
+
+  const validated = { ...query, page: req.query.page || 1, limit: req.query.limit || 10, status: norm };
+  try {
+    Object.defineProperty(req, 'query', { value: validated, writable: true, configurable: true });
+  } catch (_) {
     req.query.status = norm;
-  } else {
-    req.query.status = 'all';
   }
 
   if (query.range !== undefined) {
@@ -133,17 +147,22 @@ export const validatePayoutQuery = (req, res, next) => {
     req.query.limit = 10;
   }
 
+  let norm = 'all';
   if (query.status) {
-    const norm = normalizeFinanceStatus(query.status);
+    norm = normalizeFinanceStatus(query.status);
     if (!ALLOWED_PAYOUT_STATUSES.includes(norm)) {
       return res.status(400).json({
         success: false,
         message: `Invalid payout status filter. Allowed values: ${ALLOWED_PAYOUT_STATUSES.join(', ')}`,
       });
     }
+  }
+
+  const validated = { ...query, page: req.query.page || 1, limit: req.query.limit || 10, status: norm };
+  try {
+    Object.defineProperty(req, 'query', { value: validated, writable: true, configurable: true });
+  } catch (_) {
     req.query.status = norm;
-  } else {
-    req.query.status = 'all';
   }
 
   if (query.search && typeof query.search === 'string') {
@@ -184,7 +203,7 @@ export const validatePayoutIdParam = (req, res, next) => {
  * Middleware: Validate updating payout status.
  */
 export const validateUpdatePayoutStatus = (req, res, next) => {
-  const { status, notes } = req.body || {};
+  const { status, notes, razorpay_payment_id } = req.body || {};
 
   if (!status || typeof status !== 'string') {
     return res.status(400).json({
@@ -205,6 +224,10 @@ export const validateUpdatePayoutStatus = (req, res, next) => {
 
   if (notes !== undefined && typeof notes === 'string') {
     req.body.notes = notes.trim().slice(0, 500);
+  }
+
+  if (razorpay_payment_id !== undefined && typeof razorpay_payment_id === 'string') {
+    req.body.razorpay_payment_id = razorpay_payment_id.trim();
   }
 
   if (norm === 'failed') {

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { Booking, CaregiverProfile, CustomerProfile, User, Service, Transaction, Review } from '../models/index.js';
+import { getPlatformPricingSettings, calculateComprehensiveQuote, calculateCaregiverHourlyRate } from './pricingService.js';
 import {
   getLocalTimeInTimezone,
   calculateTotalHours,
@@ -313,8 +314,18 @@ export const createBooking = async (customerId, bookingData) => {
       }
     }
 
-    const hourlyRate = caregiver.hourlyRate;
-    const totalAmount = Math.round(hourlyRate * durationHours);
+    const pricingConfig = await getPlatformPricingSettings();
+    const quote = calculateComprehensiveQuote({
+      bookingType: bookingData.bookingType || 'hourly',
+      hours: durationHours,
+      days: bookingData.days || (durationHours >= 24 ? Math.ceil(durationHours / 24) : 1),
+      caregiver,
+      service,
+      pricingConfig,
+    });
+    const hourlyRate = quote.effectiveHourlyRate;
+    const totalAmount = quote.baseAmount;
+    const discountAmount = quote.discountAmount || 0;
 
     return executeWithTransactionRetry(async (session) => {
       await CaregiverProfile.updateOne(
@@ -348,6 +359,9 @@ export const createBooking = async (customerId, bookingData) => {
             service: service._id,
             serviceName: service.name,
             serviceCategory: service.category,
+            bookingType: quote.bookingType,
+            days: quote.days,
+            discountAmount,
             hourlyRate,
             totalHours: durationHours,
             totalAmount,
@@ -379,9 +393,18 @@ export const createBooking = async (customerId, bookingData) => {
   }
 
   // 5. On-Demand Broadcast Booking Mode (Swiggy / Uber delivery style)
-  // Derive transparent canonical hourly rate from Service Catalog
-  const hourlyRate = service.baseHourlyRate || 199;
-  const totalAmount = Math.round(hourlyRate * durationHours);
+  // Derive transparent canonical hourly rate from Service Catalog & Platform Pricing
+  const broadcastPricing = await getPlatformPricingSettings();
+  const broadcastQuote = calculateComprehensiveQuote({
+    bookingType: bookingData.bookingType || 'hourly',
+    hours: durationHours,
+    days: bookingData.days || (durationHours >= 24 ? Math.ceil(durationHours / 24) : 1),
+    service,
+    pricingConfig: broadcastPricing,
+  });
+  const hourlyRate = broadcastQuote.effectiveHourlyRate;
+  const totalAmount = broadcastQuote.baseAmount;
+  const discountAmount = broadcastQuote.discountAmount || 0;
   const broadcastExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1-hour broadcast TTL
 
   // Ensure location has valid coordinates for 30 km radius matching
@@ -405,6 +428,9 @@ export const createBooking = async (customerId, bookingData) => {
           service: service._id,
           serviceName: service.name,
           serviceCategory: service.category,
+          bookingType: broadcastQuote.bookingType,
+          days: broadcastQuote.days,
+          discountAmount,
           hourlyRate,
           totalHours: durationHours,
           totalAmount,
@@ -988,12 +1014,15 @@ export const acceptBooking = async (user, bookingId) => {
       throw err;
     }
 
-    const applicantTotal = Math.round(caregiver.hourlyRate * booking.totalHours);
+    const activePricing = await getPlatformPricingSettings();
+    const applicantTier = calculateCaregiverHourlyRate(caregiver, activePricing);
+    const applicantRate = applicantTier.rate;
+    const applicantTotal = Math.round(applicantRate * booking.totalHours);
     booking.applicants = booking.applicants || [];
     booking.applicants.push({
       caregiver: caregiver._id,
       caregiverUser: caregiver.user._id,
-      hourlyRate: caregiver.hourlyRate,
+      hourlyRate: applicantRate,
       totalAmount: applicantTotal,
       appliedAt: new Date(),
       status: 'applied',
@@ -1306,6 +1335,7 @@ export const cancelBooking = async (user, bookingId, cancellationReason) => {
     {
       $set: {
         status: 'cancelled',
+        paymentStatus: 'cancelled',
         cancelledAt: now,
         cancelledBy: user._id,
         cancelledByRole: user.role,
@@ -1357,8 +1387,9 @@ export const cancelBooking = async (user, bookingId, cancellationReason) => {
     throw err;
   }
 
-  await recordBookingTransaction(updatedBooking, 'refunded').catch((txErr) => {
-    console.warn('[Ledger Warning] Could not record refund transaction on cancellation:', txErr.message);
+  const targetStatus = booking.paidAt ? 'refunded' : 'cancelled';
+  await recordBookingTransaction(updatedBooking, targetStatus).catch((txErr) => {
+    console.warn('[Ledger Warning] Could not record cancellation transaction:', txErr.message);
   });
 
   return updatedBooking.populate([
@@ -1476,9 +1507,10 @@ export const rejectBooking = async (user, bookingId, rejectionReason = '') => {
     idempotencyKey: `booking:rejected:${booking._id}`,
   });
 
-  // Update ledger status to refunded on rejection
-  await recordBookingTransaction(updated, 'refunded').catch((txErr) => {
-    console.warn('[Ledger Warning] Could not record refund transaction on rejection:', txErr.message);
+  // Update ledger status to refunded or cancelled on rejection
+  const targetRejectStatus = booking.paidAt ? 'refunded' : 'cancelled';
+  await recordBookingTransaction(updated, targetRejectStatus).catch((txErr) => {
+    console.warn('[Ledger Warning] Could not record cancellation transaction on rejection:', txErr.message);
   });
 
   return updated.populate([

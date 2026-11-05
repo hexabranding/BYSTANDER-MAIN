@@ -65,6 +65,10 @@ export function ProfilePage() {
       district: caregiver?.district || caregiver?.address?.district || 'Ernakulam',
       state: caregiver?.state || caregiver?.address?.state || 'Kerala',
       pincode: caregiver?.pincode || caregiver?.address?.pincode || '',
+      bankHolder: caregiver?.bank?.holderName || '',
+      accountNumber: caregiver?.bank?.accountNumber || '',
+      ifsc: caregiver?.bank?.ifsc || '',
+      upiId: caregiver?.bank?.upiId || '',
     },
   })
 
@@ -91,6 +95,10 @@ export function ProfilePage() {
           district: data.district || data.address?.district || 'Ernakulam',
           state: data.state || data.address?.state || 'Kerala',
           pincode: data.pincode || data.address?.pincode || '',
+          bankHolder: data.bank?.holderName || '',
+          accountNumber: data.bank?.accountNumber || '',
+          ifsc: data.bank?.ifsc || '',
+          upiId: data.bank?.upiId || '',
         })
       })
       .catch(() => {})
@@ -145,6 +153,12 @@ export function ProfilePage() {
           district: data.district || 'Ernakulam',
           state: data.state || 'Kerala',
           pincode: data.pincode?.trim() || '',
+        },
+        bank: {
+          holderName: data.bankHolder?.trim() || '',
+          accountNumber: data.accountNumber?.trim() || '',
+          ifsc: data.ifsc?.trim().toUpperCase() || '',
+          upiId: data.upiId?.trim() || '',
         },
       }
       const updated = await profileService.updateCaregiverProfile(sanitized)
@@ -529,6 +543,52 @@ export function ProfilePage() {
                           message: 'Enter a valid 6-digit Indian PIN code',
                         },
                       })}
+                    />
+                  </FormField>
+                </div>
+              </div>
+
+              <div className="space-y-4 border-t border-line pt-6">
+                <div>
+                  <h3 className="font-display text-base font-bold text-ink">Payout & Banking Details</h3>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Razorpay Payouts transfers your earnings directly to this Bank Account or UPI ID when admin approves your withdrawal.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField label="Account Holder Name" htmlFor="pf-bankHolder" error={errors.bankHolder?.message}>
+                    <Input
+                      id="pf-bankHolder"
+                      placeholder="e.g. Elephant Caretaker"
+                      {...register('bankHolder')}
+                    />
+                  </FormField>
+
+                  <FormField label="UPI ID / VPA (Instant Transfer)" htmlFor="pf-upiId" error={errors.upiId?.message}>
+                    <Input
+                      id="pf-upiId"
+                      placeholder="e.g. elephant@okhdfcbank"
+                      {...register('upiId')}
+                    />
+                  </FormField>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField label="Bank Account Number" htmlFor="pf-accountNumber" error={errors.accountNumber?.message}>
+                    <Input
+                      id="pf-accountNumber"
+                      placeholder="e.g. 50100492817291"
+                      {...register('accountNumber')}
+                    />
+                  </FormField>
+
+                  <FormField label="IFSC Code" htmlFor="pf-ifsc" error={errors.ifsc?.message}>
+                    <Input
+                      id="pf-ifsc"
+                      placeholder="e.g. HDFC0000001"
+                      autoCapitalize="characters"
+                      {...register('ifsc')}
                     />
                   </FormField>
                 </div>

@@ -189,6 +189,25 @@ export const rebroadcastBooking = async (id) => {
   return adaptBooking(rawBooking)
 }
 
+/**
+ * Retrieves the live platform pricing rules & daily discounts for booking flows.
+ * @returns {Promise<{ pricing: Object }>}
+ */
+export const getPublicPricingConfig = async () => {
+  const response = await apiClient.get('/pricing/config')
+  return response?.data || response
+}
+
+/**
+ * Calculates authoritative quote from the backend pricing engine.
+ * @param {Object} payload - { bookingType, hours, days, caregiverId?, serviceId? }
+ * @returns {Promise<{ quote: Object }>}
+ */
+export const getBookingQuote = async (payload) => {
+  const response = await apiClient.post('/pricing/quote', payload)
+  return response?.data || response
+}
+
 export const bookingService = {
   createBooking,
   getBookings,
@@ -202,6 +221,8 @@ export const bookingService = {
   verifyCheckIn,
   requestCheckOutOtp,
   verifyCheckOut,
+  getPublicPricingConfig,
+  getBookingQuote,
 }
 
 export default bookingService

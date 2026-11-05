@@ -172,17 +172,21 @@ export function BookingsPage() {
       notes: payload.notes || '',
     }
 
+    const bookingId = String(booking?.id || booking?._id || '')
+
     if (mode === 'checkin') {
-      const updated = await bookingService.verifyCheckIn(booking.id, checkData)
-      setRealBookings((prev) => (prev || []).map((b) => (b.id === booking.id ? updated : b)))
-      if (advanceBooking) advanceBooking(booking.id, 'start', payload)
+      const updated = await bookingService.verifyCheckIn(bookingId, checkData)
+      setRealBookings((prev) => (prev || []).map((b) => (String(b.id || b._id) === bookingId ? updated : b)))
+      if (advanceBooking) advanceBooking(bookingId, 'start', payload)
+      if (typeof fetchBookings === 'function') fetchBookings()
       toast.success('Checked in — the service is now in progress', {
         description: `Verified at ${formatDateTime(payload.capturedAt)}.`,
       })
     } else {
-      const updated = await bookingService.verifyCheckOut(booking.id, checkData)
-      setRealBookings((prev) => (prev || []).map((b) => (b.id === booking.id ? updated : b)))
-      if (advanceBooking) advanceBooking(booking.id, 'complete', payload)
+      const updated = await bookingService.verifyCheckOut(bookingId, checkData)
+      setRealBookings((prev) => (prev || []).map((b) => (String(b.id || b._id) === bookingId ? updated : b)))
+      if (advanceBooking) advanceBooking(bookingId, 'complete', payload)
+      if (typeof fetchBookings === 'function') fetchBookings()
       toast.success('Checked out — the service is marked complete', {
         description: `Verified at ${formatDateTime(payload.capturedAt)}.`,
       })

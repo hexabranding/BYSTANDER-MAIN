@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import {
   AlertCircle,
   Camera,
@@ -7,7 +8,6 @@ import {
   MapPin,
   QrCode,
   RefreshCw,
-  SwitchCamera,
   Video,
   X,
 } from 'lucide-react'
@@ -25,8 +25,9 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
   const [cameraStarting, setCameraStarting] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [cameraWarning, setCameraWarning] = useState('')
-  const [cameraDeviceName, setCameraDeviceName] = useState('')
   const [facingMode, setFacingMode] = useState('user')
+  const [isFaceAligned, setIsFaceAligned] = useState(false)
+  const [faceDetectionFeedback, setFaceDetectionFeedback] = useState('Position your face in the oval')
   const [otp, setOtp] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [now, setNow] = useState(() => new Date().toISOString())
@@ -46,6 +47,8 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     setCameraActive(false)
     setCameraStarting(false)
     setCameraWarning('')
+    setIsFaceAligned(false)
+    setFaceDetectionFeedback('Position your face in the oval')
   }, [])
 
   const attachVideoRef = useCallback((videoEl) => {
@@ -75,6 +78,8 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     setCameraWarning('')
     setErrorMsg('')
     setCameraStarting(true)
+    setIsFaceAligned(false)
+    setFaceDetectionFeedback('Position your face in the oval')
     const targetFacing = overrideFacing || facingMode
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -110,7 +115,6 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
 
       const track = stream.getVideoTracks()[0]
       if (track) {
-        setCameraDeviceName(track.label || 'FaceTime HD Camera')
         if (track.muted) {
           setCameraWarning('Camera stream is locked or muted by another macOS application (such as WhatsApp). Please close WhatsApp or other camera apps.')
         }
@@ -139,11 +143,165 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     }
   }
 
-  const toggleFacing = () => {
-    const nextFacing = facingMode === 'user' ? 'environment' : 'user'
-    setFacingMode(nextFacing)
-    startCamera(nextFacing)
-  }
+  // Real-time KYC biometric face detection loop
+  useEffect(() => {
+    if (!cameraActive) {
+      setIsFaceAligned(false)
+      return
+    }
+
+    let isMounted = true
+    let animationId = null
+    const canvas = document.createElement('canvas')
+    canvas.width = 120
+    canvas.height = 90
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
+    let nativeDetector = null
+    if (typeof window !== 'undefined' && 'FaceDetector' in window) {
+      try {
+        nativeDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 2 })
+      } catch (_) {}
+    }
+
+    let consecutiveHits = 0
+    let lastScanTime = 0
+
+    const scanFace = async (time) => {
+      if (!isMounted) return
+
+      // Run detection scan at ~8 FPS (every 125ms) for maximum responsiveness with negligible CPU
+      if (time - lastScanTime > 125 && videoRef.current) {
+        lastScanTime = time
+        const video = videoRef.current
+
+        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+          let detected = false
+          let message = 'Position your face in the oval'
+
+          // Method 1: Hardware-accelerated browser Shape Detection API if present
+          if (nativeDetector) {
+            try {
+              const faces = await nativeDetector.detect(video)
+              if (faces && faces.length > 0) {
+                const face = faces[0].boundingBox
+                const vW = video.videoWidth
+                const vH = video.videoHeight
+                const faceCenterX = face.x + face.width / 2
+                const faceCenterY = face.y + face.height / 2
+                const widthRatio = face.width / vW
+
+                const isCentered =
+                  faceCenterX > vW * 0.28 &&
+                  faceCenterX < vW * 0.72 &&
+                  faceCenterY > vH * 0.16 &&
+                  faceCenterY < vH * 0.78
+                const isProperDistance = widthRatio >= 0.15 && widthRatio <= 0.75
+
+                if (isCentered && isProperDistance) {
+                  detected = true
+                  message = 'Face aligned • Ready to capture'
+                } else if (!isCentered) {
+                  message = 'Center your face inside the oval'
+                } else {
+                  message = widthRatio < 0.15 ? 'Move slightly closer' : 'Move slightly back'
+                }
+              }
+            } catch (_) {}
+          }
+
+          // Method 2: Biometric Skin & Facial Geometry Analyzer (Universal fallback)
+          if (!detected && ctx) {
+            ctx.drawImage(video, 0, 0, 120, 90)
+            const imgData = ctx.getImageData(0, 0, 120, 90).data
+            const w = 120
+            const h = 90
+            const cx = w * 0.5
+            const cy = h * 0.465
+            const rx = w * 0.19
+            const ry = h * 0.445
+
+            let ovalTotal = 0
+            let ovalSkin = 0
+            let leftSkin = 0
+            let rightSkin = 0
+            let outerTotal = 0
+            let outerSkin = 0
+
+            for (let y = 0; y < h; y += 2) {
+              for (let x = 0; x < w; x += 2) {
+                const idx = (y * w + x) * 4
+                const r = imgData[idx]
+                const g = imgData[idx + 1]
+                const b = imgData[idx + 2]
+
+                // Robust multi-complexion chrominance filter
+                const Y = 0.299 * r + 0.587 * g + 0.114 * b
+                const Cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b
+                const Cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b
+
+                const isSkin =
+                  (Cr >= 133 && Cr <= 175 && Cb >= 75 && Cb <= 130 && Y >= 30) ||
+                  (r > g && r - g >= 14 && r / (r + g + b || 1) >= 0.35 && Y >= 30)
+
+                const dx = (x - cx) / rx
+                const dy = (y - cy) / ry
+                const insideOval = dx * dx + dy * dy <= 1.0
+
+                if (insideOval) {
+                  ovalTotal++
+                  if (isSkin) {
+                    ovalSkin++
+                    if (x < cx) leftSkin++
+                    else rightSkin++
+                  }
+                } else {
+                  outerTotal++
+                  if (isSkin) outerSkin++
+                }
+              }
+            }
+
+            const skinRatio = ovalSkin / (ovalTotal || 1)
+            const symmetry = Math.min(leftSkin, rightSkin) / (Math.max(leftSkin, rightSkin) || 1)
+            const outerSkinRatio = outerSkin / (outerTotal || 1)
+
+            // Centered human face requires >= 20% skin coverage in oval, bilateral symmetry >= 0.52, and central prominence
+            if (skinRatio >= 0.20 && skinRatio <= 0.85 && symmetry >= 0.52 && skinRatio > outerSkinRatio * 1.05) {
+              detected = true
+              message = 'Face aligned • Ready to capture'
+            } else if (skinRatio < 0.20) {
+              message = 'Position your face in the oval'
+            } else {
+              message = 'Center your face in the oval'
+            }
+          }
+
+          // Temporal debounce filter (prevents flicker)
+          if (detected) {
+            consecutiveHits = Math.min(4, consecutiveHits + 1)
+          } else {
+            consecutiveHits = Math.max(0, consecutiveHits - 1)
+          }
+
+          const isConfirmed = consecutiveHits >= 2
+          setIsFaceAligned(isConfirmed)
+          setFaceDetectionFeedback(isConfirmed ? 'Face aligned • Ready to capture' : message)
+        }
+      }
+
+      if (isMounted) {
+        animationId = requestAnimationFrame(scanFace)
+      }
+    }
+
+    animationId = requestAnimationFrame(scanFace)
+
+    return () => {
+      isMounted = false
+      if (animationId) cancelAnimationFrame(animationId)
+    }
+  }, [cameraActive])
 
   const snapPhoto = () => {
     if (!videoRef.current) return
@@ -226,7 +384,10 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
       stopCamera()
       onClose?.()
     } catch (err) {
-      setErrorMsg(err.message || 'Verification failed. Please check the code with customer.')
+      console.error('[CheckInOutModal] Verification failed:', err)
+      const message = err?.message || 'Verification failed. Please check the code with customer.'
+      setErrorMsg(message)
+      toast.error('Verification failed', { description: message })
     } finally {
       setSubmitting(false)
     }
@@ -258,6 +419,10 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
             form="checkinout-form"
             disabled={!canSubmit}
             loading={submitting}
+            onClick={(e) => {
+              e.preventDefault()
+              handleSubmit()
+            }}
             icon={Check}
           >
             {isCheckIn ? 'Verify & start service' : 'Verify & complete service'}
@@ -321,7 +486,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
               </div>
             </div>
           ) : cameraActive ? (
-            /* State B: Live Camera Stream View */
+            /* State B: Live Camera Stream View with KYC Oval & Face Detection */
             <div className="space-y-3 text-center">
               {cameraWarning ? (
                 <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-left text-xs text-amber-200 flex items-start gap-2">
@@ -329,13 +494,13 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   <div className="space-y-1">
                     <p className="font-semibold">{cameraWarning}</p>
                     <p className="text-[11px] text-amber-300/80">
-                      If WhatsApp, FaceTime, or another tab is open, macOS blocks camera frames to other apps. Close them and click Reload Feed.
+                      If WhatsApp, FaceTime, or another tab is open, macOS blocks camera frames to other apps. Close them and reopen camera.
                     </p>
                   </div>
                 </div>
               ) : null}
 
-              <div className="relative overflow-hidden rounded-xl bg-slate-950 aspect-video flex items-center justify-center shadow-inner">
+              <div className="relative overflow-hidden rounded-2xl bg-slate-950 aspect-video flex items-center justify-center shadow-inner select-none">
                 <video
                   ref={attachVideoRef}
                   autoPlay
@@ -347,22 +512,74 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                     objectFit: 'cover',
                     transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
                   }}
-                  className="rounded-xl block"
+                  className="rounded-2xl block"
                 />
 
-                <div className="absolute top-2 left-2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white flex items-center gap-1.5 backdrop-blur-xs z-10">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  {cameraDeviceName || 'Live On-Site Camera'}
+                {/* KYC Biometric Vertical Oval Face Overlay */}
+                <svg
+                  className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <mask id="kyc-face-mask">
+                      <rect width="100" height="100" fill="white" />
+                      <ellipse cx="50" cy="46.5" rx="19" ry="44.5" fill="black" />
+                    </mask>
+                  </defs>
+
+                  {/* Darkened vignette around outside of the vertical oval */}
+                  <rect
+                    width="100"
+                    height="100"
+                    fill="rgba(15, 23, 42, 0.58)"
+                    mask="url(#kyc-face-mask)"
+                  />
+
+                  {/* Dynamic Vertical Oval Border: Red when unaligned, Green when face aligned */}
+                  <ellipse
+                    cx="50"
+                    cy="46.5"
+                    rx="19"
+                    ry="44.5"
+                    fill="none"
+                    stroke={isFaceAligned ? '#10b981' : '#ef4444'}
+                    strokeWidth={isFaceAligned ? '1.5' : '1.2'}
+                    strokeDasharray={isFaceAligned ? 'none' : '3 1.5'}
+                    className="transition-all duration-300"
+                    style={{
+                      filter: isFaceAligned
+                        ? 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.95))'
+                        : 'drop-shadow(0 0 6px rgba(239, 68, 68, 0.75))',
+                    }}
+                  />
+                </svg>
+
+                {/* Top Badge: Live Indicator */}
+                <div className="absolute top-2.5 left-2.5 rounded-full bg-black/75 px-3 py-1 text-xs font-semibold text-white flex items-center gap-1.5 backdrop-blur-md z-20 shadow-sm select-none">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Live</span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={toggleFacing}
-                  title="Switch camera (Front / Rear)"
-                  className="absolute top-2 right-2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80 transition-colors z-10"
-                >
-                  <SwitchCamera className="h-4 w-4" />
-                </button>
+                {/* Real-time KYC Feedback Pill */}
+                <div className="absolute bottom-3 inset-x-0 flex justify-center z-20 pointer-events-none px-4">
+                  <div
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md transition-all duration-300 shadow-md',
+                      isFaceAligned
+                        ? 'bg-emerald-600/90 text-white shadow-emerald-500/40 ring-1 ring-emerald-400/50'
+                        : 'bg-red-600/90 text-white shadow-red-500/30 ring-1 ring-red-400/40'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full',
+                        isFaceAligned ? 'bg-white animate-ping' : 'bg-white'
+                      )}
+                    />
+                    <span>{faceDetectionFeedback}</span>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-center gap-3 pt-1">
@@ -371,20 +588,17 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   variant="primary"
                   size="sm"
                   onClick={snapPhoto}
+                  disabled={!isFaceAligned}
                   icon={Camera}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold px-6"
+                  className={cn(
+                    'font-bold px-6 transition-all duration-200',
+                    isFaceAligned
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/25 ring-2 ring-emerald-400/40'
+                      : 'bg-slate-700 text-slate-400 border border-slate-600 cursor-not-allowed opacity-60'
+                  )}
+                  title={isFaceAligned ? 'Capture verification selfie' : 'Align your face in the oval to enable photo capture'}
                 >
                   Take Photo Now
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => startCamera()}
-                  icon={RefreshCw}
-                  className="border-slate-700 text-slate-300 hover:bg-white/10"
-                >
-                  Reload Feed
                 </Button>
                 <Button
                   type="button"
@@ -443,6 +657,14 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
           <p className="mt-1 text-xs text-muted">
             Ask the customer for the 6-digit OTP displayed on their visit pass.
           </p>
+
+          {errorMsg ? (
+            <div className="mt-3 rounded-xl border border-danger-200 bg-danger-50 p-3 text-xs font-semibold text-danger-700 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-danger-500 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          ) : null}
+
           <div className="mt-3">
             <FormField error={errorMsg}>
               <Input

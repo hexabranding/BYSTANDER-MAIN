@@ -28,25 +28,30 @@ mongoose.connection.on('reconnected', () => {
   console.log('[Database] Mongoose reconnected to MongoDB Atlas.');
 });
 
-export const connectDB = async () => {
+export const connectDB = async (retries = 3, delayMs = 2000) => {
   const uri = process.env.MONGODB_URI;
 
   if (!uri || !uri.trim()) {
     throw new Error('MONGODB_URI environment variable is missing or empty. Please configure it in backend/.env');
   }
 
-  try {
-    const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 5000, // Fail fast if cluster is unreachable
-    });
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const conn = await mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 15000,
+      });
 
-    console.log(`[Database] MongoDB Atlas connected successfully: ${conn.connection.host}`);
-    return conn;
-  } catch (error) {
-    // Sanitize any URI credentials from the error message
-    const sanitizedError = error.message.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
-    console.error(`[Database Error] Initial connection failed: ${sanitizedError}`);
-    throw new Error(`Database connection failed: ${sanitizedError}`);
+      console.log(`[Database] MongoDB Atlas connected successfully: ${conn.connection.host}`);
+      return conn;
+    } catch (error) {
+      const sanitizedError = error.message.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+      console.warn(`[Database Warning] Connection attempt ${attempt}/${retries} failed: ${sanitizedError}`);
+      if (attempt === retries) {
+        console.error(`[Database Error] Initial connection failed: ${sanitizedError}`);
+        throw new Error(`Database connection failed: ${sanitizedError}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
 };
 

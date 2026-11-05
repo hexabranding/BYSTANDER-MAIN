@@ -22,9 +22,11 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
   const [selfieDataUrl, setSelfieDataUrl] = useState(null)
   const [selfieAt, setSelfieAt] = useState(null)
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraStarting, setCameraStarting] = useState(false)
   const [cameraError, setCameraError] = useState('')
+  const [cameraWarning, setCameraWarning] = useState('')
+  const [cameraDeviceName, setCameraDeviceName] = useState('')
   const [facingMode, setFacingMode] = useState('user')
-  const [streamReady, setStreamReady] = useState(false)
   const [otp, setOtp] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [now, setNow] = useState(() => new Date().toISOString())
@@ -41,54 +43,38 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
-    setStreamReady(false)
     setCameraActive(false)
+    setCameraStarting(false)
+    setCameraWarning('')
   }, [])
 
-  const bindStreamToVideo = useCallback((videoEl, stream) => {
-    if (!videoEl || !stream) return
-    try {
-      if (videoEl.srcObject !== stream) {
-        videoEl.srcObject = stream
+  const attachVideoRef = useCallback((videoEl) => {
+    videoRef.current = videoEl
+    if (videoEl && streamRef.current) {
+      if (videoEl.srcObject !== streamRef.current) {
+        videoEl.srcObject = streamRef.current
       }
       videoEl.muted = true
       videoEl.playsInline = true
-      videoEl.setAttribute('playsinline', 'true')
-      videoEl.setAttribute('muted', 'true')
-
-      const tryPlay = () => {
-        const p = videoEl.play()
-        if (p && typeof p.then === 'function') {
-          p.then(() => {
-            setStreamReady(true)
-          }).catch((err) => {
-            console.warn('[CheckInOutModal] Autoplay was prevented:', err)
-          })
-        }
+      const playVideo = () => {
+        videoEl.play().catch((err) => {
+          console.warn('[CheckInOutModal] Autoplay warning:', err)
+        })
       }
-
-      videoEl.onloadedmetadata = tryPlay
-      videoEl.oncanplay = tryPlay
-      tryPlay()
-    } catch (err) {
-      console.warn('[CheckInOutModal] bindStreamToVideo error:', err)
+      if (videoEl.readyState >= 1) {
+        playVideo()
+      } else {
+        videoEl.addEventListener('loadedmetadata', playVideo, { once: true })
+      }
+      playVideo()
     }
   }, [])
 
-  const attachVideoRef = useCallback(
-    (videoEl) => {
-      videoRef.current = videoEl
-      if (videoEl && streamRef.current) {
-        bindStreamToVideo(videoEl, streamRef.current)
-      }
-    },
-    [bindStreamToVideo]
-  )
-
   const startCamera = async (overrideFacing) => {
     setCameraError('')
+    setCameraWarning('')
     setErrorMsg('')
-    setStreamReady(false)
+    setCameraStarting(true)
     const targetFacing = overrideFacing || facingMode
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -121,8 +107,26 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
 
       streamRef.current = stream
       setCameraActive(true)
+
+      const track = stream.getVideoTracks()[0]
+      if (track) {
+        setCameraDeviceName(track.label || 'FaceTime HD Camera')
+        if (track.muted) {
+          setCameraWarning('Camera stream is locked or muted by another macOS application (such as WhatsApp). Please close WhatsApp or other camera apps.')
+        }
+        track.onmute = () => {
+          setCameraWarning('Camera stream is locked or muted by another macOS application (such as WhatsApp). Please close WhatsApp or other camera apps.')
+        }
+        track.onunmute = () => {
+          setCameraWarning('')
+        }
+      }
+
       if (videoRef.current) {
-        bindStreamToVideo(videoRef.current, stream)
+        videoRef.current.srcObject = stream
+        videoRef.current.muted = true
+        videoRef.current.playsInline = true
+        videoRef.current.play().catch(() => {})
       }
     } catch (err) {
       stopCamera()
@@ -130,6 +134,8 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
         err?.message ||
           'Unable to access camera. Please allow camera permissions in your browser to capture the live attendance selfie.'
       )
+    } finally {
+      setCameraStarting(false)
     }
   }
 
@@ -139,20 +145,9 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     startCamera(nextFacing)
   }
 
-  // Ensure video element receives the stream if cameraActive toggles
-  useEffect(() => {
-    if (cameraActive && videoRef.current && streamRef.current) {
-      bindStreamToVideo(videoRef.current, streamRef.current)
-    }
-  }, [cameraActive, bindStreamToVideo])
-
   const snapPhoto = () => {
     if (!videoRef.current) return
     const video = videoRef.current
-    if (!video.videoWidth || !video.videoHeight) {
-      setErrorMsg('Camera stream is still starting. Please wait a second and try again.')
-      return
-    }
     const canvas = document.createElement('canvas')
     const width = video.videoWidth || 640
     const height = video.videoHeight || 480
@@ -190,15 +185,13 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
     setSelfieDataUrl(null)
     setSelfieAt(null)
     setCameraActive(false)
+    setCameraStarting(false)
     setCameraError('')
     setFacingMode('user')
     setOtp('')
     setErrorMsg('')
     setSubmitting(false)
     setNow(new Date().toISOString())
-
-    // Attempt to automatically start live camera for seamless instant verification
-    startCamera('user')
 
     const timer = setInterval(() => setNow(new Date().toISOString()), 1000)
     return () => {
@@ -330,38 +323,36 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
           ) : cameraActive ? (
             /* State B: Live Camera Stream View */
             <div className="space-y-3 text-center">
+              {cameraWarning ? (
+                <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-left text-xs text-amber-200 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-semibold">{cameraWarning}</p>
+                    <p className="text-[11px] text-amber-300/80">
+                      If WhatsApp, FaceTime, or another tab is open, macOS blocks camera frames to other apps. Close them and click Reload Feed.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="relative overflow-hidden rounded-xl bg-slate-950 aspect-video flex items-center justify-center shadow-inner">
                 <video
                   ref={attachVideoRef}
                   autoPlay
                   playsInline
                   muted
-                  onLoadedMetadata={(e) => {
-                    e.currentTarget.play().catch(() => {})
-                    setStreamReady(true)
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
                   }}
-                  onCanPlay={(e) => {
-                    e.currentTarget.play().catch(() => {})
-                    setStreamReady(true)
-                  }}
-                  onPlaying={() => setStreamReady(true)}
-                  className={cn(
-                    'h-full w-full object-cover transition-opacity duration-200',
-                    facingMode === 'user' && '-scale-x-100',
-                    streamReady ? 'opacity-100' : 'opacity-0'
-                  )}
+                  className="rounded-xl block"
                 />
-
-                {!streamReady && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900 text-slate-300 text-xs">
-                    <RefreshCw className="h-6 w-6 animate-spin text-emerald-400" />
-                    <span>Connecting camera feed...</span>
-                  </div>
-                )}
 
                 <div className="absolute top-2 left-2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white flex items-center gap-1.5 backdrop-blur-xs z-10">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Live On-Site Camera
+                  {cameraDeviceName || 'Live On-Site Camera'}
                 </div>
 
                 <button
@@ -381,10 +372,19 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   size="sm"
                   onClick={snapPhoto}
                   icon={Camera}
-                  disabled={!streamReady}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold px-6"
                 >
                   Take Photo Now
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => startCamera()}
+                  icon={RefreshCw}
+                  className="border-slate-700 text-slate-300 hover:bg-white/10"
+                >
+                  Reload Feed
                 </Button>
                 <Button
                   type="button"
@@ -404,7 +404,7 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                 <Camera className="h-6 w-6" />
               </span>
               <p className="mt-3 text-sm font-bold text-ink">
-                Step 1 — Live Attendance Selfie Verification
+                Step 1 — Attendance Selfie Verification
               </p>
               <p className="mt-1 text-xs text-muted max-w-sm mx-auto">
                 Caretakers must capture a live photo on site right now. Gallery uploads and saved photos are disabled to prevent fraud.
@@ -423,10 +423,11 @@ export function CheckInOutModal({ open, onClose, mode = 'checkin', booking, onCo
                   variant="primary"
                   size="sm"
                   onClick={() => startCamera()}
+                  loading={cameraStarting}
                   icon={Camera}
                   className="font-semibold shadow-xs px-5"
                 >
-                  Open Live Camera
+                  {cameraStarting ? 'Connecting Camera...' : 'Open Camera'}
                 </Button>
               </div>
             </div>

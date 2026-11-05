@@ -58,6 +58,7 @@ export function PricingPage() {
   // Services catalog list
   const [services, setServices] = useState([])
   const [serviceRates, setServiceRates] = useState({})
+  const [initialSnapshot, setInitialSnapshot] = useState(null)
 
   // Simulator State
   const [simMode, setSimMode] = useState('daily')
@@ -71,8 +72,10 @@ export function PricingPage() {
     setIsLoading(true)
     try {
       const res = await adminService.getAdminPricing()
+      let loadedPricing = {}
       if (res?.pricing) {
         const p = res.pricing
+        loadedPricing = p
         setServiceBaseRate(p.serviceBaseRate ?? 199)
         setInitialRate(p.hourly?.initialRate ?? 200)
         setMaxCap(p.hourly?.maxCap ?? 500)
@@ -85,6 +88,7 @@ export function PricingPage() {
         setMonthlyUseFormula(p.monthly?.useFormula ?? true)
         setFixedMonthlyPackage(p.monthly?.fixedPackageRate ?? 37500)
       }
+      let loadedRates = {}
       if (Array.isArray(res?.services)) {
         setServices(res.services)
         const ratesMap = {}
@@ -92,10 +96,25 @@ export function PricingPage() {
           ratesMap[s._id] = s.baseHourlyRate ?? 199
         })
         setServiceRates(ratesMap)
+        loadedRates = ratesMap
         if (res.services.length > 0 && !simServiceId) {
           setSimServiceId(res.services[0]._id)
         }
       }
+      setInitialSnapshot(
+        JSON.stringify({
+          serviceBaseRate: loadedPricing.serviceBaseRate ?? 199,
+          initialRate: loadedPricing.hourly?.initialRate ?? 200,
+          maxCap: loadedPricing.hourly?.maxCap ?? 500,
+          dynamicPricingEnabled: loadedPricing.hourly?.dynamicPricingEnabled ?? true,
+          tiers: loadedPricing.hourly?.tiers || DEFAULT_TIERS,
+          baseDailyRate: loadedPricing.daily?.baseDailyRate ?? 1500,
+          extraDayDiscount: loadedPricing.daily?.extraDayDiscount ?? 250,
+          monthlyUseFormula: loadedPricing.monthly?.useFormula ?? true,
+          fixedMonthlyPackage: loadedPricing.monthly?.fixedPackageRate ?? 37500,
+          serviceRates: loadedRates,
+        })
+      )
     } catch (err) {
       toast.error('Failed to load pricing configuration', {
         description: err?.message || 'Using local standard defaults.',
@@ -103,6 +122,54 @@ export function PricingPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const hasChanges = useMemo(() => {
+    if (!initialSnapshot) return false
+    try {
+      const snap = JSON.parse(initialSnapshot)
+      if (Number(serviceBaseRate) !== snap.serviceBaseRate) return true
+      if (Number(initialRate) !== snap.initialRate) return true
+      if (Number(maxCap) !== snap.maxCap) return true
+      if (Boolean(dynamicPricingEnabled) !== Boolean(snap.dynamicPricingEnabled)) return true
+      if (Number(baseDailyRate) !== snap.baseDailyRate) return true
+      if (Number(extraDayDiscount) !== snap.extraDayDiscount) return true
+      if (Boolean(monthlyUseFormula) !== Boolean(snap.monthlyUseFormula)) return true
+      if (Number(fixedMonthlyPackage) !== snap.fixedMonthlyPackage) return true
+      if (JSON.stringify(tiers) !== JSON.stringify(snap.tiers)) return true
+      if (JSON.stringify(serviceRates) !== JSON.stringify(snap.serviceRates)) return true
+    } catch (_) {}
+    return false
+  }, [
+    initialSnapshot,
+    serviceBaseRate,
+    initialRate,
+    maxCap,
+    dynamicPricingEnabled,
+    tiers,
+    baseDailyRate,
+    extraDayDiscount,
+    monthlyUseFormula,
+    fixedMonthlyPackage,
+    serviceRates,
+  ])
+
+  const handleDiscardChanges = () => {
+    if (!initialSnapshot) return
+    try {
+      const snap = JSON.parse(initialSnapshot)
+      setServiceBaseRate(snap.serviceBaseRate)
+      setInitialRate(snap.initialRate)
+      setMaxCap(snap.maxCap)
+      setDynamicPricingEnabled(snap.dynamicPricingEnabled)
+      setTiers(snap.tiers)
+      setBaseDailyRate(snap.baseDailyRate)
+      setExtraDayDiscount(snap.extraDayDiscount)
+      setMonthlyUseFormula(snap.monthlyUseFormula)
+      setFixedMonthlyPackage(snap.fixedMonthlyPackage)
+      setServiceRates(snap.serviceRates)
+      toast.info('Unsaved pricing changes discarded.')
+    } catch (_) {}
   }
 
   useEffect(() => {
@@ -316,25 +383,33 @@ export function PricingPage() {
         title="Pricing & Revenue Configuration"
         subtitle="Configure platform-wide service rates, caretaker review progression tiers, and multi-day discounts in real time."
         action={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              icon={RotateCcw}
-              onClick={handleResetDefaults}
-              disabled={isLoading || isSaving}
-            >
-              Reset defaults
-            </Button>
-            <Button
-              variant="primary"
-              icon={Save}
-              loading={isSaving}
-              onClick={handleSave}
-              disabled={isLoading}
-            >
-              Save changes
-            </Button>
-          </div>
+          hasChanges ? (
+            <div className="flex items-center gap-2 animate-in fade-in duration-200">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 border border-amber-200 shadow-xs">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                Unsaved changes
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={RotateCcw}
+                onClick={handleDiscardChanges}
+                disabled={isLoading || isSaving}
+              >
+                Discard
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Save}
+                loading={isSaving}
+                onClick={handleSave}
+                disabled={isLoading}
+              >
+                Save changes
+              </Button>
+            </div>
+          ) : null
         }
       />
 
@@ -380,18 +455,6 @@ export function PricingPage() {
               title="1. Service Catalog Base Pricing"
               subtitle="Set and adjust the base hourly rate for each offering in the service catalog."
               icon={Layers}
-              action={
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={Save}
-                  loading={isSaving}
-                  onClick={handleSave}
-                  disabled={isLoading}
-                >
-                  Save rates
-                </Button>
-              }
             />
             <CardBody className="space-y-4">
               <div className="overflow-x-auto rounded-xl border border-line">
@@ -448,18 +511,6 @@ export function PricingPage() {
               title="2. Caretaker Hourly Rates & Review Progression Tiers"
               subtitle="Configure baseline starting prices and review milestone tiers that unlock higher earnings."
               icon={Sparkles}
-              action={
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={Save}
-                  loading={isSaving}
-                  onClick={handleSave}
-                  disabled={isLoading}
-                >
-                  Save tiers
-                </Button>
-              }
             />
             <CardBody className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-3">
@@ -627,18 +678,6 @@ export function PricingPage() {
               title="3. Daily & Multi-Day Progressive Discount Engine"
               subtitle="Set the 1-day base rate and progressive discounts that reward customers for booking extended shifts."
               icon={Calendar}
-              action={
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={Save}
-                  loading={isSaving}
-                  onClick={handleSave}
-                  disabled={isLoading}
-                >
-                  Save discounts
-                </Button>
-              }
             />
             <CardBody className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -720,18 +759,6 @@ export function PricingPage() {
               title="4. Monthly Schedule Package (30 Days)"
               subtitle="Configure whether 1-month bookings use the progressive discount formula or a fixed flat package rate."
               icon={Clock}
-              action={
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={Save}
-                  loading={isSaving}
-                  onClick={handleSave}
-                  disabled={isLoading}
-                >
-                  Save package
-                </Button>
-              }
             />
             <CardBody className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -969,40 +996,6 @@ export function PricingPage() {
               </div>
             </CardBody>
           </Card>
-
-          {/* Sticky Bottom Floating Action Bar */}
-          <div className="sticky bottom-4 z-30 mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary-200 bg-white/95 px-5 py-3 shadow-xl backdrop-blur-md">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
-              </span>
-              <span className="text-xs font-bold text-ink">
-                Pricing Admin Bar · Click Save to persist all rates and tiers to database
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                icon={RotateCcw}
-                onClick={handleResetDefaults}
-                disabled={isLoading || isSaving}
-              >
-                Reset defaults
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                icon={Save}
-                loading={isSaving}
-                onClick={handleSave}
-                disabled={isLoading}
-              >
-                Save all changes
-              </Button>
-            </div>
-          </div>
         </>
       )}
     </div>

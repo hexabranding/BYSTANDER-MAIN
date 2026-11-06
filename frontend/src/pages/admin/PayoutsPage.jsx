@@ -107,22 +107,42 @@ export function PayoutsPage() {
       settled: allPayouts.filter((p) => p.status === 'Settled').length,
     }
 
-  // Monthly trend chart dynamically computed from real payouts
+  // Monthly trend chart dynamically computed from real payouts across the rolling 6 months
   const monthlyTrend = useMemo(() => {
-    const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']
-    const monthMap = Object.fromEntries(months.map((m) => [m, 0]))
-    if (displayedPayouts && displayedPayouts.length > 0) {
-      displayedPayouts.forEach((p) => {
-        if (p.status === 'Settled' && p.requestedOn) {
-          const m = new Date(p.requestedOn).toLocaleString('en-US', { month: 'short' })
-          if (monthMap[m] !== undefined) {
-            monthMap[m] += p.net || 0
+    const now = new Date()
+    const rollingMonths = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const label = d.toLocaleString('en-US', { month: 'short' })
+      const fullYear = d.getFullYear()
+      rollingMonths.push({ key, label, fullYear, payout: 0 })
+    }
+
+    const monthMap = new Map(rollingMonths.map((m) => [m.key, m]))
+
+    if (allPayouts && allPayouts.length > 0) {
+      allPayouts.forEach((p) => {
+        const isSettled = String(p.status).toLowerCase() === 'settled'
+        const rawDate = p.settledAt || p.requestedOn || p.createdAt || p.date
+        if (isSettled && rawDate) {
+          const d = new Date(rawDate)
+          if (!isNaN(d.getTime())) {
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+            if (monthMap.has(key)) {
+              monthMap.get(key).payout += Number(p.net || 0)
+            }
           }
         }
       })
     }
-    return months.map((month) => ({ month, payout: monthMap[month] }))
-  }, [displayedPayouts])
+
+    return rollingMonths.map((m) => ({
+      month: m.label,
+      payout: m.payout,
+      fullLabel: `${m.label} ${m.fullYear}`,
+    }))
+  }, [allPayouts])
 
   const viewing = displayedPayouts.find((p) => p.id === viewingId) || null
   const approving = displayedPayouts.find((p) => p.id === approvingId) || null
@@ -384,7 +404,7 @@ export function PayoutsPage() {
                 <Tooltip
                   contentStyle={tooltipStyle}
                   formatter={(value) => [formatCurrency(value), 'Payout']}
-                  labelFormatter={(label) => `${label} 2026`}
+                  labelFormatter={(label, payload) => payload?.[0]?.payload?.fullLabel || `${label} ${new Date().getFullYear()}`}
                 />
                 <Line
                   type="monotone"

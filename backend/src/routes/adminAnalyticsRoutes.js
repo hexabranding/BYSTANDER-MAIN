@@ -17,10 +17,17 @@ router.get('/metrics', adminAnalyticsController.getMetrics);
 
 /**
  * @route   GET /api/admin/ratings
- * @desc    Retrieve caregiver ratings directory and star distribution breakdown
+ * @desc    Retrieve ratings directory and star distribution breakdown (caregiver & customer)
  * @access  Private (Admin only)
  */
 router.get('/ratings', adminAnalyticsController.getRatings);
+
+/**
+ * @route   GET /api/admin/ratings/customer/:customerId/reviews
+ * @desc    Retrieve individual customer review history evaluated by caregivers
+ * @access  Private (Admin only)
+ */
+router.get('/ratings/customer/:customerId/reviews', adminAnalyticsController.getCustomerReviewsAdmin);
 
 /**
  * @route   GET /api/admin/ratings/:caregiverId/reviews

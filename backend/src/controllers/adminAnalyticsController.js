@@ -37,6 +37,18 @@ export const getCaregiverReviewsAdmin = async (req, res, next) => {
   }
 };
 
+export const getCustomerReviewsAdmin = async (req, res, next) => {
+  try {
+    const reviews = await reviewService.getAdminCustomerReviews(req.params.customerId);
+    return res.status(200).json({
+      success: true,
+      reviews,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const generateReport = async (req, res, next) => {
   try {
     const report = await adminAnalyticsService.generateAdminReport(req.sanitizedReportQuery || req.body);
@@ -54,6 +66,7 @@ export const adminAnalyticsController = {
   getMetrics,
   getRatings,
   getCaregiverReviewsAdmin,
+  getCustomerReviewsAdmin,
   generateReport,
 };
 

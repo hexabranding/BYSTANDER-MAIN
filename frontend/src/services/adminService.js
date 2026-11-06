@@ -353,6 +353,19 @@ export const getAdminCaregiverReviews = async (caregiverId) => {
 }
 
 /**
+ * Retrieves written review dossier for an individual customer evaluated by caregivers.
+ * @param {string} customerId
+ * @returns {Promise<Array>}
+ */
+export const getAdminCustomerReviews = async (customerId) => {
+  if (!customerId) {
+    throw new Error('A customer identifier is required')
+  }
+  const response = await apiClient.get(`/admin/ratings/customer/${customerId}/reviews`)
+  return response?.data?.reviews || response?.reviews || (Array.isArray(response?.data) ? response.data : [])
+}
+
+/**
  * Generates an operational report with real CSV content.
  * @param {Object} payload - { type, period, format }
  * @returns {Promise<Object>} Generated report metadata and CSV content
@@ -677,6 +690,7 @@ export const adminService = {
   getAdminMetrics,
   getAdminRatings,
   getAdminCaregiverReviews,
+  getAdminCustomerReviews,
   generateAdminReport,
   getAdminPayments,
   getAdminPaymentById,

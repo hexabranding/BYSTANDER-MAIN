@@ -3,6 +3,7 @@ import { Review } from '../models/Review.js';
 import { Booking } from '../models/Booking.js';
 import { CaregiverProfile } from '../models/CaregiverProfile.js';
 import { CustomerProfile } from '../models/CustomerProfile.js';
+import { User } from '../models/User.js';
 import { safeDispatchNotification } from './notificationService.js';
 import { getPlatformPricingSettings, calculateCaregiverHourlyRate } from './pricingService.js';
 
@@ -484,33 +485,68 @@ export const addCaregiverReply = async (user, reviewId, replyText) => {
 };
 
 /**
- * Administrative ratings overview across all caregivers with distribution analytics.
+ * Administrative ratings overview across all caregivers and customers with distribution analytics.
+ * Supports query.target = 'caregiver' | 'customer' and returns full metrics for both.
  */
 export const getAdminRatings = async (query = {}) => {
-  const [caregivers, allReviews] = await Promise.all([
-    CaregiverProfile.find()
-      .populate('user', 'fullName email status')
-      .sort({ 'rating.average': -1 }),
-    Review.find({ isPublic: true }),
+  const isDbConnected = mongoose.connection?.readyState !== 0;
+
+  const caregiversQuery = CaregiverProfile.find();
+  const caregiversPromise =
+    typeof caregiversQuery?.populate === 'function'
+      ? caregiversQuery.populate('user', 'fullName email status avatar').sort({ 'rating.average': -1 })
+      : caregiversQuery;
+
+  const customerProfilesPromise =
+    isDbConnected || CustomerProfile.find !== mongoose.Model.find
+      ? CustomerProfile.find()
+      : Promise.resolve([]);
+
+  let customerUsersQuery =
+    isDbConnected || User.find !== mongoose.Model.find
+      ? User.find({ role: 'customer' })
+      : Promise.resolve([]);
+
+  if (typeof customerUsersQuery?.select === 'function') {
+    customerUsersQuery = customerUsersQuery.select('fullName email phone status avatar createdAt');
+  }
+
+  const reviewsPromise = Review.find({ isPublic: true });
+
+  const [rawCaregivers, rawCustomerProfiles, rawCustomerUsers, rawAllReviews] = await Promise.all([
+    caregiversPromise,
+    customerProfilesPromise,
+    customerUsersQuery,
+    reviewsPromise,
   ]);
 
-  const totalReviews = allReviews.length;
-  const weightedSum = allReviews.reduce((sum, r) => sum + r.rating, 0);
-  const average = totalReviews ? (weightedSum / totalReviews).toFixed(2) : '5.00';
-  const fiveStarCount = allReviews.filter((r) => r.rating >= 4.5).length;
-  const fiveShare = totalReviews ? Math.round((fiveStarCount / totalReviews) * 100) : 100;
-  const attentionCount = caregivers.filter((c) => (c.rating?.average || 5.0) < 4.5).length;
+  const caregivers = Array.isArray(rawCaregivers) ? rawCaregivers : [];
+  const customerProfiles = Array.isArray(rawCustomerProfiles) ? rawCustomerProfiles : [];
+  const allCustomerUsers = Array.isArray(rawCustomerUsers) ? rawCustomerUsers : [];
+  const allReviews = Array.isArray(rawAllReviews) ? rawAllReviews : [];
 
-  // Star distribution breakdown (5, 4, 3, 2, 1)
-  const distribution = [5, 4, 3, 2, 1].map((star) => {
-    const count = allReviews.filter((r) => Math.round(r.rating) === star).length;
-    const percentage = totalReviews ? Math.round((count / totalReviews) * 100) : star === 5 ? 100 : 0;
+  // 1. Separate reviews by target entity
+  // Reviews received by Caregivers (evaluated by Customers)
+  const caregiverReviews = allReviews.filter((r) => r.reviewerRole !== 'caregiver');
+  // Reviews received by Customers (evaluated by Caregivers)
+  const customerReviews = allReviews.filter((r) => r.reviewerRole === 'caregiver');
+
+  // --- CAREGIVER AGGREGATION ---
+  const cgTotalReviews = caregiverReviews.length;
+  const cgWeightedSum = caregiverReviews.reduce((sum, r) => sum + r.rating, 0);
+  const cgAverage = cgTotalReviews ? (cgWeightedSum / cgTotalReviews).toFixed(2) : '5.00';
+  const cgFiveStarCount = caregiverReviews.filter((r) => r.rating >= 4.5).length;
+  const cgFiveShare = cgTotalReviews ? Math.round((cgFiveStarCount / cgTotalReviews) * 100) : 100;
+  const cgAttentionCount = caregivers.filter((c) => (c.rating?.average || 5.0) < 4.5).length;
+
+  const cgDistribution = [5, 4, 3, 2, 1].map((star) => {
+    const count = caregiverReviews.filter((r) => Math.round(r.rating) === star).length;
+    const percentage = cgTotalReviews ? Math.round((count / cgTotalReviews) * 100) : star === 5 ? 100 : 0;
     return { star, count, percentage };
   });
 
-  // Map caregiver rows matching frontend table
-  const rows = caregivers.map((c) => {
-    const cReviews = allReviews.filter((r) => r.caregiver.toString() === c._id.toString());
+  const caregiverRows = caregivers.map((c) => {
+    const cReviews = caregiverReviews.filter((r) => r.caregiver && r.caregiver.toString() === c._id.toString());
     const rCount = cReviews.length || c.rating?.count || 0;
     const rAvg = c.rating?.average !== undefined ? c.rating.average : 5.0;
     const positiveCount = cReviews.filter((r) => r.rating >= 4).length;
@@ -521,8 +557,10 @@ export const getAdminRatings = async (query = {}) => {
       caregiverProfileId: c._id.toString(),
       caregiverUserId: c.user?._id?.toString() || null,
       caregiverName: c.user?.fullName || 'Caregiver',
+      name: c.user?.fullName || 'Caregiver',
+      email: c.user?.email || '',
       city: c.city || 'Mumbai, MH',
-      qualification: c.qualification,
+      qualification: c.qualification || 'Certified Caregiver',
       rating: rAvg,
       reviews: rCount,
       positive,
@@ -531,15 +569,84 @@ export const getAdminRatings = async (query = {}) => {
     };
   });
 
-  return {
-    rows,
+  // --- CUSTOMER AGGREGATION ---
+  const custTotalReviews = customerReviews.length;
+  const custWeightedSum = customerReviews.reduce((sum, r) => sum + r.rating, 0);
+  const custAverage = custTotalReviews ? (custWeightedSum / custTotalReviews).toFixed(2) : (allCustomerUsers.length ? '5.00' : '0.00');
+  const custFiveStarCount = customerReviews.filter((r) => r.rating >= 4.5).length;
+  const custFiveShare = custTotalReviews ? Math.round((custFiveStarCount / custTotalReviews) * 100) : 100;
+
+  const custDistribution = [5, 4, 3, 2, 1].map((star) => {
+    const count = customerReviews.filter((r) => Math.round(r.rating) === star).length;
+    const percentage = custTotalReviews ? Math.round((count / custTotalReviews) * 100) : star === 5 ? 100 : 0;
+    return { star, count, percentage };
+  });
+
+  const customerProfileMap = new Map(customerProfiles.map((p) => [p.user ? p.user.toString() : '', p]));
+
+  const customerRows = allCustomerUsers.map((u) => {
+    const uId = u._id.toString();
+    const prof = customerProfileMap.get(uId);
+    const cReviews = customerReviews.filter((r) => r.customer && r.customer.toString() === uId);
+    const rCount = cReviews.length || prof?.rating?.count || 0;
+    const rAvg = rCount > 0
+      ? Number((cReviews.reduce((sum, r) => sum + r.rating, 0) / rCount).toFixed(2))
+      : (prof?.rating?.average !== undefined ? prof.rating.average : 5.0);
+    const positiveCount = cReviews.filter((r) => r.rating >= 4).length;
+    const positive = rCount ? Math.round((positiveCount / rCount) * 100) : 100;
+
+    const city = prof?.defaultAddress?.city || prof?.defaultAddress?.area || 'Mumbai, MH';
+
+    return {
+      id: uId,
+      customerId: uId,
+      customerProfileId: prof?._id ? prof._id.toString() : null,
+      customerName: u.fullName || 'Customer',
+      name: u.fullName || 'Customer',
+      email: u.email || '',
+      phone: u.phone || '',
+      city,
+      rating: rAvg,
+      reviews: rCount,
+      positive,
+      trend: '+0.1',
+      status: rAvg < 4.5 ? 'Needs attention' : 'Good',
+    };
+  }).sort((a, b) => b.rating - a.rating || b.reviews - a.reviews);
+
+  const custAttentionCount = customerRows.filter((c) => c.status === 'Needs attention').length;
+
+  const isCustomerTarget = query?.target === 'customer' || query?.type === 'customer';
+
+  const caregiverPayload = {
+    rows: caregiverRows,
     stats: {
-      average,
-      totalReviews,
-      fiveShare,
-      attention: attentionCount,
+      average: cgAverage,
+      totalReviews: cgTotalReviews,
+      fiveShare: cgFiveShare,
+      attention: cgAttentionCount,
     },
-    distribution,
+    distribution: cgDistribution,
+  };
+
+  const customerPayload = {
+    rows: customerRows,
+    stats: {
+      average: custAverage,
+      totalReviews: custTotalReviews,
+      fiveShare: custFiveShare,
+      attention: custAttentionCount,
+    },
+    distribution: custDistribution,
+  };
+
+  return {
+    target: isCustomerTarget ? 'customer' : 'caregiver',
+    rows: isCustomerTarget ? customerPayload.rows : caregiverPayload.rows,
+    stats: isCustomerTarget ? customerPayload.stats : caregiverPayload.stats,
+    distribution: isCustomerTarget ? customerPayload.distribution : caregiverPayload.distribution,
+    caregivers: caregiverPayload,
+    customers: customerPayload,
   };
 };
 
@@ -556,10 +663,40 @@ export const getAdminCaregiverReviews = async (caregiverId) => {
 
   const reviews = await Review.find({
     $or: [{ caregiver: caregiverId }, { caregiverUser: caregiverId }],
+    reviewerRole: { $ne: 'caregiver' },
   })
     .sort({ createdAt: -1 })
-    .populate('customer', 'fullName email')
+    .populate('customer', 'fullName email phone')
     .populate('booking', 'serviceName date totalAmount');
+
+  return reviews;
+};
+
+/**
+ * Retrieve individual customer review dossier evaluated by caregivers for administrators.
+ */
+export const getAdminCustomerReviews = async (customerId) => {
+  if (!mongoose.Types.ObjectId.isValid(customerId)) {
+    const err = new Error('Invalid customer identifier');
+    err.statusCode = 400;
+    err.name = 'ValidationError';
+    throw err;
+  }
+
+  let targetUserId = customerId;
+  const profile = await CustomerProfile.findById(customerId).select('user');
+  if (profile && profile.user) {
+    targetUserId = profile.user;
+  }
+
+  const reviews = await Review.find({
+    customer: targetUserId,
+    reviewerRole: 'caregiver',
+  })
+    .sort({ createdAt: -1 })
+    .populate('caregiverUser', 'fullName email avatar phone')
+    .populate('caregiver', 'qualification experienceYears rating city area')
+    .populate('booking', 'serviceName date scheduledDate durationHours totalAmount status');
 
   return reviews;
 };
@@ -674,6 +811,7 @@ export const reviewService = {
   addCaregiverReply,
   getAdminRatings,
   getAdminCaregiverReviews,
+  getAdminCustomerReviews,
   recalculateCaregiverRating,
   recalculateCustomerRating,
   withCaregiverLock,

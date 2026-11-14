@@ -33,9 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
+          node-version: 24
 
       - name: Install MongoDB server binary
         run: |
@@ -50,8 +48,42 @@ jobs:
           mongod --version
 
       - name: Install backend dependencies
-        run: npm ci --workspace=backend --include-workspace-root=false
+        working-directory: backend
+        run: npm install --omit=dev --package-lock=false
 
       - name: Run backend tests
-        run: npm test --workspace=backend
+        working-directory: backend
+        run: npm test
 
+  deploy:
+    name: Deploy to AWS EC2
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Deploy backend through SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            'set -e
+             cd /var/www/BYSTANDER-MAIN
+             git fetch origin main
+             git reset --hard origin/main
+             cd backend
+             npm install --omit=dev --package-lock=false
+             pm2 restart bystander-api --update-env
+             sleep 5
+             curl --fail --silent --show-error http://127.0.0.1:5001/api/health'

@@ -41,8 +41,8 @@ export function PublicNavbar() {
         scrolled ? 'border-line bg-white/90 backdrop-blur-md shadow-card' : 'border-transparent bg-white',
       )}
     >
-      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-4 px-4 sm:h-28 sm:px-6 lg:px-8">
-        <Logo size="xl" className="shrink-0" />
+      <div className="mx-auto flex h-22 max-w-7xl items-center justify-between gap-4 px-4 sm:h-24 sm:px-6 lg:px-8">
+        <Logo size="lg" className="shrink-0" />
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
           {links.map((link) =>

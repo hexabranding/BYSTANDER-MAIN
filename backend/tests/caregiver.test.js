@@ -236,12 +236,25 @@ test('Step 6 - 5: Date exceptions enforce YYYY-MM-DD and reject duplicate dates'
   assert.equal(res2.statusCode, 400);
   assert.ok(res2.jsonData.message.includes('Duplicate date exception'));
 
+  // Generate dates dynamically in the future using local calendar date arithmetic
+  const now = new Date();
+  const futureDate1 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
+  const futureDate2 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 6);
+  const formatDate = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const validDate1 = formatDate(futureDate1);
+  const validDate2 = formatDate(futureDate2);
+
   // Valid date exception passes
   const { req: req3, res: res3, next: next3, getNextCalled: called3 } = createMockReqRes({
     body: {
       dateExceptions: [
-        { date: '2026-11-05', isAvailable: false, reason: 'Medical appointment' },
-        { date: '2026-11-06', isAvailable: true, slots: [{ start: '10:00', end: '14:00' }] },
+        { date: validDate1, isAvailable: false, reason: 'Medical appointment' },
+        { date: validDate2, isAvailable: true, slots: [{ start: '10:00', end: '14:00' }] },
       ],
     },
   });

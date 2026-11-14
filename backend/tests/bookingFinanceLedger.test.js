@@ -291,6 +291,7 @@ test('BUG-03 - 4: cancelBooking transitions transaction status to refunded with 
       caregiverUser: caregiverUserId,
       status: 'pending',
       startDateTime: new Date(Date.now() + 86400000),
+      paidAt: new Date(Date.now() - 3600000),
     });
 
     Booking.findOneAndUpdate = async () => ({
@@ -298,6 +299,7 @@ test('BUG-03 - 4: cancelBooking transitions transaction status to refunded with 
       customer: customerId,
       caregiverUser: caregiverUserId,
       status: 'cancelled',
+      paidAt: new Date(Date.now() - 3600000),
       populate: async function () {
         return this;
       },
@@ -355,6 +357,7 @@ test('BUG-03 - 5: rejectBooking transitions transaction status to refunded', asy
       caregiverUser: caregiverUserId,
       status: 'pending',
       serviceName: 'Physiotherapy Assist',
+      paidAt: new Date(Date.now() - 3600000),
     });
 
     Booking.findOneAndUpdate = async () => ({
@@ -363,6 +366,7 @@ test('BUG-03 - 5: rejectBooking transitions transaction status to refunded', asy
       caregiverUser: caregiverUserId,
       status: 'rejected',
       serviceName: 'Physiotherapy Assist',
+      paidAt: new Date(Date.now() - 3600000),
       populate: async function () {
         return this;
       },

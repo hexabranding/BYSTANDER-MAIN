@@ -96,7 +96,6 @@ export function LoginPage({ adminOnly = false }) {
   const [customerStep, setCustomerStep] = useState('email') // 'email' | 'otp'
   const [customerEmail, setCustomerEmail] = useState(rememberedEmail || '')
   const [customerOtp, setCustomerOtp] = useState('')
-  const [customerDevOtp, setCustomerDevOtp] = useState('')
   const [customerLoading, setCustomerLoading] = useState(false)
   const [customerUsePassword, setCustomerUsePassword] = useState(false)
 
@@ -113,15 +112,9 @@ export function LoginPage({ adminOnly = false }) {
       const res = await requestGuestOtp(clean, 'login')
       if (res.ok) {
         setCustomerStep('otp')
-        if (res.data?.devOtp) {
-          setCustomerDevOtp(res.data.devOtp)
-        }
         toast.success('Verification code sent!', {
           description: `Enter the 6-digit code sent to ${clean}`,
         })
-        if (res.data?.devOtp) {
-          toast.info(`Development test code: ${res.data.devOtp}`, { duration: 8000 })
-        }
       } else {
         setStatusNotice(res.message || 'No customer account found with this email. Please sign up first.')
         toast.error(res.message || 'No customer account found with this email.')
@@ -407,28 +400,6 @@ export function LoginPage({ adminOnly = false }) {
                     Change email
                   </button>
                 </div>
-
-                {customerDevOtp ? (
-                  <div className="flex items-center justify-between rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900 animate-in fade-in">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-2 w-2 rounded-full bg-teal-500 animate-pulse" />
-                      <span>
-                        Test Code: <strong className="font-mono text-sm tracking-wider text-teal-950">{customerDevOtp}</strong>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setCustomerOtp(customerDevOtp)}
-                      className="rounded-md bg-teal-700 px-2.5 py-1 text-xs font-bold text-white hover:bg-teal-800 transition"
-                    >
-                      Auto-fill
-                    </button>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    💡 Test shortcut: You can also use <strong className="font-mono font-bold text-slate-800">123456</strong> to sign in instantly.
-                  </div>
-                )}
 
                 <FormField
                   label="Enter 6-digit verification code"

@@ -113,7 +113,8 @@ app.get('/api/health', (req, res) => {
 
   res.status(200).json({
     status: 'ok',
-    message: 'Bystander API is operational',
+    message: 'Bystander API is operational (v1.0.1)',
+    version: '1.0.1',
     database: dbStatus,
     timestamp: new Date().toISOString(),
     uptime: Number(process.uptime().toFixed(2)),

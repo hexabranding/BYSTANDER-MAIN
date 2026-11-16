@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { MapPin, ExternalLink, Move, Loader2 } from 'lucide-react'
+import { MapPin, ExternalLink, Move, Loader2, Satellite, Map } from 'lucide-react'
 import { loadGoogleMaps, isGoogleMapsConfigured } from '@/utils/googleMapsLoader'
 import { apiClient } from '@/services'
 
@@ -485,30 +485,33 @@ export default function InteractiveLocationPicker({
           <button
             type="button"
             onClick={() => handleModeChange('hybrid')}
-            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-md transition cursor-pointer ${
               mapMode === 'hybrid'
                 ? 'bg-primary-700 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            🛰️ Satellite
+            <Satellite className="h-3.5 w-3.5" />
+            <span>Satellite</span>
           </button>
           <button
             type="button"
             onClick={() => handleModeChange('roadmap')}
-            className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-md transition cursor-pointer ${
               mapMode === 'roadmap'
                 ? 'bg-primary-700 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            🗺️ Streets
+            <Map className="h-3.5 w-3.5" />
+            <span>Streets</span>
           </button>
         </div>
       </div>
 
-      <p className="mt-2 px-1 text-[11px] text-slate-500">
-        📍 The caretaker's navigation will drive directly to this pin. Confirm or refine your house / flat number below.
+      <p className="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-slate-500">
+        <MapPin className="h-3 w-3 shrink-0 text-primary-700" />
+        <span>The caretaker's navigation will drive directly to this pin. Confirm or refine your house / flat number below.</span>
       </p>
     </div>
   )

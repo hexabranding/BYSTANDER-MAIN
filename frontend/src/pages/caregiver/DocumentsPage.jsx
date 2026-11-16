@@ -28,6 +28,7 @@ import { getVerificationForCaregiver } from '@/data/verifications'
 import { documentService } from '@/services'
 import { cn } from '@/utils/cn'
 import { downloadText, formatDate } from '@/utils/format'
+import { fileToOptimizedDataUrl } from '@/utils/image'
 import { Button } from '@/components/common/Button'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -249,7 +250,7 @@ export function DocumentsPage() {
 
     try {
       setSubmitting(true)
-      const dataUrl = await fileToDataUrl(uploadFile.rawFile || uploadFile.file)
+      const dataUrl = await fileToOptimizedDataUrl(uploadFile.rawFile || uploadFile.file || uploadFile)
 
       const docTypeKey =
         uploadTarget.documentType ||

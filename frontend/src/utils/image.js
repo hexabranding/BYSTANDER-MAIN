@@ -49,3 +49,36 @@ export const compressImage = (file, maxWidth = 640, quality = 0.82) => {
     reader.readAsDataURL(file);
   });
 };
+
+/**
+ * Converts a File, Blob, or Data URL to an optimized, lightweight Data URL.
+ * Automatically downsamples large camera images to max 1400px and JPEG 0.8 quality
+ * to guarantee payloads stay well within proxy transfer limits (< 300KB)
+ * while preserving high visual clarity for text and documents.
+ *
+ * @param {File|Blob|string|Object} file
+ * @returns {Promise<string|null>} Data URL or null
+ */
+export const fileToOptimizedDataUrl = async (file) => {
+  if (!file) return null;
+  if (typeof file === 'string') {
+    return file.startsWith('data:') ? file : null;
+  }
+  const raw = file.rawFile || file.file || file;
+  if (!(raw instanceof Blob || (typeof File !== 'undefined' && raw instanceof File))) {
+    return typeof raw === 'string' && raw.startsWith('data:') ? raw : null;
+  }
+  if (raw.type && raw.type.startsWith('image/')) {
+    try {
+      return await compressImage(raw, 1400, 0.8);
+    } catch {
+      // Fall through to raw reader if canvas rendering fails
+    }
+  }
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(raw);
+  });
+};

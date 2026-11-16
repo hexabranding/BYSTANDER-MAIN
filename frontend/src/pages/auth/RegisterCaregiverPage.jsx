@@ -35,6 +35,7 @@ import { ProgressBar, Chip } from '@/components/common/Tabs'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { QUALIFICATIONS, LANGUAGES, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
 import { cn } from '@/utils/cn'
+import { fileToOptimizedDataUrl } from '@/utils/image'
 
 const STEPS = [
   { key: 'personal', label: 'Personal', icon: UserRound },
@@ -515,20 +516,8 @@ export function RegisterCaregiverPage() {
     const serializedDocs = {}
     for (const [key, file] of Object.entries(values.docs || {})) {
       if (!file) continue
-      const raw = file.rawFile || file.file
-      let dataUrl = null
-      if (raw && (raw instanceof Blob || (typeof File !== 'undefined' && raw instanceof File))) {
-        try {
-          dataUrl = await new Promise((resolve) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result)
-            reader.onerror = () => resolve(null)
-            reader.readAsDataURL(raw)
-          })
-        } catch {
-          dataUrl = null
-        }
-      }
+      const raw = file.rawFile || file.file || file
+      let dataUrl = await fileToOptimizedDataUrl(raw)
       if (!dataUrl && typeof file.preview === 'string' && file.preview.startsWith('data:')) {
         dataUrl = file.preview
       }
@@ -537,7 +526,7 @@ export function RegisterCaregiverPage() {
       }
       serializedDocs[key] = {
         name: file.name || String(file),
-        size: file.size || 1024,
+        size: dataUrl ? Math.round((dataUrl.length * 3) / 4) : file.size || 1024,
         type: file.type || 'application/pdf',
         fileData: dataUrl,
       }

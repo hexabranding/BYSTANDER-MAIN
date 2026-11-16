@@ -520,8 +520,6 @@ export const registerCaregiver = async (payload) => {
       languages: payload.languages || undefined,
       careSettings: normalizedCareSettings,
       bio: payload.bio || undefined,
-      documents: payload.documents || undefined,
-      docs: payload.docs || undefined,
     });
 
     const { user, profile, token } = response.data || {};
@@ -563,17 +561,24 @@ export const registerCaregiver = async (payload) => {
         policeClearance: 'police_clearance',
         bankProof: 'bank_verification',
       };
-      const entries = payload.docs ? Object.entries(payload.docs) : [];
+      const entries = payload.docs
+        ? Object.entries(payload.docs)
+        : Array.isArray(payload.documents)
+          ? payload.documents.map((d) => [d.docId || d.type, d])
+          : [];
+
       for (const [key, f] of entries) {
         if (!f) continue;
-        const documentType = docKeyMap[key] || key;
+        const documentType = docKeyMap[key] || docKeyMap[f.docId] || docKeyMap[f.type] || key;
+        const fileData = f.fileData || f.preview || (typeof f === 'string' && f.startsWith('data:') ? f : null);
+        if (!fileData) continue;
         try {
           await apiClient.post('/caregiver/documents', {
             documentType,
-            fileName: f.name || f.fileName || `${documentType}.pdf`,
-            fileSize: f.size || f.fileSize || 1024,
-            mimeType: f.type || f.mimeType || 'application/pdf',
-            fileData: f.fileData || f.preview || null,
+            fileName: f.name || f.fileName || (f.file && f.file.name) || `${documentType}.pdf`,
+            fileSize: f.size || f.fileSize || (f.file && f.file.size) || 1024,
+            mimeType: f.type || f.mimeType || (f.file && f.file.type) || 'application/pdf',
+            fileData,
           });
         } catch (uploadErr) {
           console.warn(`[Document Upload] Could not upload ${documentType}:`, uploadErr.message);

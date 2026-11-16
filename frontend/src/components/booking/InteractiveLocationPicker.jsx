@@ -3,6 +3,17 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MapPin, ExternalLink, Move, Loader2 } from 'lucide-react'
 import { loadGoogleMaps, isGoogleMapsConfigured } from '@/utils/googleMapsLoader'
+import { apiClient } from '@/services'
+
+const escapeHtml = (str) => {
+  if (!str) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
 
 // Custom high-contrast SVG pin anchored precisely at the bottom tip for Leaflet fallback
 const createLeafletPinIcon = () =>
@@ -56,6 +67,7 @@ export default function InteractiveLocationPicker({
   // Google Maps references
   const googleMapRef = useRef(null)
   const googleMarkerRef = useRef(null)
+  const googleInfoWindowRef = useRef(null)
 
   // Leaflet references (fallback)
   const leafletMapRef = useRef(null)
@@ -64,6 +76,32 @@ export default function InteractiveLocationPicker({
 
   const initialLat = typeof lat === 'number' && !Number.isNaN(lat) ? lat : 11.25085
   const initialLng = typeof lng === 'number' && !Number.isNaN(lng) ? lng : 75.79804
+
+  // Helper to show styled Google Maps InfoWindow above pin
+  const showMapPopup = (title, subtitle) => {
+    if (!googleInfoWindowRef.current || !googleMapRef.current || !googleMarkerRef.current) return
+    const safeTitle = (title || 'Selected Location').trim()
+    const safeSubtitle = (subtitle || '').trim()
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 4px 6px; max-width: 280px; text-align: left;">
+        <div style="font-weight: 700; font-size: 13.5px; color: #0F172A; line-height: 1.3; margin-bottom: 3px;">
+          ${escapeHtml(safeTitle)}
+        </div>
+        ${
+          safeSubtitle
+            ? `<div style="font-size: 11.5px; color: #64748B; line-height: 1.35;">${escapeHtml(safeSubtitle)}</div>`
+            : ''
+        }
+      </div>
+    `
+    googleInfoWindowRef.current.setContent(html)
+    googleInfoWindowRef.current.open({
+      map: googleMapRef.current,
+      anchor: googleMarkerRef.current,
+      shouldFocus: false,
+    })
+  }
 
   // Initialize Map: Tries Google Maps first; falls back to Leaflet gracefully
   useEffect(() => {
@@ -109,100 +147,96 @@ export default function InteractiveLocationPicker({
             },
           })
 
-          // Client-side reverse geocoding & POI resolution
-          const resolveGoogleLocation = (latLng, placeId, callback) => {
+          const infoWindow = new googleMaps.InfoWindow({
+            disableAutoPan: false,
+          })
+          googleInfoWindowRef.current = infoWindow
+
+          gMarker.addListener('click', () => {
+            if (googleInfoWindowRef.current && googleMapRef.current) {
+              googleInfoWindowRef.current.open({
+                map: googleMapRef.current,
+                anchor: gMarker,
+                shouldFocus: false,
+              })
+            }
+          })
+
+          // Unified reverse geocoding & POI resolution
+          const resolveGoogleLocation = async (newLat, newLng, placeId, callback) => {
             setIsResolving(true)
-            const geocoder = googleMaps?.Geocoder ? new googleMaps.Geocoder() : null
-            const placesService =
-              placeId && googleMaps?.places?.PlacesService
-                ? new googleMaps.places.PlacesService(gMap)
-                : null
-
-            const parseComponents = (components, formattedAddress, placeName = '') => {
-              const getComp = (...types) => {
-                const found = components.find((c) => types.some((t) => c.types.includes(t)))
-                return found ? found.long_name : ''
+            try {
+              const res = await apiClient.get('/geo/reverse', {
+                params: {
+                  lat: newLat,
+                  lng: newLng,
+                  ...(placeId ? { placeId } : {}),
+                },
+              })
+              const geo = res?.data || res
+              if (geo && (geo.address || geo.placeName || geo.formattedAddress)) {
+                setIsResolving(false)
+                const title = geo.placeName || geo.address || 'Selected Location'
+                const subtitle = geo.formattedAddress || [geo.area, geo.city].filter(Boolean).join(', ')
+                showMapPopup(title, subtitle)
+                callback?.(geo)
+                return
               }
-
-              const premise = getComp('premise', 'subpremise', 'point_of_interest', 'establishment')
-              const route = getComp('route')
-              const landmark = getComp('landmark')
-              const sublocality = getComp('sublocality_level_1', 'sublocality', 'sublocality_level_2', 'neighborhood')
-              const locality = getComp('locality')
-              const district = getComp('administrative_area_level_3', 'administrative_area_level_2')
-              const state = getComp('administrative_area_level_1')
-              const postalCode = getComp('postal_code')
-
-              let streetParts = []
-              if (placeName && !placeName.includes('+')) {
-                streetParts.push(placeName)
-              } else if (premise) {
-                streetParts.push(premise)
-              }
-              if (route && !streetParts.includes(route)) streetParts.push(route)
-              if (landmark && !streetParts.includes(landmark)) streetParts.push(`Near ${landmark}`)
-
-              let address = streetParts.filter(Boolean).join(', ')
-              if (!address && formattedAddress) {
-                address = formattedAddress
-                  .replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '')
-                  .split(',')
-                  .slice(0, 2)
-                  .join(', ')
-                  .trim()
-              }
-
-              return {
-                address: address || formattedAddress || '',
-                area: sublocality || locality || '',
-                city: locality || sublocality || district || '',
-                district: district || locality || '',
-                state: state || 'Kerala',
-                pincode: postalCode || '',
-                formattedAddress: formattedAddress || '',
-              }
+            } catch (apiErr) {
+              console.warn('[MapPicker] Reverse geocode API error, trying client geocoder fallback:', apiErr?.message)
             }
 
-            if (placeId && placesService) {
-              placesService.getDetails(
-                { placeId, fields: ['name', 'formatted_address', 'address_components', 'geometry'] },
-                (place, status) => {
-                  if (status === googleMaps.places?.PlacesServiceStatus?.OK && place) {
-                    setIsResolving(false)
-                    const details = parseComponents(
-                      place.address_components || [],
-                      place.formatted_address,
-                      place.name
-                    )
-                    callback?.(details)
-                    return
-                  }
-                  geocodeFallback()
-                }
-              )
+            // Client Geocoder Fallback if API fails
+            if (!googleMaps?.Geocoder) {
+              setIsResolving(false)
+              callback?.(null)
               return
             }
 
-            geocodeFallback()
-
-            function geocodeFallback() {
-              if (!geocoder) {
-                setIsResolving(false)
-                callback?.(null)
-                return
-              }
-              const req = placeId ? { placeId } : { location: latLng }
-              geocoder.geocode(req, (results, status) => {
-                setIsResolving(false)
-                if (status === 'OK' && results && results[0]) {
-                  const first = results[0]
-                  const details = parseComponents(first.address_components || [], first.formatted_address)
-                  callback?.(details)
-                } else {
-                  callback?.(null)
+            const geocoder = new googleMaps.Geocoder()
+            const req = placeId ? { placeId } : { location: { lat: newLat, lng: newLng } }
+            geocoder.geocode(req, (results, status) => {
+              setIsResolving(false)
+              if (status === 'OK' && results && results[0]) {
+                const first = results[0]
+                const cleanFormatted = (first.formatted_address || '').replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '')
+                const components = first.address_components || []
+                const getComp = (...types) => {
+                  const found = components.find((c) => types.some((t) => c.types.includes(t)))
+                  return found ? found.long_name : ''
                 }
-              })
-            }
+                const route = getComp('route')
+                const subpremise = getComp('subpremise', 'premise', 'point_of_interest', 'establishment')
+                const neighborhood = getComp('neighborhood', 'sublocality_level_2')
+                const sublocality = getComp('sublocality_level_1', 'sublocality')
+                const locality = getComp('locality')
+                const district = getComp('administrative_area_level_3', 'administrative_area_level_2')
+                const state = getComp('administrative_area_level_1')
+                const pincode = getComp('postal_code')
+
+                const streetParts = [subpremise, route].filter(Boolean)
+                const address = streetParts.length > 0 ? streetParts.join(', ') : cleanFormatted.split(',')[0] || ''
+                const area = sublocality || neighborhood || locality || ''
+
+                const details = {
+                  placeName: '',
+                  address: address || area,
+                  area: area || locality,
+                  city: locality || district || 'Kozhikode',
+                  district: district || 'Kozhikode',
+                  state: state === 'Keralam' ? 'Kerala' : (state || 'Kerala'),
+                  pincode: pincode || '',
+                  formattedAddress: cleanFormatted,
+                  lat: first.geometry?.location?.lat?.() || newLat,
+                  lng: first.geometry?.location?.lng?.() || newLng,
+                  source: 'google_client',
+                }
+                showMapPopup(details.address, details.formattedAddress)
+                callback?.(details)
+              } else {
+                callback?.(null)
+              }
+            })
           }
 
           gMarker.addListener('dragend', () => {
@@ -211,7 +245,7 @@ export default function InteractiveLocationPicker({
             const newLat = Number(pos.lat().toFixed(6))
             const newLng = Number(pos.lng().toFixed(6))
             isInternalMove.current = true
-            resolveGoogleLocation(pos, null, (details) => {
+            resolveGoogleLocation(newLat, newLng, null, (details) => {
               onLocationChange?.(newLat, newLng, details)
             })
           })
@@ -220,16 +254,21 @@ export default function InteractiveLocationPicker({
             if (!e.latLng) return
             const newLat = Number(e.latLng.lat().toFixed(6))
             const newLng = Number(e.latLng.lng().toFixed(6))
-            gMarker.setPosition(e.latLng)
-            isInternalMove.current = true
+            const clickedPlaceId = e.placeId || null
 
             // Stop Google's default detached info popup
             if (e.placeId) {
               e.stop()
             }
 
-            resolveGoogleLocation(e.latLng, e.placeId, (details) => {
-              onLocationChange?.(newLat, newLng, details)
+            gMarker.setPosition(e.latLng)
+            isInternalMove.current = true
+
+            resolveGoogleLocation(newLat, newLng, clickedPlaceId, (details) => {
+              if (details?.lat && details?.lng && (details.lat !== newLat || details.lng !== newLng)) {
+                gMarker.setPosition({ lat: details.lat, lng: details.lng })
+              }
+              onLocationChange?.(details?.lat || newLat, details?.lng || newLng, details)
             })
           })
 
@@ -268,19 +307,56 @@ export default function InteractiveLocationPicker({
         autoPan: true,
       }).addTo(map)
 
-      marker.on('dragend', () => {
+      const showLeafletPopup = (title, subtitle) => {
+        if (!marker) return
+        const safeTitle = (title || 'Selected Location').trim()
+        const safeSubtitle = (subtitle || '').trim()
+        const html = `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 2px 4px; max-width: 240px; text-align: left;">
+            <div style="font-weight: 700; font-size: 13px; color: #0F172A; line-height: 1.3; margin-bottom: 2px;">
+              ${escapeHtml(safeTitle)}
+            </div>
+            ${
+              safeSubtitle
+                ? `<div style="font-size: 11px; color: #64748B; line-height: 1.3;">${escapeHtml(safeSubtitle)}</div>`
+                : ''
+            }
+          </div>
+        `
+        marker.bindPopup(html).openPopup()
+      }
+
+      marker.on('dragend', async () => {
         const pos = marker.getLatLng()
         const newLat = Number(pos.lat.toFixed(6))
         const newLng = Number(pos.lng.toFixed(6))
         isInternalMove.current = true
+        try {
+          const res = await apiClient.get('/geo/reverse', { params: { lat: newLat, lng: newLng } })
+          const geo = res?.data || res
+          if (geo) {
+            showLeafletPopup(geo.placeName || geo.address, geo.formattedAddress)
+            onLocationChange?.(newLat, newLng, geo)
+            return
+          }
+        } catch (_) {}
         onLocationChange?.(newLat, newLng)
       })
 
-      map.on('click', (e) => {
+      map.on('click', async (e) => {
         marker.setLatLng(e.latlng)
         const newLat = Number(e.latlng.lat.toFixed(6))
         const newLng = Number(e.latlng.lng.toFixed(6))
         isInternalMove.current = true
+        try {
+          const res = await apiClient.get('/geo/reverse', { params: { lat: newLat, lng: newLng } })
+          const geo = res?.data || res
+          if (geo) {
+            showLeafletPopup(geo.placeName || geo.address, geo.formattedAddress)
+            onLocationChange?.(newLat, newLng, geo)
+            return
+          }
+        } catch (_) {}
         onLocationChange?.(newLat, newLng)
       })
 
@@ -303,6 +379,10 @@ export default function InteractiveLocationPicker({
         leafletMapRef.current = null
         leafletMarkerRef.current = null
         leafletTileLayerRef.current = null
+      }
+      if (googleInfoWindowRef.current) {
+        googleInfoWindowRef.current.close()
+        googleInfoWindowRef.current = null
       }
       googleMapRef.current = null
       googleMarkerRef.current = null

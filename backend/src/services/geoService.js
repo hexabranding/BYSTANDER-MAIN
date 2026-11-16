@@ -16,7 +16,7 @@ import { CITY_COORDINATES } from '../utils/geoUtils.js';
  * @param {number|string} lng - Longitude (-180 to 180)
  * @returns {Promise<Object>} Normalized address object
  */
-export const reverseGeocode = async (lat, lng) => {
+export const reverseGeocode = async (lat, lng, placeId = null) => {
   const latitude = parseFloat(lat);
   const longitude = parseFloat(lng);
 
@@ -34,12 +34,149 @@ export const reverseGeocode = async (lat, lng) => {
     throw err;
   }
 
+  const googleApiKey =
+    process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+
+  // 1. Google Maps Platform (Places API New & Geocoding API) - PRIMARY
+  if (
+    googleApiKey &&
+    typeof googleApiKey === 'string' &&
+    googleApiKey.trim().length > 10 &&
+    !googleApiKey.includes('your_')
+  ) {
+    // 1A. When a specific placeId is provided (e.g. user clicked Aster MIMS Hospital or Hexa Branding)
+    if (placeId && typeof placeId === 'string' && placeId.trim()) {
+      try {
+        let placeDisplayName = '';
+        let pData = null;
+        const pRes = await fetch(
+          `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId.trim())}`,
+          {
+            headers: {
+              'X-Goog-Api-Key': googleApiKey.trim(),
+              'X-Goog-FieldMask': 'id,displayName,formattedAddress',
+            },
+          }
+        );
+        if (pRes.ok) {
+          pData = await pRes.json();
+          placeDisplayName = pData.displayName?.text || '';
+        }
+
+        const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?place_id=${encodeURIComponent(placeId.trim())}&key=${googleApiKey.trim()}`;
+        const gRes = await fetch(gUrl);
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          if (gData.status === 'OK' && Array.isArray(gData.results) && gData.results.length > 0) {
+            const first = gData.results[0];
+            const components = first.address_components || [];
+            const getComp = (...types) => {
+              const found = components.find((c) => types.some((t) => c.types.includes(t)));
+              return found ? found.long_name : '';
+            };
+
+            const route = getComp('route');
+            const sublocality = getComp('sublocality_level_1', 'sublocality');
+            const locality = getComp('locality');
+            const district = getComp('administrative_area_level_2');
+            const state = getComp('administrative_area_level_1');
+            const pincode = getComp('postal_code');
+
+            let address = placeDisplayName
+              ? (route && !placeDisplayName.toLowerCase().includes(route.toLowerCase()) ? `${placeDisplayName}, ${route}` : placeDisplayName)
+              : (route || first.formatted_address?.split(',')[0] || '');
+
+            const cleanFormatted = (pData?.formattedAddress || first.formatted_address || '').replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '');
+
+            return {
+              placeName: placeDisplayName,
+              address: address || cleanFormatted || '',
+              area: sublocality || locality || '',
+              city: locality || district || 'Kozhikode',
+              district: district || 'Kozhikode',
+              state: state === 'Keralam' ? 'Kerala' : (state || 'Kerala'),
+              pincode: pincode ? pincode.slice(0, 6) : '',
+              formattedAddress: cleanFormatted,
+              lat: first.geometry?.location?.lat || latitude,
+              lng: first.geometry?.location?.lng || longitude,
+              source: 'google',
+            };
+          }
+        }
+      } catch (placeErr) {
+        console.warn('[GeoService] Google Places placeId lookup failed, trying standard geocode:', placeErr.message);
+      }
+    }
+
+    // 1B. Standard Google Reverse Geocoding by Coordinates
+    try {
+      const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${googleApiKey.trim()}`;
+      const gRes = await fetch(gUrl);
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        if (
+          gData.status === 'OK' &&
+          Array.isArray(gData.results) &&
+          gData.results.length > 0
+        ) {
+          const first = gData.results[0];
+          const components = first.address_components || [];
+
+          const getComp = (...types) => {
+            const found = components.find((c) =>
+              types.some((t) => c.types.includes(t)),
+            );
+            return found ? found.long_name : '';
+          };
+
+          const streetNumber = getComp('street_number');
+          const route = getComp('route');
+          const subpremise = getComp('subpremise', 'premise', 'point_of_interest', 'establishment');
+          const neighborhood = getComp('neighborhood', 'sublocality_level_2');
+          const sublocality = getComp('sublocality_level_1', 'sublocality');
+          const locality = getComp('locality');
+          const district = getComp('administrative_area_level_2');
+          const state = getComp('administrative_area_level_1');
+          const pincode = getComp('postal_code');
+
+          const streetParts = [subpremise, streetNumber, route].filter(Boolean);
+          if ((streetParts.length === 0 || (streetParts.length === 1 && /^\d+$/.test(streetParts[0]))) && neighborhood) {
+            streetParts.push(neighborhood);
+          }
+          const cleanFormatted = (first.formatted_address || '').replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '');
+          const address =
+            streetParts.length > 0
+              ? streetParts.join(', ')
+              : route || cleanFormatted.split(',')[0] || '';
+          const area = [sublocality, neighborhood].filter(Boolean).join(', ') || locality || '';
+
+          return {
+            placeName: '',
+            address: address || area,
+            area: area || locality,
+            city: locality || district || 'Kozhikode',
+            district: district || 'Kozhikode',
+            state: state === 'Keralam' ? 'Kerala' : (state || 'Kerala'),
+            pincode: pincode ? pincode.slice(0, 6) : '',
+            formattedAddress: cleanFormatted,
+            plusCode: first.plus_code?.compound_code || '',
+            lat: latitude,
+            lng: longitude,
+            source: 'google',
+          };
+        }
+      }
+    } catch (gErr) {
+      console.warn('[GeoService] Google Geocoding API lookup failed, falling back to Mappls:', gErr.message);
+    }
+  }
+
+  // 2. Mappls (MapmyIndia) Reverse Geocoding API (Fallback)
   const mapplsApiKey =
     process.env.MAPPLS_API_KEY ||
     process.env.MAPMYINDIA_KEY ||
     process.env.VITE_MAPPLS_API_KEY;
 
-  // 1. Mappls (MapmyIndia) Reverse Geocoding API (High-accuracy doorstep mapping for India)
   if (mapplsApiKey && typeof mapplsApiKey === 'string' && mapplsApiKey.trim().length > 10) {
     try {
       const mapplsUrl = `https://search.mappls.com/search/address/rev-geocode?lat=${latitude}&lng=${longitude}&access_token=${mapplsApiKey.trim()}`;
@@ -105,73 +242,6 @@ export const reverseGeocode = async (lat, lng) => {
       }
     } catch (mErr) {
       console.warn('[GeoService] Mappls reverse-geocoding failed, falling back:', mErr.message);
-    }
-  }
-
-  const googleApiKey =
-    process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
-
-  // 1. Google Maps Platform Geocoding API (Primary when configured)
-  if (
-    googleApiKey &&
-    typeof googleApiKey === 'string' &&
-    googleApiKey.trim().length > 10 &&
-    !googleApiKey.includes('your_')
-  ) {
-    try {
-      const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${googleApiKey.trim()}`;
-      const gRes = await fetch(gUrl);
-      if (gRes.ok) {
-        const gData = await gRes.json();
-        if (
-          gData.status === 'OK' &&
-          Array.isArray(gData.results) &&
-          gData.results.length > 0
-        ) {
-          const first = gData.results[0];
-          const components = first.address_components || [];
-
-          const getComp = (...types) => {
-            const found = components.find((c) =>
-              types.some((t) => c.types.includes(t)),
-            );
-            return found ? found.long_name : '';
-          };
-
-          const streetNumber = getComp('street_number');
-          const route = getComp('route');
-          const subpremise = getComp('subpremise', 'premise', 'point_of_interest', 'establishment');
-          const neighborhood = getComp('neighborhood', 'sublocality_level_2');
-          const sublocality = getComp('sublocality_level_1', 'sublocality');
-          const locality = getComp('locality');
-          const district = getComp('administrative_area_level_2');
-          const state = getComp('administrative_area_level_1');
-          const pincode = getComp('postal_code');
-
-          const streetParts = [subpremise, streetNumber, route].filter(Boolean);
-          const address =
-            streetParts.length > 0
-              ? streetParts.join(', ')
-              : route || first.formatted_address.split(',')[0] || '';
-          const area = [sublocality, neighborhood].filter(Boolean).join(', ') || locality || '';
-
-          return {
-            address: address || area,
-            area: area || locality,
-            city: locality || district || 'Kozhikode',
-            district: district || 'Kozhikode',
-            state: state || 'Kerala',
-            pincode: pincode ? pincode.slice(0, 6) : '',
-            formattedAddress: first.formatted_address,
-            plusCode: first.plus_code?.compound_code || '',
-            lat: latitude,
-            lng: longitude,
-            source: 'google',
-          };
-        }
-      }
-    } catch (gErr) {
-      console.warn('[GeoService] Google Geocoding API lookup failed, falling back:', gErr.message);
     }
   }
 

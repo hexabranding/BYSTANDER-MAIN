@@ -6,8 +6,8 @@ import * as geoService from '../services/geoService.js';
  */
 export const reverseGeocode = async (req, res, next) => {
   try {
-    const { lat, lng } = req.query;
-    const addressData = await geoService.reverseGeocode(lat, lng);
+    const { lat, lng, placeId } = req.query;
+    const addressData = await geoService.reverseGeocode(lat, lng, placeId);
 
     res.status(200).json({
       success: true,

@@ -162,7 +162,7 @@ export const fetchPublicCaregivers = async (queryOptions = {}, options = {}) => 
   }
 
   const apiFn = async () => {
-    const res = await apiClient.get('/api/caregivers', { params: backendParams })
+    const res = await apiClient.get('/caregivers', { params: backendParams })
     const items = Array.isArray(res.data) ? res.data : []
     let adapted = items.map(adaptCaregiver)
 
@@ -243,7 +243,7 @@ export const fetchPublicCaregiverById = async (id, options = {}) => {
 
   // 2. For genuine MongoDB ObjectIds, query backend /api/caregivers/:id
   const apiFn = async () => {
-    const res = await apiClient.get(`/api/caregivers/${trimmed}`)
+    const res = await apiClient.get(`/caregivers/${trimmed}`)
     if (!res?.data) {
       throw new ApiError({
         message: 'Caregiver profile empty',

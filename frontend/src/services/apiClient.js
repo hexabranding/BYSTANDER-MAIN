@@ -83,7 +83,11 @@ export const clearAuthToken = () => {
 export const getApiBaseUrl = () => {
   const envUrl = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    return envUrl.trim().replace(/\/+$/, '');
+    const trimmed = envUrl.trim().replace(/\/+$/, '');
+    if (!trimmed.endsWith('/api')) {
+      return `${trimmed}/api`;
+    }
+    return trimmed;
   }
   return '/api';
 };
@@ -154,15 +158,37 @@ export const parseErrorResponse = async (response) => {
  * Core HTTP Request Execution
  */
 export const request = async (endpoint, options = {}) => {
-  const baseUrl = getApiBaseUrl();
-  let cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  let url = '';
 
-  // Prevent duplicate baseUrl prefix if endpoint already includes it (e.g. /api/services)
-  if (baseUrl && (cleanEndpoint.startsWith(`${baseUrl}/`) || cleanEndpoint === baseUrl)) {
-    cleanEndpoint = cleanEndpoint.slice(baseUrl.length) || '/';
+  if (typeof endpoint === 'string' && /^https?:\/\//i.test(endpoint)) {
+    url = endpoint;
+  } else {
+    const baseUrl = getApiBaseUrl();
+    let cleanEndpoint = typeof endpoint === 'string' ? endpoint.trim() : '';
+    if (!cleanEndpoint.startsWith('/')) {
+      cleanEndpoint = `/${cleanEndpoint}`;
+    }
+
+    // Strip redundant leading '/api' from cleanEndpoint if baseUrl ends with '/api' (or is '/api')
+    if (baseUrl.endsWith('/api') || baseUrl === '/api') {
+      if (cleanEndpoint === '/api') {
+        cleanEndpoint = '/';
+      } else if (cleanEndpoint.startsWith('/api/')) {
+        cleanEndpoint = cleanEndpoint.slice(4);
+      } else if (cleanEndpoint.startsWith('/api?')) {
+        cleanEndpoint = cleanEndpoint.slice(4);
+      }
+    } else if (baseUrl && (cleanEndpoint.startsWith(`${baseUrl}/`) || cleanEndpoint === baseUrl)) {
+      cleanEndpoint = cleanEndpoint.slice(baseUrl.length) || '/';
+    }
+
+    // Ensure cleanEndpoint begins with '/' unless it's a query string starting with '?'
+    if (!cleanEndpoint.startsWith('/') && !cleanEndpoint.startsWith('?')) {
+      cleanEndpoint = `/${cleanEndpoint}`;
+    }
+
+    url = `${baseUrl}${cleanEndpoint === '/' ? '' : cleanEndpoint}`;
   }
-
-  let url = `${baseUrl}${cleanEndpoint}`;
 
   // Serialize query parameters if provided
   if (options.params && typeof options.params === 'object') {

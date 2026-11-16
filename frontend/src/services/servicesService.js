@@ -95,7 +95,7 @@ export const fetchPublicServices = async (queryOptions = {}, options = {}) => {
   }
 
   const apiFn = async () => {
-    const res = await apiClient.get('/api/services', { params: cleanParams })
+    const res = await apiClient.get('/services', { params: cleanParams })
     const items = Array.isArray(res.data) ? res.data : []
     const adapted = items.map(adaptService)
 
@@ -166,7 +166,7 @@ export const fetchPublicServiceById = async (idOrSlug, options = {}) => {
 
   // 2. For genuine MongoDB ObjectIds, query backend /api/services/:id
   const apiFn = async () => {
-    const res = await apiClient.get(`/api/services/${trimmed}`)
+    const res = await apiClient.get(`/services/${trimmed}`)
     if (!res?.data) {
       throw new ApiError({
         message: 'Service record empty',

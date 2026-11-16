@@ -160,4 +160,41 @@ describe('Step 12B - Centralized API Client', () => {
       },
     );
   });
+
+  it('9. Deduplicates /api prefix whether caller provides /api/caregivers or /caregivers', async () => {
+    let capturedUrls = [];
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(String(url));
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    await apiClient.get('/caregivers');
+    await apiClient.get('/api/caregivers');
+    await apiClient.post('/api/ambulances/register', {});
+    await apiClient.post('/ambulances/register', {});
+
+    assert.deepStrictEqual(capturedUrls, [
+      '/api/caregivers',
+      '/api/caregivers',
+      '/api/ambulances/register',
+      '/api/ambulances/register',
+    ]);
+  });
+
+  it('10. Preserves absolute URLs when passed directly to apiClient', async () => {
+    let capturedUrl = '';
+    globalThis.fetch = async (url) => {
+      capturedUrl = String(url);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    await apiClient.get('https://external-service.com/health');
+    assert.strictEqual(capturedUrl, 'https://external-service.com/health');
+  });
 });

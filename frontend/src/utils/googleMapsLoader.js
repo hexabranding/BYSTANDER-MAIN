@@ -27,8 +27,8 @@ export const loadGoogleMaps = (customKey) => {
     return Promise.reject(new Error('Google Maps API key is missing or not configured'));
   }
 
-  // If already initialized on window, resolve immediately
-  if (typeof window !== 'undefined' && window.google && window.google.maps) {
+  // If Map constructor is already ready on window, resolve immediately
+  if (typeof window !== 'undefined' && window.google?.maps?.Map) {
     return Promise.resolve(window.google.maps);
   }
 
@@ -42,32 +42,46 @@ export const loadGoogleMaps = (customKey) => {
       return reject(new Error('Google Maps can only be loaded in a browser environment'));
     }
 
+    if (window.google?.maps?.Map) {
+      return resolve(window.google.maps);
+    }
+
+    const waitForMap = (maxWaitMs = 12000) => {
+      const startTime = Date.now();
+      const interval = setInterval(() => {
+        if (window.google?.maps?.Map) {
+          clearInterval(interval);
+          resolve(window.google.maps);
+        } else if (Date.now() - startTime > maxWaitMs) {
+          clearInterval(interval);
+          loadPromise = null;
+          reject(new Error('Google Maps Map constructor timed out after script load'));
+        }
+      }, 50);
+    };
+
     const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
     if (existingScript) {
-      if (window.google && window.google.maps) {
+      if (window.google?.maps?.Map) {
         return resolve(window.google.maps);
       }
-      existingScript.addEventListener('load', () => resolve(window.google.maps));
+      existingScript.addEventListener('load', () => waitForMap());
       existingScript.addEventListener('error', (err) => {
         loadPromise = null;
         reject(err);
       });
+      waitForMap();
       return;
     }
 
     const script = document.createElement('script');
     script.type = 'text/javascript';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places,geometry,marker&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places,geometry,marker`;
     script.async = true;
     script.defer = true;
 
     script.onload = () => {
-      if (window.google && window.google.maps) {
-        resolve(window.google.maps);
-      } else {
-        loadPromise = null;
-        reject(new Error('Google Maps object not found after script load'));
-      }
+      waitForMap();
     };
 
     script.onerror = (error) => {

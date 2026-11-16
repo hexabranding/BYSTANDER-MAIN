@@ -814,7 +814,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     }
   }
 
-  const handlePinMoved = async (newLat, newLng) => {
+  const handlePinMoved = async (newLat, newLng, placeDetails = null) => {
     isGpsOrPinDragRef.current = true
     setLocationCaptured((prev) => ({
       ...(prev || {}),
@@ -831,34 +831,57 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       },
     }))
 
-    // Reverse geocode moved pin in background to enrich area/district/pincode if empty
+    // Reverse geocode moved pin to update address, area, district, and pincode
     try {
-      const geoRes = await apiClient.get('/geo/reverse', {
-        params: { lat: newLat, lng: newLng },
-      })
-      const geo = geoRes?.data || geoRes
+      let geo = placeDetails
+      if (!geo) {
+        const geoRes = await apiClient.get('/geo/reverse', {
+          params: { lat: newLat, lng: newLng },
+        })
+        geo = geoRes?.data || geoRes
+      }
+
       if (geo) {
-        lastResolvedRef.current = `${prev.address || geo.address || ''}|${prev.area || geo.area || ''}|${prev.district || geo.district || ''}|${prev.pincode || geo.pincode || ''}`
+        const resolvedAddress = geo.address || geo.formattedAddress || ''
+        const resolvedArea = geo.area || ''
+        const resolvedCity = geo.city || ''
+        const resolvedDistrict = geo.district || ''
+        const resolvedState = geo.state || 'Kerala'
+        const resolvedPincode = geo.pincode || ''
+
+        const matchedDistrict =
+          KERALA_DISTRICTS.find((d) => d.toLowerCase() === String(resolvedDistrict).toLowerCase()) ||
+          resolvedDistrict
+
+        lastResolvedRef.current = `${resolvedAddress}|${resolvedArea}|${matchedDistrict || ''}|${resolvedPincode}`
+
         setForm((prev) => ({
           ...prev,
-          // Preserve whatever user already typed; fill in if empty
-          area: prev.area || geo.area || '',
-          city: geo.city || prev.city,
-          district: geo.district || prev.district,
-          state: geo.state || prev.state,
-          pincode: prev.pincode || geo.pincode || '',
-          address: prev.address || geo.address || '',
+          address: resolvedAddress || prev.address,
+          area: resolvedArea || prev.area,
+          city: resolvedCity || prev.city,
+          district: matchedDistrict || prev.district,
+          state: resolvedState || prev.state,
+          pincode: resolvedPincode || prev.pincode,
         }))
-        if (geo.area || geo.city) {
-          setLocationCaptured((prev) => ({
-            ...prev,
-            area: geo.area || prev?.area,
-            city: geo.city || prev?.city,
-          }))
+
+        setLocationCaptured((prev) => ({
+          ...(prev || {}),
+          lat: newLat,
+          lng: newLng,
+          area: resolvedArea || prev?.area,
+          city: resolvedCity || prev?.city,
+          address: resolvedAddress || prev?.address,
+        }))
+
+        if (resolvedAddress || resolvedArea) {
+          toast.success('Location selected from map', {
+            description: [resolvedAddress, resolvedArea, resolvedCity].filter(Boolean).join(', '),
+          })
         }
       }
-    } catch (_) {
-      // Non-blocking background enrichment
+    } catch (err) {
+      console.warn('[handlePinMoved] reverse geocode error:', err)
     } finally {
       setTimeout(() => {
         isGpsOrPinDragRef.current = false

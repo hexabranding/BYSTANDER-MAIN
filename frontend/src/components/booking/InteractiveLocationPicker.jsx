@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { MapPin, ExternalLink, Move } from 'lucide-react'
+import { MapPin, ExternalLink, Move, Loader2 } from 'lucide-react'
 import { loadGoogleMaps, isGoogleMapsConfigured } from '@/utils/googleMapsLoader'
 
 // Custom high-contrast SVG pin anchored precisely at the bottom tip for Leaflet fallback
@@ -51,6 +51,7 @@ export default function InteractiveLocationPicker({
   const isInternalMove = useRef(false)
   const [mapEngine, setMapEngine] = useState('loading') // 'google' | 'leaflet' | 'loading'
   const [mapMode, setMapMode] = useState('hybrid') // 'hybrid' | 'roadmap'
+  const [isResolving, setIsResolving] = useState(false)
 
   // Google Maps references
   const googleMapRef = useRef(null)
@@ -108,22 +109,128 @@ export default function InteractiveLocationPicker({
             },
           })
 
+          // Client-side reverse geocoding & POI resolution
+          const resolveGoogleLocation = (latLng, placeId, callback) => {
+            setIsResolving(true)
+            const geocoder = googleMaps?.Geocoder ? new googleMaps.Geocoder() : null
+            const placesService =
+              placeId && googleMaps?.places?.PlacesService
+                ? new googleMaps.places.PlacesService(gMap)
+                : null
+
+            const parseComponents = (components, formattedAddress, placeName = '') => {
+              const getComp = (...types) => {
+                const found = components.find((c) => types.some((t) => c.types.includes(t)))
+                return found ? found.long_name : ''
+              }
+
+              const premise = getComp('premise', 'subpremise', 'point_of_interest', 'establishment')
+              const route = getComp('route')
+              const landmark = getComp('landmark')
+              const sublocality = getComp('sublocality_level_1', 'sublocality', 'sublocality_level_2', 'neighborhood')
+              const locality = getComp('locality')
+              const district = getComp('administrative_area_level_3', 'administrative_area_level_2')
+              const state = getComp('administrative_area_level_1')
+              const postalCode = getComp('postal_code')
+
+              let streetParts = []
+              if (placeName && !placeName.includes('+')) {
+                streetParts.push(placeName)
+              } else if (premise) {
+                streetParts.push(premise)
+              }
+              if (route && !streetParts.includes(route)) streetParts.push(route)
+              if (landmark && !streetParts.includes(landmark)) streetParts.push(`Near ${landmark}`)
+
+              let address = streetParts.filter(Boolean).join(', ')
+              if (!address && formattedAddress) {
+                address = formattedAddress
+                  .replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4},\s*/i, '')
+                  .split(',')
+                  .slice(0, 2)
+                  .join(', ')
+                  .trim()
+              }
+
+              return {
+                address: address || formattedAddress || '',
+                area: sublocality || locality || '',
+                city: locality || sublocality || district || '',
+                district: district || locality || '',
+                state: state || 'Kerala',
+                pincode: postalCode || '',
+                formattedAddress: formattedAddress || '',
+              }
+            }
+
+            if (placeId && placesService) {
+              placesService.getDetails(
+                { placeId, fields: ['name', 'formatted_address', 'address_components', 'geometry'] },
+                (place, status) => {
+                  if (status === googleMaps.places?.PlacesServiceStatus?.OK && place) {
+                    setIsResolving(false)
+                    const details = parseComponents(
+                      place.address_components || [],
+                      place.formatted_address,
+                      place.name
+                    )
+                    callback?.(details)
+                    return
+                  }
+                  geocodeFallback()
+                }
+              )
+              return
+            }
+
+            geocodeFallback()
+
+            function geocodeFallback() {
+              if (!geocoder) {
+                setIsResolving(false)
+                callback?.(null)
+                return
+              }
+              const req = placeId ? { placeId } : { location: latLng }
+              geocoder.geocode(req, (results, status) => {
+                setIsResolving(false)
+                if (status === 'OK' && results && results[0]) {
+                  const first = results[0]
+                  const details = parseComponents(first.address_components || [], first.formatted_address)
+                  callback?.(details)
+                } else {
+                  callback?.(null)
+                }
+              })
+            }
+          }
+
           gMarker.addListener('dragend', () => {
             const pos = gMarker.getPosition()
             if (!pos) return
             const newLat = Number(pos.lat().toFixed(6))
             const newLng = Number(pos.lng().toFixed(6))
             isInternalMove.current = true
-            onLocationChange?.(newLat, newLng)
+            resolveGoogleLocation(pos, null, (details) => {
+              onLocationChange?.(newLat, newLng, details)
+            })
           })
 
           gMap.addListener('click', (e) => {
             if (!e.latLng) return
-            gMarker.setPosition(e.latLng)
             const newLat = Number(e.latLng.lat().toFixed(6))
             const newLng = Number(e.latLng.lng().toFixed(6))
+            gMarker.setPosition(e.latLng)
             isInternalMove.current = true
-            onLocationChange?.(newLat, newLng)
+
+            // Stop Google's default detached info popup
+            if (e.placeId) {
+              e.stop()
+            }
+
+            resolveGoogleLocation(e.latLng, e.placeId, (details) => {
+              onLocationChange?.(newLat, newLng, details)
+            })
           })
 
           googleMapRef.current = gMap
@@ -255,6 +362,12 @@ export default function InteractiveLocationPicker({
           Pin GPS: {lat?.toFixed ? lat.toFixed(5) : lat}, {lng?.toFixed ? lng.toFixed(5) : lng}
           {accuracy && (
             <span className="text-[10px] text-muted font-normal">(±{accuracy}m)</span>
+          )}
+          {isResolving && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary-700 animate-pulse ml-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Resolving address...
+            </span>
           )}
         </span>
         <div className="flex items-center gap-2">

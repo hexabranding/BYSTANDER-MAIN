@@ -251,3 +251,61 @@ export const QUALIFICATIONS = [
   'Paramedic',
 ]
 
+export const PRIMARY_HEALTH_CONDITIONS = [
+  'Bedridden / Complete Bed Rest',
+  'Post-Surgery Recovery',
+  'Post-Stroke Rehabilitation',
+  'Dementia & Alzheimer’s Care',
+  'Mobility Support (Walker / Cane assisted)',
+  'Wheelchair Bound / Fall Risk',
+  'General Eldercare & Daily Living',
+  'Cardiac / Post-Heart Procedure',
+  'Orthopedic / Fracture Recovery',
+  'Parkinson’s Disease Care',
+  'Cancer / Oncology Bedside Care',
+  'ICU Step-down / Tracheostomy Care',
+  'Respiratory / Oxygen Dependent',
+  'Palliative & End-of-Life Care',
+  'Other / Custom Condition',
+]
+
+export const HEALTH_CONDITION_SUGGESTIONS = [
+  { label: 'Bedridden', value: 'Bedridden / Complete Bed Rest' },
+  { label: 'Post-Surgery', value: 'Post-Surgery Recovery' },
+  { label: 'Post-Stroke', value: 'Post-Stroke Rehabilitation' },
+  { label: 'Dementia', value: 'Dementia & Alzheimer’s Care' },
+  { label: 'Walker Assisted', value: 'Mobility Support (Walker / Cane assisted)' },
+  { label: 'Wheelchair Bound', value: 'Wheelchair Bound / Fall Risk' },
+  { label: 'Fall Risk', value: 'Fall Risk / Supervised Walking' },
+  { label: 'Elderly Care', value: 'General Eldercare & Daily Living' },
+]
+
+export const AGE_OPTIONS_GROUPS = [
+  {
+    group: 'Senior Patients (60 - 105 yrs)',
+    ages: Array.from({ length: 46 }, (_, i) => 60 + i),
+  },
+  {
+    group: 'Adult Patients (18 - 59 yrs)',
+    ages: Array.from({ length: 42 }, (_, i) => 18 + i),
+  },
+  {
+    group: 'Pediatric / Younger (1 - 17 yrs)',
+    ages: Array.from({ length: 17 }, (_, i) => 1 + i),
+  },
+]
+
+export const RELATIONS = [
+  'Mother',
+  'Father',
+  'Son',
+  'Daughter',
+  'Grandmother',
+  'Grandfather',
+  'Wife',
+  'Husband',
+  'Sibling',
+  'Self',
+  'Other',
+]
+

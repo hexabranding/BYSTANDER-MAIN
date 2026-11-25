@@ -27,7 +27,7 @@ import { CARE_TYPES, CITIES } from '@/utils/constants'
 import { reveal, clamp01 } from '@/utils/motion'
 import { SERVICES } from '@/data/services'
 import { fetchPublicCaregivers } from '@/services/caregiversService'
-import { FAQS, TESTIMONIALS } from '@/data/content'
+import { FAQS, TESTIMONIALS, LATEST_ARTICLES } from '@/data/content'
 import { Button } from '@/components/common/Button'
 import { Container } from '@/components/common/Container'
 import { Section } from '@/components/common/Section'
@@ -816,6 +816,72 @@ export function HomePage() {
                 )
               })}
             </motion.div>
+          </div>
+        </Container>
+      </Section>
+
+      {/* ---------------- latest articles ---------------- */}
+      <Section id="articles" tone="canvas" divider="top">
+        <Container>
+          <motion.div {...reveal}>
+            <SectionHeading
+              eyebrow="Care guides & insights"
+              title="Latest articles from our clinical & eldercare team"
+              description="Practical advice, hospital admission checklists, and care protocols prepared by verified doctors, nurses, and care coordinators."
+              action={
+                <Button to="/services" variant="outline" size="sm" iconRight={ArrowRight}>
+                  Explore all care
+                </Button>
+              }
+            />
+          </motion.div>
+
+          <div className="mt-9 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {LATEST_ARTICLES.map((article, i) => (
+              <motion.article
+                key={article.id}
+                {...reveal}
+                transition={{ duration: 0.45, delay: (i % 3) * 0.08 }}
+                className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-primary-300 hover:shadow-raised"
+              >
+                {/* Image Container */}
+                <div className="relative h-48 w-full overflow-hidden bg-slate-100">
+                  <img
+                    src={article.image}
+                    alt={article.title}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                  />
+                  <span className="absolute top-3 left-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-bold text-primary-800 shadow-sm backdrop-blur">
+                    {article.category}
+                  </span>
+                </div>
+
+                {/* Content */}
+                <div className="flex flex-1 flex-col p-5">
+                  <div className="flex items-center gap-3 text-xs text-muted">
+                    <span>{article.date}</span>
+                    <span>·</span>
+                    <span>{article.readTime}</span>
+                  </div>
+
+                  <h3 className="mt-2.5 font-display text-base font-bold text-ink leading-snug transition-colors group-hover:text-primary-700">
+                    {article.title}
+                  </h3>
+
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted line-clamp-3">
+                    {article.excerpt}
+                  </p>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-line pt-3.5 text-xs">
+                    <span className="font-medium text-ink-soft">By {article.author}</span>
+                    <span className="inline-flex items-center gap-1 font-semibold text-primary-600 transition-colors group-hover:text-primary-700">
+                      Read guide <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
+                </div>
+              </motion.article>
+            ))}
           </div>
         </Container>
       </Section>

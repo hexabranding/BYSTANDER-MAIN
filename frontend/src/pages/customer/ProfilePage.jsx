@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Camera, KeyRound, LogOut, Mail, Pencil, RefreshCcw, Save, ShieldCheck, Star, UserRound } from 'lucide-react'
+import { Bell, Camera, Check, KeyRound, LogOut, Mail, Pencil, Plus, RefreshCcw, Save, ShieldCheck, Sparkles, Star, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
@@ -9,7 +9,7 @@ import { useDocumentTitle } from '@/hooks/useUi'
 import { cn } from '@/utils/cn'
 import { formatDate } from '@/utils/format'
 import { compressImage } from '@/utils/image'
-import { CARE_TYPES, CITIES, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
+import { CARE_TYPES, CITIES, KERALA_DISTRICTS, INDIAN_STATES, PRIMARY_HEALTH_CONDITIONS, HEALTH_CONDITION_SUGGESTIONS, AGE_OPTIONS_GROUPS, RELATIONS } from '@/utils/constants'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardBody, CardHeader } from '@/components/common/Card'
 import { Avatar } from '@/components/common/Avatar'
@@ -111,6 +111,7 @@ export function ProfilePage() {
       careType: user?.patientInfo?.preferredCareType || CARE_TYPES[0],
     },
   })
+  const patientCondition = useWatch({ control: patient.control, name: 'condition' }) || ''
 
   useEffect(() => {
     let isMounted = true
@@ -119,20 +120,22 @@ export function ProfilePage() {
       .then((data) => {
         if (!isMounted || !data) return
         setProfileData(data)
-        personal.reset({
-          fullName: data.fullName || user?.name || '',
-          email: data.email || user?.email || '',
-          mobile: data.phone || user?.phone || '',
-          city: data.defaultAddress?.city || user?.city || 'Kochi, KL',
-          area: data.defaultAddress?.area || user?.area || '',
-          street: data.defaultAddress?.street || data.defaultAddress?.addressLine || user?.address || '',
-          district: data.defaultAddress?.district || user?.district || 'Ernakulam',
-          state: data.defaultAddress?.state || user?.state || 'Kerala',
-          pincode: data.defaultAddress?.pincode || user?.pincode || '',
-          address: data.defaultAddress?.addressLine || user?.address || '',
-        })
+        if (!personal.formState.isDirty) {
+          personal.reset({
+            fullName: data.fullName || user?.name || '',
+            email: data.email || user?.email || '',
+            mobile: data.phone || user?.phone || '',
+            city: data.defaultAddress?.city || user?.city || 'Kochi, KL',
+            area: data.defaultAddress?.area || user?.area || '',
+            street: data.defaultAddress?.street || data.defaultAddress?.addressLine || user?.address || '',
+            district: data.defaultAddress?.district || user?.district || 'Ernakulam',
+            state: data.defaultAddress?.state || user?.state || 'Kerala',
+            pincode: data.defaultAddress?.pincode || user?.pincode || '',
+            address: data.defaultAddress?.addressLine || user?.address || '',
+          })
+        }
         const p = data.patients?.[0]
-        if (p) {
+        if (p && !patient.formState.isDirty) {
           patient.reset({
             patientName: p.name || '',
             patientAge: p.age ? String(p.age) : '',
@@ -208,9 +211,9 @@ export function ProfilePage() {
     try {
       const patientData = {
         name: values.patientName.trim(),
-        age: Number(values.patientAge) || 0,
-        relation: values.relation.trim(),
-        condition: values.condition.trim(),
+        age: Number(values.patientAge) || profileData?.patients?.[0]?.age || 60,
+        relation: values.relation?.trim() || '',
+        condition: values.condition?.trim() || '',
       }
       await profileService.updateCustomerProfile({
         patients: [patientData],
@@ -483,11 +486,12 @@ export function ProfilePage() {
                 <Input
                   id="pt-age"
                   type="number"
-                  min="1"
-                  max="120"
-                  placeholder="74"
+                  min={1}
+                  max={120}
+                  placeholder="44"
                   error={patient.formState.errors.patientAge?.message}
                   {...patient.register('patientAge', {
+                    required: 'Age is required',
                     validate: (value) => {
                       if (!String(value).trim()) return 'Age is required'
                       const age = Number(value)
@@ -498,29 +502,96 @@ export function ProfilePage() {
                 />
               </FormField>
 
-              <FormField label="Relation" htmlFor="pt-relation" error={patient.formState.errors.relation?.message}>
-                <Input
+              <FormField label="Relationship to patient" htmlFor="pt-relation" error={patient.formState.errors.relation?.message}>
+                <Select
                   id="pt-relation"
-                  placeholder="e.g. Mother"
                   error={patient.formState.errors.relation?.message}
                   {...patient.register('relation')}
-                />
+                >
+                  <option value="">-- Select relationship --</option>
+                  {RELATIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </Select>
               </FormField>
             </div>
 
             <FormField
-              label="Condition & care requirements"
+              label="Primary health condition / mobility"
               htmlFor="pt-condition"
               error={patient.formState.errors.condition?.message}
-              hint="Anything the caretaker should know before the first visit"
+              hint="Select a standard condition or click a suggestion, then add specific notes for your caretaker"
             >
-              <Textarea
-                id="pt-condition"
-                rows={4}
-                placeholder="e.g. Post hip-replacement recovery, mild hypertension, mobilises with a walker."
-                error={patient.formState.errors.condition?.message}
-                {...patient.register('condition')}
-              />
+              <div className="space-y-2.5">
+                <Select
+                  id="pt-condition-select"
+                  value={
+                    PRIMARY_HEALTH_CONDITIONS.includes(patientCondition)
+                      ? patientCondition
+                      : patientCondition
+                      ? 'Other / Custom Condition'
+                      : ''
+                  }
+                  onChange={(e) => {
+                    const selected = e.target.value
+                    if (selected === 'Other / Custom Condition') {
+                      if (PRIMARY_HEALTH_CONDITIONS.includes(patientCondition)) {
+                        patient.setValue('condition', '', { shouldDirty: true, shouldValidate: true })
+                      }
+                    } else if (selected) {
+                      patient.setValue('condition', selected, { shouldDirty: true, shouldValidate: true })
+                    }
+                  }}
+                >
+                  <option value="">-- Select primary condition or mobility --</option>
+                  {PRIMARY_HEALTH_CONDITIONS.map((cond) => (
+                    <option key={cond} value={cond}>
+                      {cond}
+                    </option>
+                  ))}
+                </Select>
+
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-primary-600" />
+                    <span className="text-xs font-semibold text-muted">Quick suggestions:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {HEALTH_CONDITION_SUGGESTIONS.map((sug) => {
+                      const isSelected =
+                        patientCondition === sug.value ||
+                        (patientCondition && patientCondition.toLowerCase().includes(sug.label.toLowerCase()))
+                      return (
+                        <button
+                          key={sug.label}
+                          type="button"
+                          onClick={() => {
+                            patient.setValue('condition', patientCondition === sug.value ? '' : sug.value, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
+                            isSelected
+                              ? 'border-primary-500 bg-primary-50 text-primary-800 shadow-sm ring-1 ring-primary-500/20'
+                              : 'border-line bg-slate-50/80 text-ink-soft hover:border-primary-300 hover:bg-white hover:text-primary-700'
+                          )}
+                        >
+                          {isSelected ? (
+                            <Check className="h-3 w-3 text-primary-600" />
+                          ) : (
+                            <Plus className="h-3 w-3 text-muted" />
+                          )}
+                          {sug.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
             </FormField>
 
             <FormField label="Default care type" htmlFor="pt-caretype" error={patient.formState.errors.careType?.message}>

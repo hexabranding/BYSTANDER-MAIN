@@ -254,3 +254,42 @@ export const WHY_CHOOSE = [
       'Itemised estimate with platform charges and tax shown upfront. No surge pricing, no surprise bills.',
   },
 ]
+
+export const LATEST_ARTICLES = [
+  {
+    id: 'art-01',
+    slug: 'hospital-bystander-protocol-family-guide',
+    title: 'Hospital Bystander Protocol: What Every Family Needs to Know Before Admission',
+    category: 'Hospital Care',
+    readTime: '5 min read',
+    date: '12 Nov 2026',
+    author: 'Dr. Vikram Raghavan',
+    image: '/articles/article-hospital.jpg',
+    excerpt:
+      'Essential bedside checklist for hospital attendants: ward protocols, shift handover logs, hourly vitals monitoring, and managing nurse communication.',
+  },
+  {
+    id: 'art-02',
+    slug: 'post-surgery-bedside-recovery-first-72-hours',
+    title: 'Post-Surgery Bedside Recovery: Why the First 72 Hours Matter Most',
+    category: 'Clinical Recovery',
+    readTime: '6 min read',
+    date: '08 Nov 2026',
+    author: 'Aarti Menon, RN',
+    image: '/articles/article-recovery.jpg',
+    excerpt:
+      'How certified nursing caretakers prevent post-operative complications, assist with gentle mobilization, and maintain incision hygiene with zero infection risk.',
+  },
+  {
+    id: 'art-03',
+    slug: 'navigating-dementia-eldercare-peaceful-nights',
+    title: 'Navigating Dementia & Eldercare at Home: Practical Tips for Peaceful Nights',
+    category: 'Elder Care',
+    readTime: '4 min read',
+    date: '03 Nov 2026',
+    author: 'Neha Kulkarni',
+    image: '/articles/article-eldercare.jpg',
+    excerpt:
+      'Proven orientation routines, sundowning management techniques, and overnight vigilance to keep senior family members calm and secure at home.',
+  },
+]

@@ -12,6 +12,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  Copy,
   HeartHandshake,
   Home,
   MapPin,
@@ -38,7 +39,7 @@ import { toast } from 'sonner'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/context/DataContext'
 import { SERVICES } from '@/data/services'
-import { CITIES, GST_RATE, PLATFORM_FEE, KERALA_DISTRICTS, INDIAN_STATES } from '@/utils/constants'
+import { CITIES, GST_RATE, PLATFORM_FEE, KERALA_DISTRICTS, INDIAN_STATES, PRIMARY_HEALTH_CONDITIONS, HEALTH_CONDITION_SUGGESTIONS, AGE_OPTIONS_GROUPS } from '@/utils/constants'
 import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import { DURATION_GROUPS, durationBasis, formatDuration } from '@/utils/duration'
 import { cn } from '@/utils/cn'
@@ -96,7 +97,7 @@ const CARE_REQUIREMENTS = [
   },
 ]
 
-const RELATIONS = ['Mother', 'Father', 'Grandmother', 'Grandfather', 'Wife', 'Husband', 'Sibling', 'Self', 'Other']
+const RELATIONS = ['Mother', 'Father', 'Son', 'Daughter', 'Grandmother', 'Grandfather', 'Wife', 'Husband', 'Sibling', 'Self', 'Other']
 
 const TIME_OPTIONS = Array.from({ length: 31 }, (_, i) => {
   const mins = 6 * 60 + i * 30
@@ -147,7 +148,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           setPricingConfig(res.pricing)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
 
     return () => {
       isMounted = false
@@ -168,7 +169,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           setAvailableServices(list)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
 
     caregiversService
       .getCaregivers()
@@ -206,6 +207,26 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
   const [maxStep, setMaxStep] = useState(0)
   const [terms, setTerms] = useState(false)
   const [created, setCreated] = useState(null)
+  const [copiedId, setCopiedId] = useState(false)
+  const [copiedRef, setCopiedRef] = useState(false)
+
+  const copyToClipboard = async (text, type = 'id') => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(String(text))
+      }
+      if (type === 'id') {
+        setCopiedId(true)
+        setTimeout(() => setCopiedId(false), 2000)
+      } else {
+        setCopiedRef(true)
+        setTimeout(() => setCopiedRef(false), 2000)
+      }
+      toast.success(`${type === 'id' ? 'Booking ID' : 'Reference'} copied to clipboard`)
+    } catch {
+      toast.info(`${type === 'id' ? 'Booking ID' : 'Reference'}: ${text}`)
+    }
+  }
   const [submitting, setSubmitting] = useState(false)
   const [selectedCaregiverId, setSelectedCaregiverId] = useState(() => preselectedId || '')
 
@@ -224,8 +245,8 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     careType: 'Home Care',
     address:
       typeof user?.address === 'string' &&
-      user?.address !== user?.city &&
-      !user?.address.includes('Mumbai, MH')
+        user?.address !== user?.city &&
+        !user?.address.includes('Mumbai, MH')
         ? user.address
         : (user?.street || user?.address?.street || ''),
     city: user?.city && user?.city !== 'Mumbai, MH' && user?.city !== 'Mumbai' ? user.city : 'Kochi, KL',
@@ -244,11 +265,13 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     contactPhone: user?.phone || '',
   }))
 
+  const userPhoneLoadedRef = useRef(Boolean(user?.phone))
   useEffect(() => {
-    if (user?.phone && !form.contactPhone) {
+    if (user?.phone && !userPhoneLoadedRef.current) {
+      userPhoneLoadedRef.current = true
       setForm((f) => ({ ...f, contactPhone: user.phone }))
     }
-  }, [user?.phone, form.contactPhone])
+  }, [user?.phone])
 
   const toggleUrgentMode = () => {
     setIsUrgent((prev) => {
@@ -319,7 +342,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           description: 'Review your details and click Confirm & Broadcast to notify caretakers.',
         })
       }
-    } catch (_) {}
+    } catch (_) { }
   }, [])
 
   const set = (patchOrFn) =>
@@ -416,7 +439,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
       case 'patient': {
         const cleanPhone = String(form.contactPhone || user?.phone || '').trim().replace(/[\s-]/g, '')
         const phoneValid = cleanPhone.length >= 10
-        return Boolean(form.patientName?.trim()) && Number(form.patientAge) > 0 && phoneValid
+        return Boolean(form.patientName?.trim()) && Boolean(form.patientAge) && phoneValid
       }
       case 'setting': {
         const settingValid =
@@ -552,7 +575,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
             isManual: true,
           }))
         }
-      } catch (_) {}
+      } catch (_) { }
     }, 600)
 
     return () => clearTimeout(timer)
@@ -604,7 +627,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
             }
           }
         }
-      } catch (_) {}
+      } catch (_) { }
 
       try {
         const res2 = await fetch('https://ipapi.co/json/')
@@ -621,7 +644,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
             }
           }
         }
-      } catch (_) {}
+      } catch (_) { }
 
       return null
     }
@@ -760,7 +783,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                   : data.display_name?.split(',').slice(0, 3).join(', ') || `${detectedArea}, ${detectedCity}`
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (!detectedCity && ipData) {
@@ -909,7 +932,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
     if (!user) {
       try {
         sessionStorage.setItem('pending_booking_broadcast', JSON.stringify({ ...form, service: activeService }))
-      } catch (_) {}
+      } catch (_) { }
       toast.info('Please sign in to broadcast your request', {
         description: 'Your booking requirements are saved and will be restored immediately after sign-in.',
       })
@@ -999,14 +1022,14 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           careSetting: form.careType === 'Hospital Care' ? 'Hospital Care' : 'Home Care',
           coordinates: form.coordinates?.latitude && form.coordinates?.longitude
             ? {
-                latitude: Number(form.coordinates.latitude),
-                longitude: Number(form.coordinates.longitude),
-              }
+              latitude: Number(form.coordinates.latitude),
+              longitude: Number(form.coordinates.longitude),
+            }
             : undefined,
         },
         patientDetails: {
           name: form.patientName.trim(),
-          age: Number(form.patientAge) || 0,
+          age: Number(form.patientAge) || Number(patientInfo?.age) || 60,
           gender: 'Other',
           specialInstructions: [
             isUrgent ? 'URGENT DISPATCH PROTOCOL' : '',
@@ -1032,7 +1055,7 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
           if (updateProfile) {
             updateProfile({ phone: cleanPhone })
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (isMongoObjectId(preselectedId)) {
@@ -1066,40 +1089,117 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
   if (created) {
     return (
-      <Card className="mx-auto max-w-2xl shadow-card">
-        <CardBody className="flex flex-col items-center px-6 py-12 text-center">
+      <Card className="mx-auto max-w-2xl overflow-hidden border border-line bg-white shadow-card">
+        <div className="h-1.5 w-full bg-gradient-to-r from-primary-600 via-mint-500 to-primary-700" />
+        <CardBody className="flex flex-col items-center px-5 py-8 sm:px-8 sm:py-10 text-center">
           <motion.span
             initial={{ scale: 0.6, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-            className="grid h-20 w-20 place-items-center rounded-full bg-mint-100 text-primary-700"
+            className="grid h-16 w-16 place-items-center rounded-full bg-mint-100 text-primary-700 shadow-sm"
           >
-            <CheckCircle2 className="h-10 w-10" />
+            <CheckCircle2 className="h-9 w-9" />
           </motion.span>
-          <h2 className="mt-5 font-display text-2xl font-extrabold text-ink">
-            You're all set, {(user?.name || 'Customer').split(' ')[0]}!
+          <h2 className="mt-4 font-display text-2xl font-extrabold text-ink sm:text-3xl">
+            You're all set, {(user?.name || form.patientName || 'Customer').split(' ')[0]}!
           </h2>
           <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
-            We are matching you with a verified caretaker for {created.service}. You will get a confirmation
-            notification once they accept your broadcast.
+            We are broadcasting your request to verified caretakers in <strong>{form.city}</strong> for <strong>{created.service || form.service?.name}</strong>. You will get immediate updates once accepted.
           </p>
-          <div className="mt-6 grid w-full max-w-sm grid-cols-2 gap-3">
-            <div className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-left">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-faint">Reference</p>
-              <p className="mt-1 font-display text-sm font-extrabold text-primary-800">{created.ref}</p>
+
+          {/* Reference & Booking ID Section */}
+          <div className="mt-6 w-full max-w-lg space-y-3 rounded-2xl border border-line bg-slate-50/80 p-4 sm:p-5 text-left shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/70 pb-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted">Booking Reference</p>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className="font-display text-lg font-black tracking-tight text-primary-800">
+                    {created.ref || `CM-${String(created.id).slice(-6).toUpperCase()}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(created.ref || created.id, 'ref')}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-white text-muted transition hover:bg-slate-100 hover:text-ink active:scale-95 cursor-pointer"
+                    title="Copy Reference"
+                    aria-label="Copy Reference"
+                  >
+                    {copiedRef ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
+                </span>
+                Live Broadcast Active
+              </span>
             </div>
-            <div className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-left">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-faint">Booking ID</p>
-              <p className="mt-1 font-display text-sm font-extrabold text-ink">{created.id}</p>
+
+            {/* Booking ID Fixed Layout */}
+            <div className="pt-0.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted">System Booking ID</p>
+                <span className="text-[10px] font-semibold text-faint">Database Key</span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between gap-2 rounded-xl border border-line bg-white px-3 py-2 shadow-2xs">
+                <span className="min-w-0 select-all font-mono text-xs sm:text-[13px] font-semibold text-slate-700 break-all" title={created.id}>
+                  {created.id}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(created.id, 'id')}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-primary-700 hover:bg-primary-50 transition active:scale-95 cursor-pointer"
+                  title="Copy Booking ID"
+                >
+                  {copiedId ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      <span className="text-emerald-700">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5 text-primary-600" />
+                      <span>Copy ID</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Summary Details Grid */}
+            <div className="grid grid-cols-2 gap-2.5 border-t border-line/70 pt-2.5 text-xs text-muted">
+              <div>
+                <span className="text-faint">Service:</span>{' '}
+                <strong className="font-semibold text-ink">{created.service || form.service?.name}</strong>
+              </div>
+              <div>
+                <span className="text-faint">Patient:</span>{' '}
+                <strong className="font-semibold text-ink">
+                  {form.patientName} {form.patientAge ? `(${form.patientAge}y)` : ''}
+                </strong>
+              </div>
+              <div>
+                <span className="text-faint">Location:</span>{' '}
+                <strong className="font-semibold text-ink">{form.city}</strong>
+              </div>
+              <div>
+                <span className="text-faint">Duration:</span>{' '}
+                <strong className="font-semibold text-ink">
+                  {form.bookingType === 'daily' ? `${days} day${days > 1 ? 's' : ''}` : `${form.hours} hrs`}
+                </strong>
+              </div>
             </div>
           </div>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-            <Button size="lg" onClick={() => navigate(`/customer/bookings/${created.id}`)} iconRight={ArrowRight}>
+          <div className="mt-7 flex w-full max-w-sm flex-col gap-2.5 sm:flex-row sm:max-w-md justify-center">
+            <Button size="lg" className="w-full sm:w-auto" onClick={() => navigate(`/customer/bookings/${created.id}`)} iconRight={ArrowRight}>
               View live status
             </Button>
             <Button
               size="lg"
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => navigate(user ? '/customer/dashboard' : '/')}
             >
               {user ? 'Back to dashboard' : 'Return to Home'}
@@ -1294,11 +1394,22 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                       <FormField label="Patient age" required>
                         <Input
                           type="number"
-                          placeholder="e.g. 72"
+                          id="patient-age"
                           min={1}
                           max={120}
+                          placeholder="e.g. 44"
                           value={form.patientAge}
-                          onChange={(e) => set({ patientAge: e.target.value })}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (val === '') {
+                              set({ patientAge: '' })
+                              return
+                            }
+                            const num = parseInt(val, 10)
+                            if (!Number.isNaN(num)) {
+                              set({ patientAge: String(Math.min(120, Math.max(0, num))) })
+                            }
+                          }}
                         />
                       </FormField>
                     </div>
@@ -1316,23 +1427,122 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                       <FormField
                         label="Contact mobile number"
                         required
-                        hint={user?.phone ? 'Confirmed on file · caretakers call to coordinate arrival' : 'Required — used for arrival calls & SMS shift alerts'}
+                        hint={
+                          user?.phone && form.contactPhone && form.contactPhone !== user.phone ? (
+                            <span className="flex items-center gap-1.5">
+                              <span>Custom contact number</span>
+                              <button
+                                type="button"
+                                onClick={() => set({ contactPhone: user.phone })}
+                                className="text-primary-700 underline hover:text-primary-800"
+                              >
+                                (Reset to {user.phone})
+                              </button>
+                            </span>
+                          ) : user?.phone ? (
+                            'Confirmed on file · caretakers call to coordinate arrival'
+                          ) : (
+                            'Required — used for arrival calls & SMS shift alerts'
+                          )
+                        }
                       >
-                        <Input
-                          type="tel"
-                          placeholder="e.g. 98765 43210"
-                          value={form.contactPhone}
-                          onChange={(e) => set({ contactPhone: e.target.value })}
-                        />
+                        <div className="relative">
+                          <Input
+                            type="tel"
+                            placeholder="e.g. 98765 43210"
+                            value={form.contactPhone}
+                            onChange={(e) => set({ contactPhone: e.target.value })}
+                            className={form.contactPhone ? 'pr-9' : ''}
+                          />
+                          {form.contactPhone ? (
+                            <button
+                              type="button"
+                              aria-label="Clear mobile number"
+                              title="Clear mobile number"
+                              onClick={() => set({ contactPhone: '' })}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted transition hover:bg-slate-100 hover:text-ink active:scale-95"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          ) : null}
+                        </div>
                       </FormField>
                     </div>
 
-                    <FormField label="Primary health condition / mobility">
-                      <Input
-                        placeholder="e.g. Post-stroke recovery, bedbound"
-                        value={form.requirements}
-                        onChange={(e) => set({ requirements: e.target.value })}
-                      />
+                    <FormField
+                      label="Primary health condition / mobility"
+                      hint="Select a standard condition or click a quick suggestion, then customize if needed"
+                    >
+                      <div className="space-y-2.5">
+                        {/* Dropdown Selection */}
+                        <Select
+                          value={
+                            PRIMARY_HEALTH_CONDITIONS.includes(form.requirements)
+                              ? form.requirements
+                              : form.requirements
+                                ? 'Other / Custom Condition'
+                                : ''
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (val === 'Other / Custom Condition') {
+                              if (PRIMARY_HEALTH_CONDITIONS.includes(form.requirements)) {
+                                set({ requirements: '' })
+                              }
+                            } else {
+                              set({ requirements: val })
+                            }
+                          }}
+                        >
+                          <option value="">-- Select primary health condition / mobility --</option>
+                          {PRIMARY_HEALTH_CONDITIONS.map((cond) => (
+                            <option key={cond} value={cond}>
+                              {cond}
+                            </option>
+                          ))}
+                        </Select>
+
+                        {/* Quick Suggestions Badges */}
+                        <div>
+                          <div className="mb-1.5 flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5 text-primary-600" />
+                            <span className="text-xs font-semibold text-muted">Quick suggestions:</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {HEALTH_CONDITION_SUGGESTIONS.map((sug) => {
+                              const isSelected =
+                                form.requirements === sug.value ||
+                                (form.requirements && form.requirements.toLowerCase().includes(sug.label.toLowerCase()))
+                              return (
+                                <button
+                                  key={sug.label}
+                                  type="button"
+                                  onClick={() => {
+                                    if (form.requirements === sug.value) {
+                                      set({ requirements: '' })
+                                    } else {
+                                      set({ requirements: sug.value })
+                                    }
+                                  }}
+                                  className={cn(
+                                    'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
+                                    isSelected
+                                      ? 'border-primary-500 bg-primary-50 text-primary-800 shadow-sm ring-1 ring-primary-500/20'
+                                      : 'border-line bg-slate-50/80 text-ink-soft hover:border-primary-300 hover:bg-white hover:text-primary-700'
+                                  )}
+                                >
+                                  {isSelected ? (
+                                    <Check className="h-3 w-3 text-primary-600" />
+                                  ) : (
+                                    <Plus className="h-3 w-3 text-muted" />
+                                  )}
+                                  {sug.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
                     </FormField>
 
                     {/* Preferred Caretaker Gender Selection */}
@@ -1717,17 +1927,55 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                         </div>
                         <div className="mt-3 flex items-center gap-2">
                           <span className="text-xs text-muted">Custom duration:</span>
-                          <input
-                            type="number"
-                            min={2}
-                            max={24}
-                            value={form.hours || 2}
-                            onChange={(e) => {
-                              const val = Math.max(2, Math.min(24, Number(e.target.value) || 2))
-                              set({ hours: val })
-                            }}
-                            className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-primary-600 focus:outline-none"
-                          />
+                          <div className="inline-flex items-center rounded-lg border border-line bg-white shadow-xs">
+                            <button
+                              type="button"
+                              aria-label="Decrease hours"
+                              title="Decrease hours (-1)"
+                              onClick={() => {
+                                const curr = Number(form.hours) || 2
+                                set({ hours: Math.max(2, curr - 1) })
+                              }}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-l-lg border-r border-line text-xs font-bold text-muted hover:bg-slate-100 hover:text-ink active:scale-95"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min={2}
+                              max={24}
+                              value={form.hours ?? ''}
+                              onChange={(e) => {
+                                const raw = e.target.value
+                                if (raw === '') {
+                                  set({ hours: '' })
+                                  return
+                                }
+                                const val = parseInt(raw, 10)
+                                if (!Number.isNaN(val)) {
+                                  set({ hours: Math.min(24, Math.max(1, val)) })
+                                }
+                              }}
+                              onBlur={() => {
+                                if (!form.hours || Number(form.hours) < 2) {
+                                  set({ hours: 2 })
+                                }
+                              }}
+                              className="w-14 text-center text-xs font-bold text-ink focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button
+                              type="button"
+                              aria-label="Increase hours"
+                              title="Increase hours (+1)"
+                              onClick={() => {
+                                const curr = Number(form.hours) || 2
+                                set({ hours: Math.min(24, curr + 1) })
+                              }}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-line text-xs font-bold text-muted hover:bg-slate-100 hover:text-ink active:scale-95"
+                            >
+                              +
+                            </button>
+                          </div>
                           <span className="text-xs text-muted">hours (open freely, min 2 hrs)</span>
                         </div>
                       </div>
@@ -1786,17 +2034,55 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
 
                         <div className="mt-3 flex items-center gap-2">
                           <span className="text-xs text-muted">Custom days:</span>
-                          <input
-                            type="number"
-                            min={1}
-                            max={60}
-                            value={days}
-                            onChange={(e) => {
-                              const val = Math.max(1, Math.min(60, Number(e.target.value) || 1))
-                              set({ days: val })
-                            }}
-                            className="w-20 rounded-lg border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink focus:border-primary-600 focus:outline-none"
-                          />
+                          <div className="inline-flex items-center rounded-lg border border-line bg-white shadow-xs">
+                            <button
+                              type="button"
+                              aria-label="Decrease days"
+                              title="Decrease days (-1)"
+                              onClick={() => {
+                                const curr = Number(days) || 1
+                                set({ days: Math.max(1, curr - 1) })
+                              }}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-l-lg border-r border-line text-xs font-bold text-muted hover:bg-slate-100 hover:text-ink active:scale-95"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              max={60}
+                              value={days ?? ''}
+                              onChange={(e) => {
+                                const raw = e.target.value
+                                if (raw === '') {
+                                  set({ days: '' })
+                                  return
+                                }
+                                const val = parseInt(raw, 10)
+                                if (!Number.isNaN(val)) {
+                                  set({ days: Math.min(60, Math.max(1, val)) })
+                                }
+                              }}
+                              onBlur={() => {
+                                if (!days || Number(days) < 1) {
+                                  set({ days: 1 })
+                                }
+                              }}
+                              className="w-14 text-center text-xs font-bold text-ink focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button
+                              type="button"
+                              aria-label="Increase days"
+                              title="Increase days (+1)"
+                              onClick={() => {
+                                const curr = Number(days) || 1
+                                set({ days: Math.min(60, curr + 1) })
+                              }}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-line text-xs font-bold text-muted hover:bg-slate-100 hover:text-ink active:scale-95"
+                            >
+                              +
+                            </button>
+                          </div>
                           <span className="text-xs text-muted">
                             days ({formatCurrency(baseDaily)}/day base with -{formatCurrency(extraDiscount)} per extra day)
                           </span>
@@ -1940,19 +2226,19 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                         items={
                           discountAmount > 0
                             ? [
-                                {
-                                  label:
-                                    form.bookingType === 'daily'
-                                      ? `${days} Days Shift (${formatCurrency(baseDaily)}/day base)`
-                                      : '30-Day Monthly Care Package',
-                                  amount: grossShiftAmount,
-                                },
-                                {
-                                  label: 'Multi-Day Progressive Discount',
-                                  amount: -discountAmount,
-                                  meta: 'Special multi-day booking discount applied',
-                                },
-                              ]
+                              {
+                                label:
+                                  form.bookingType === 'daily'
+                                    ? `${days} Days Shift (${formatCurrency(baseDaily)}/day base)`
+                                    : '30-Day Monthly Care Package',
+                                amount: grossShiftAmount,
+                              },
+                              {
+                                label: 'Multi-Day Progressive Discount',
+                                amount: -discountAmount,
+                                meta: 'Special multi-day booking discount applied',
+                              },
+                            ]
                             : []
                         }
                         baseRate={rate}
@@ -1984,18 +2270,17 @@ export function BookCaregiverWizard({ isPublic = false, className = '' }) {
                   <CardBody className="space-y-5">
                     <SummaryGrid
                       items={[
-                        { icon: UserRound, label: 'Patient', value: `${form.patientName} (${form.patientAge} yrs, ${form.relation})` },
+                        { icon: UserRound, label: 'Patient', value: form.patientAge ? `${form.patientName} (${form.patientAge} yrs, ${form.relation})` : `${form.patientName} (${form.relation})` },
                         { icon: Phone, label: 'Contact Phone', value: form.contactPhone || user?.phone || 'On file' },
                         {
                           icon: UserRound,
                           label: 'Preferred Caretaker',
-                          value: `${form.preferredCaregiverGender || 'Any'} Gender (${
-                            form.preferredCaregiverGender === 'Female'
+                          value: `${form.preferredCaregiverGender || 'Any'} Gender (${form.preferredCaregiverGender === 'Female'
                               ? 'Female caretaker requested'
                               : form.preferredCaregiverGender === 'Male'
                                 ? 'Male caretaker requested'
                                 : 'Any gender / fastest match'
-                          })`,
+                            })`,
                         },
                         {
                           icon: MapPin,
